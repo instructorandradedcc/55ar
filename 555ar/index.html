@@ -1,0 +1,89 @@
+﻿<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta charset="UTF-8">
+    <title>MindAR - Ejemplo Oficial</title>
+    
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+    <style>
+      /* Estilos para que la UI de escaneo se vea bien */
+      #scanning-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        color: white;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-size: 24px;
+        z-index: 10;
+      }
+    </style>
+
+  </head>
+  <body>
+    <div id="scanning-overlay" class="hidden">Escaneando...</div>
+
+    <a-scene 
+      mindar-image="imageTargetSrc:./assets/targets.mind; uiScanning: #scanning-overlay;" 
+      color-space="sRGB" 
+      renderer="colorManagement: true, physicallyCorrectLights" 
+      vr-mode-ui="enabled: false" 
+      device-orientation-permission-ui="enabled: false">
+      
+      <a-assets>
+        <a-asset-item id="raccoonModel" src="./assets/models/raccoon.glb"></a-asset-item>
+      </a-assets>
+
+      <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+      <a-entity mindar-image-target="targetIndex: 0">
+        <a-gltf-model 
+          rotation="0 0 0" 
+          position="0 0 0.1" 
+          scale="0.1 0.1 0.1" 
+          src="#raccoonModel" 
+          animation-mixer>
+        </a-gltf-model>
+      </a-entity>
+    </a-scene>
+
+    <script>
+      // Este script es para diagnosticar y forzar la solicitud de permisos.
+      // MindAR debería hacerlo automáticamente, pero esto nos ayuda a confirmar.
+      document.addEventListener('DOMContentLoaded', () => {
+        console.log("Página cargada. Intentando solicitar acceso a la cámara...");
+
+        // Verificamos si el navegador soporta la API necesaria
+        if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+          
+          // Solicitamos acceso solo al video
+          navigator.mediaDevices.getUserMedia({ video: true })
+           .then(function(stream) {
+              // ¡Éxito! El usuario dio permiso.
+              console.log("¡Permiso de cámara concedido!");
+              // Detenemos el stream inmediatamente, ya que MindAR se encargará de gestionarlo.
+              stream.getTracks().forEach(track => track.stop());
+              
+              // Ahora que tenemos permiso, la escena de MindAR debería poder iniciarse sin problemas.
+              // Si la pantalla sigue en blanco, el problema está en la configuración de la escena.
+            })
+           .catch(function(error) {
+              // El usuario denegó el permiso o hubo un error.
+              console.error("Error al solicitar permiso de cámara: ", error);
+              alert("Error: No se pudo acceder a la cámara. Por favor, revisa los permisos en la configuración de tu navegador.");
+            });
+        } else {
+          console.error("La API getUserMedia no es soportada por este navegador.");
+          alert("Error: Tu navegador no soporta el acceso a la cámara, que es necesario para esta aplicación.");
+        }
+      });
+    </script>
+  </body>
+</html>
