@@ -10,7 +10,7 @@
     <!-- A-Frame y GeoAR.js -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://cdn.jsdelivr.net/gh/nicolocarpignoli/GeoAR.js@latest/aframe/build/aframe-geoar.min.js"></script>
-    <!-- Leaflet.js (Alternativa a Google Maps) -->
+    <!-- Leaflet.js -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="importmap">
@@ -37,18 +37,19 @@
         #map-container { position: relative; width: 100%; height: 100%; cursor: grab; }
         #map-container:active { cursor: grabbing; }
         #map-canvas { width: 100%; height: 100%; background-color: #f0f0f0; }
-        #model-preview-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        .map-ui-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 401; background-color: rgba(255, 255, 255, 0.8); padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); backdrop-filter: blur(5px); display: flex; flex-direction: column; gap: 10px; width: 300px; }
-        #map-controls { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 401; display: flex; gap: 10px; }
+        #model-preview-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 401; }
+        .map-ui-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 402; background-color: rgba(255, 255, 255, 0.8); padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); backdrop-filter: blur(5px); display: flex; flex-direction: column; gap: 10px; width: 300px; }
+        #map-controls { position: fixed; top: 20px; right: 20px; z-index: 402; display: flex; flex-direction: column; gap: 10px; }
         .slider-container { display: flex; flex-direction: column; gap: 5px; }
-        #map-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px black; pointer-events: none; z-index: 402; display: none; }
+        #map-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px black; pointer-events: none; z-index: 402; }
+        #coords-jumpto { position: fixed; top: 20px; left: 20px; z-index: 402; background-color: rgba(255, 255, 255, 0.8); padding: 10px; border-radius: 8px; display: flex; gap: 5px; align-items: center; }
     </style>
 </head>
 <body>
     <!-- PÁGINA 1: Carga de Archivos y Coordenadas -->
     <div id="upload-page" class="page active">
         <div class="flex items-center justify-center h-full bg-gray-100">
-            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md mx-4">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg mx-4">
                 <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Configuración de Escena AR<span id="version-display" class="text-sm align-middle font-normal text-gray-400 ml-2"></span></h1>
                 <div id="upload-section" class="space-y-4">
                     <div>
@@ -88,15 +89,19 @@
             <div id="map-crosshair"></div>
             <canvas id="model-preview-canvas"></canvas>
         </div>
+        <div id="coords-jumpto">
+            <input type="number" id="jumpto-lat" placeholder="Latitud" class="w-24 p-1 border rounded text-sm">
+            <input type="number" id="jumpto-lon" placeholder="Longitud" class="w-24 p-1 border rounded text-sm">
+            <button id="jumpto-btn" class="control-button bg-blue-500 hover:bg-blue-600 p-2 text-sm">Ir</button>
+        </div>
         <div id="map-controls">
             <button id="back-to-setup-from-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
-            <button id="toggle-move-mode-btn" class="control-button bg-orange-500 hover:bg-orange-600">Mover Modelo</button>
             <button id="goto-ar-from-map-btn" class="control-button bg-green-500 hover:bg-green-600">Iniciar AR</button>
         </div>
         <div class="map-ui-container">
             <div class="slider-container">
                 <label for="map-zoom-slider" class="block text-sm font-medium text-gray-700">Zoom del Mapa</label>
-                <input id="map-zoom-slider" type="range" min="1" max="20" value="18" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                <input id="map-zoom-slider" type="range" min="1" max="22" value="18" step="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
             </div>
             <div class="slider-container">
                 <label for="map-scale-slider" class="block text-sm font-medium text-gray-700">Escala del Modelo</label>
@@ -104,6 +109,7 @@
             </div>
         </div>
     </div>
+
 
     <!-- PÁGINA 3: Vista de Realidad Aumentada -->
     <div id="ar-page" class="page">
@@ -157,13 +163,13 @@
             }
         });
 
-        const APP_VERSION = '2.0';
-        const CACHE_NAME = 'geo-ar-cache-v9';
+        const APP_VERSION = '2.2';
+        const CACHE_NAME = 'geo-ar-cache-v11';
         let appState = {
-            modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50, moveMode: 'map',
+            modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
             isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
         };
-        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isDragging: false };
+        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null };
 
         const pages = { upload: document.getElementById('upload-page'), map: document.getElementById('map-page'), ar: document.getElementById('ar-page') };
         const messageBox = document.getElementById('message-box');
@@ -197,10 +203,15 @@
         async function loadDataFromCache() {
             try {
                 const cache = await caches.open(CACHE_NAME);
-                const [modelRes, coordsRes] = await Promise.all([ cache.match('cached-model.glb'), cache.match('cached-coords.json') ]);
+                const [modelRes, coordsRes] = await Promise.all([ 
+                    cache.match('cached-model.glb'), 
+                    cache.match('cached-coords.json') 
+                ]);
                 if (!modelRes || !coordsRes) throw new Error("Datos no encontrados en caché.");
+                
                 appState.coords = await coordsRes.json();
                 appState.modelURL = URL.createObjectURL(await modelRes.blob());
+                
                 document.getElementById('upload-section').classList.add('hidden');
                 document.getElementById('load-data-btn').classList.add('hidden');
                 document.getElementById('status-section').classList.remove('hidden');
@@ -214,10 +225,13 @@
             const modelFile = document.getElementById('model-upload').files[0];
             const lat = parseFloat(document.getElementById('latitude-input').value);
             const lon = parseFloat(document.getElementById('longitude-input').value);
-            if (!modelFile || isNaN(lat) || isNaN(lon)) { showMessage('Por favor, completa todos los campos.'); return; }
+
+            if (!modelFile || isNaN(lat) || isNaN(lon)) { showMessage('Por favor, modelo y coordenadas son requeridos.'); return; }
+            
             showMessage('Guardando datos en caché...');
             const cache = await caches.open(CACHE_NAME);
             const coords = { latitude: lat, longitude: lon };
+            
             await Promise.all([ 
                 cache.put('cached-model.glb', new Response(modelFile)), 
                 cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(coords)], {type : 'application/json'})))
@@ -226,9 +240,10 @@
         }
         
         async function updateCoordsInCache(coords) {
+            appState.coords = coords;
             try {
                 const cache = await caches.open(CACHE_NAME);
-                await cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(coords)], {type : 'application/json'})));
+                await cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(appState.coords)], {type : 'application/json'})));
             } catch (error) { console.error('Failed to update coordinates in cache:', error); }
         }
 
@@ -247,16 +262,20 @@
             if (map) { map.remove(); map = null; }
             
             map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
-            L.control.zoom({ position: 'topright' }).addTo(map);
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles &copy; Esri' }).addTo(map);
+            
+            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
+                attribution: 'Tiles &copy; Esri' 
+            }).addTo(map);
 
             map.on('moveend', () => {
-                if (appState.moveMode === 'map') {
-                    const newCoords = map.getCenter();
-                    appState.coords = { latitude: newCoords.lat, longitude: newCoords.lng };
-                    updateCoordsInCache(appState.coords);
-                }
+                const newCoords = map.getCenter();
+                updateCoordsInCache({ latitude: newCoords.lat, longitude: newCoords.lng });
+                document.getElementById('jumpto-lat').value = newCoords.lat.toFixed(6);
+                document.getElementById('jumpto-lon').value = newCoords.lng.toFixed(6);
             });
+            
+            document.getElementById('jumpto-lat').value = appState.coords.latitude.toFixed(6);
+            document.getElementById('jumpto-lon').value = appState.coords.longitude.toFixed(6);
 
             initModelPreview();
         }
@@ -299,7 +318,9 @@
                 modelPreview.model.scale.set(scale, scale, scale);
                 modelPreview.model.rotation.y += 0.01;
             }
-            modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
+            if(modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
+                modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
+            }
         }
 
         async function startAR() {
@@ -370,39 +391,11 @@
              navigateTo('map');
         }
         
-        function toggleMoveMode() {
-            const btn = document.getElementById('toggle-move-mode-btn');
-            const crosshair = document.getElementById('map-crosshair');
-            const previewCanvas = document.getElementById('model-preview-canvas');
-            
-            if(appState.moveMode === 'map') {
-                appState.moveMode = 'model';
-                btn.textContent = 'Fijar Posición';
-                btn.classList.replace('bg-orange-500', 'bg-red-500');
-                btn.classList.replace('hover:bg-orange-600', 'hover:bg-red-600');
-                map.dragging.disable();
-                crosshair.style.display = 'none';
-                previewCanvas.style.pointerEvents = 'auto';
-                showMessage('Modo Mover Modelo: Arrastra el modelo para posicionarlo.');
-            } else {
-                appState.moveMode = 'map';
-                btn.textContent = 'Mover Modelo';
-                btn.classList.replace('bg-red-500', 'bg-orange-500');
-                btn.classList.replace('hover:bg-red-600', 'hover:bg-orange-600');
-                map.dragging.enable();
-                crosshair.style.display = 'block';
-                previewCanvas.style.pointerEvents = 'none';
-                
-                // Finalize position
-                const centerPoint = map.latLngToContainerPoint(map.getCenter());
-                const modelPoint = [centerPoint.x + modelPreview.model.position.x, centerPoint.y - modelPreview.model.position.z];
-                const newCoords = map.containerPointToLatLng(modelPoint);
-                appState.coords = { latitude: newCoords.lat, longitude: newCoords.lng };
-                updateCoordsInCache(appState.coords);
-                map.setView(newCoords, map.getZoom());
-                modelPreview.model.position.set(0, modelPreview.model.position.y, 0); // Recenter model visually
-                showMessage(`Posición fijada: ${newCoords.lat.toFixed(4)}, ${newCoords.lng.toFixed(4)}`);
-            }
+        function jumpToCoords() {
+            const lat = parseFloat(document.getElementById('jumpto-lat').value);
+            const lon = parseFloat(document.getElementById('jumpto-lon').value);
+            if(isNaN(lat) || isNaN(lon) || !map) return;
+            map.setView([lat, lon], map.getZoom());
         }
 
         // --- Event Listeners ---
@@ -414,19 +407,9 @@
         document.getElementById('goto-ar-from-map-btn').addEventListener('click', startAR);
         document.getElementById('back-to-map-btn').addEventListener('click', stopAR);
         document.getElementById('toggle-interior-view').addEventListener('click', toggleInteriorView);
-        document.getElementById('toggle-move-mode-btn').addEventListener('click', toggleMoveMode);
         document.getElementById('map-scale-slider').addEventListener('input', (e) => { appState.mapScale = parseFloat(e.target.value); });
         document.getElementById('map-zoom-slider').addEventListener('input', (e) => { if(map) map.setZoom(parseFloat(e.target.value)); });
-        
-        const mapContainer = document.getElementById('map-container');
-        mapContainer.addEventListener('mousedown', (e) => { if (appState.moveMode === 'model') modelPreview.isDragging = true; });
-        window.addEventListener('mouseup', () => { if (modelPreview.isDragging) { modelPreview.isDragging = false; toggleMoveMode(); } });
-        window.addEventListener('mousemove', (e) => {
-            if (modelPreview.isDragging && modelPreview.model) {
-                modelPreview.model.position.x += e.movementX;
-                modelPreview.model.position.z -= e.movementY; // Invert Y for Z axis
-            }
-        });
+        document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
         
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
@@ -437,6 +420,8 @@
     </script>
 </body>
 </html>
+
+
 
 
 
