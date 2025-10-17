@@ -163,7 +163,7 @@
             }
         });
 
-        const APP_VERSION = '2.9';
+        const APP_VERSION = '3.0';
         const CACHE_NAME = 'geo-ar-cache-v16';
         let appState = {
             modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
@@ -307,7 +307,7 @@
 
             initModelPreview();
             setTimeout(() => {
-                showMessage("Arrastra el mapa para posicionar. Clic derecho y arrastra para girar el modelo.", 5000);
+                showMessage("Clic izquierdo: Mover mapa. Clic DERECHO: Girar modelo.", 5000);
             }, 500);
         }
 
@@ -463,7 +463,14 @@
         window.addEventListener('mousemove', (e) => {
             if (modelPreview.isRotating && modelPreview.model) {
                 const deltaX = e.clientX - modelPreview.previousMousePosition.x;
+                const deltaY = e.clientY - modelPreview.previousMousePosition.y;
+
+                // Rotar en eje Y (horizontal) basado en el movimiento horizontal del mouse
                 modelPreview.model.rotation.y += deltaX * 0.01;
+                
+                // Rotar en eje X (vertical) basado en el movimiento vertical del mouse
+                modelPreview.model.rotation.x += deltaY * 0.01;
+
                 modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
             }
         });
@@ -483,5 +490,7 @@
     </script>
 </body>
 </html>
+
+
 
 
