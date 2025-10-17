@@ -163,13 +163,13 @@
             }
         });
 
-        const APP_VERSION = '2.3';
-        const CACHE_NAME = 'geo-ar-cache-v12';
+        const APP_VERSION = '2.4';
+        const CACHE_NAME = 'geo-ar-cache-v13';
         let appState = {
             modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
             isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
         };
-        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null };
+        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isRotating: false, previousMousePosition: { x: 0, y: 0 } };
 
         const pages = { upload: document.getElementById('upload-page'), map: document.getElementById('map-page'), ar: document.getElementById('ar-page') };
         const messageBox = document.getElementById('message-box');
@@ -263,15 +263,20 @@
             
             map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
             
-            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
-                attribution: 'Tiles &copy; Esri' 
-            }).addTo(map);
+            const hybridLayer = L.layerGroup([
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                    attribution: 'Tiles &copy; Esri'
+                }),
+                L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                })
+            ]).addTo(map);
 
             const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             });
 
-            const baseMaps = { "Satélite": satelliteLayer, "Calles": streetLayer };
+            const baseMaps = { "Híbrido": hybridLayer, "Calles": streetLayer };
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
             map.on('moveend', () => {
@@ -285,6 +290,7 @@
             document.getElementById('jumpto-lon').value = appState.coords.longitude.toFixed(6);
 
             initModelPreview();
+            showMessage("Arrastra el mapa para posicionar. Clic derecho y arrastra para girar el modelo.", 5000);
         }
 
         async function initModelPreview() {
@@ -323,7 +329,6 @@
                 const maxSize = Math.max(size.x, size.y, size.z) || 1;
                 const scale = (appState.mapScale * 0.5) / maxSize;
                 modelPreview.model.scale.set(scale, scale, scale);
-                modelPreview.model.rotation.y += 0.01;
             }
             if(modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
                 modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
@@ -417,6 +422,30 @@
         document.getElementById('map-scale-slider').addEventListener('input', (e) => { appState.mapScale = parseFloat(e.target.value); });
         document.getElementById('map-zoom-slider').addEventListener('input', (e) => { if(map) map.setZoom(parseFloat(e.target.value)); });
         document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
+
+        // --- Rotation controls for map preview ---
+        const mapContainer = document.getElementById('map-container');
+        mapContainer.addEventListener('contextmenu', e => e.preventDefault());
+        mapContainer.addEventListener('mousedown', (e) => {
+            if (e.button === 2) { // Right mouse button
+                modelPreview.isRotating = true;
+                if(map) map.dragging.disable();
+                modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (modelPreview.isRotating && modelPreview.model) {
+                const deltaX = e.clientX - modelPreview.previousMousePosition.x;
+                modelPreview.model.rotation.y += deltaX * 0.01;
+                modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 2 && modelPreview.isRotating) {
+                modelPreview.isRotating = false;
+                if(map) map.dragging.enable();
+            }
+        });
         
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
