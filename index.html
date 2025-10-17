@@ -162,7 +162,7 @@
             }
         });
 
-        const APP_VERSION = '3.3';
+        const APP_VERSION = '3.4';
         const CACHE_NAME = 'geo-ar-cache-v16';
         let appState = { modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50 };
         let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isRotating: false, previousMousePosition: { x: 0, y: 0 } };
@@ -294,7 +294,7 @@
 
             initModelPreview();
             setTimeout(() => {
-                showMessage("Clic izquierdo: Mover mapa. Clic DERECHO: Girar modelo.", 5000);
+                showMessage("Mover mapa. Toca y Sostén para girar modelo.", 5000);
             }, 500);
         }
 
@@ -352,33 +352,14 @@
             const loadingScreen = document.getElementById('loading-screen');
             loadingScreen.style.display = 'flex';
 
-            // --- Solicitud de Permisos Proactiva ---
-            try {
-                // Solicitar acceso a la cámara. Esto disparará el aviso del navegador si es necesario.
-                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                // Si se obtiene el permiso, detener el stream temporal para que A-Frame pueda usar la cámara.
-                stream.getTracks().forEach(track => track.stop());
-
-                // Solicitar acceso a la ubicación.
-                await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
-                });
-
-            } catch (error) {
-                console.error("Error de permisos:", error);
-                loadingScreen.style.display = 'none';
-                let message = 'Error: No se pudo activar la cámara o GPS. Revisa los permisos del sitio en los ajustes de tu navegador.';
-                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
-                    message = 'Permiso denegado. Por favor, habilita la cámara y la ubicación en los ajustes de tu navegador para usar la Realidad Aumentada.';
+            const arTimeout = setTimeout(() => {
+                if (loadingScreen.style.display !== 'none') {
+                    loadingScreen.style.display = 'none';
+                    showMessage('Error al iniciar AR. Revisa los permisos de cámara y ubicación en los ajustes del navegador.', 8000);
+                    navigateTo('map');
                 }
-                showMessage(message, 8000);
-                navigateTo('map'); // Devolver al mapa
-                return; // Detener la ejecución de la función aquí
-            }
-            // --- Fin de la Solicitud de Permisos ---
+            }, 20000); 
 
-
-            // Si los permisos fueron otorgados, proceder con la inicialización de A-Frame.
             const arScene = document.getElementById('ar-scene');
             const existingModel = arScene.querySelector('#arch-model');
             if (existingModel) existingModel.parentNode.removeChild(existingModel);
@@ -403,16 +384,18 @@
                 arScene.appendChild(modelEntity);
                 
                 window.addEventListener('gps-camera-update-position', function onGPSUpdate(event) {
+                    clearTimeout(arTimeout);
                     if (loadingScreen.style.display !== 'none') {
                         loadingScreen.style.display = 'none';
                         const pos = event.detail.position;
-                        showMessage(`GPS Fijado. Precisión: ${pos.accuracy.toFixed(2)}m`);
+                        showMessage(`GPS Fijado. Precisión: ${pos.accuracy.toFixed(2)}m. Pellizca para escalar.`, 6000);
                     }
                     window.removeEventListener('gps-camera-update-position', onGPSUpdate);
                 });
             } catch(error) {
-                console.error("Error al iniciar AR:", error);
+                console.error("Error al cargar modelo en AR:", error);
                 showMessage("Error al cargar el modelo 3D.");
+                clearTimeout(arTimeout);
                 navigateTo('map');
             }
         }
@@ -462,16 +445,19 @@
 
         // --- Controles de rotación para la vista previa del mapa ---
         const mapContainer = document.getElementById('map-container');
+        let longPressTimeout = null;
+
+        // Mouse Controls
         mapContainer.addEventListener('contextmenu', e => e.preventDefault());
         mapContainer.addEventListener('mousedown', (e) => {
-            if (e.button === 2) { // Botón derecho del ratón
+            if (e.button === 2) {
                 modelPreview.isRotating = true;
                 if(map) map.dragging.disable();
                 modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
             }
         });
         window.addEventListener('mousemove', (e) => {
-            if (modelPreview.isRotating && modelPreview.model) {
+            if (modelPreview.isRotating && e.buttons === 2 && modelPreview.model) {
                 const deltaX = e.clientX - modelPreview.previousMousePosition.x;
                 const deltaY = e.clientY - modelPreview.previousMousePosition.y;
                 modelPreview.model.rotation.y += deltaX * 0.01;
@@ -485,6 +471,45 @@
                 if(map) map.dragging.enable();
             }
         });
+
+        // Touch Controls
+        mapContainer.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) {
+                clearTimeout(longPressTimeout);
+                return;
+            }
+            modelPreview.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            longPressTimeout = setTimeout(() => {
+                modelPreview.isRotating = true;
+                if (map) map.dragging.disable();
+                showMessage('Modo Rotación Activado', 2000);
+            }, 1000);
+        }, { passive: false });
+
+        mapContainer.addEventListener('touchmove', (e) => {
+             if (e.touches.length === 1) {
+                if (!modelPreview.isRotating) {
+                    clearTimeout(longPressTimeout);
+                } else {
+                    e.preventDefault();
+                    const deltaX = e.touches[0].clientX - modelPreview.previousMousePosition.x;
+                    const deltaY = e.touches[0].clientY - modelPreview.previousMousePosition.y;
+                    if (modelPreview.model) {
+                        modelPreview.model.rotation.y += deltaX * 0.02;
+                        modelPreview.model.rotation.x += deltaY * 0.02;
+                    }
+                    modelPreview.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                }
+            }
+        });
+
+        mapContainer.addEventListener('touchend', (e) => {
+            clearTimeout(longPressTimeout);
+            if (modelPreview.isRotating) {
+                modelPreview.isRotating = false;
+                if (map) map.dragging.enable();
+            }
+        });
         
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
@@ -495,6 +520,3 @@
     </script>
 </body>
 </html>
-
-
-
