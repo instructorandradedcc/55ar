@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Visor AR para Arquitectura</title>
+    <title>Visor AR Arquitectura por Geolocalización</title>
     <!-- Favicon -->
     <link rel="icon" href="https://raw.githubusercontent.com/instructorandradedcc/propuesta-AR/main/favicon3dAR.ico">
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- A-Frame y GeoAR.js -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+    <script src="https://raw.githack.com/nicolocarpignoli/GeoAR.js/master/resources/js/aframe-geoar.js"></script>
     <script type="importmap">
         {
             "imports": {
@@ -17,725 +18,360 @@
             }
         }
     </script>
+    <!-- Google Maps API - REEMPLAZA 'YOUR_GOOGLE_MAPS_API_KEY' con tu clave -->
+    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap" async defer></script>
     <style>
-        /* Estilos generales y para el modo AR */
-        html.ar-active, body.ar-active {
-             overflow: hidden;
-            width: 100%;
-            height: 100%;
-            margin: 0;
-            padding: 0;
-        }
-        #app {
-            transition: all 0.3s ease-in-out;
-        }
-        .app-container.ar-fullscreen {
-            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-            width: 100%; height: 100%; max-height: none; 
-            padding: 0; margin: 0 !important; border-radius: 0;
-            overflow: hidden;
-        }
-        .app-container.ar-fullscreen .page.active {
-            height: 100%;
-        }
-        .page { display: none; }
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; }
+        .page { display: none; height: 100%; width: 100%; }
         .page.active { display: block; }
-        #editor-canvas { width: 100%; height: 400px; border: 1px solid #ccc; background: #f0f0f0; cursor: move; touch-action: none; border-radius: 8px; }                        
-        #ar-scene-container.ar-active {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9990;
-        }
-        #ar-scene-container.ar-active a-scene {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        #ar-scene-container.ar-active video, 
-        #ar-scene-container.ar-active canvas {
-            position: absolute !important;
-            top: 50% !important;
-            left: 50% !important;
-            transform: translate(-50%, -50%) !important;
-            min-width: 100% !important;
-            min-height: 100% !important;
-            width: auto !important;
-            height: auto !important;
-            object-fit: cover !important;
-            cursor: grab;
-        }
-        #ar-scene-container.ar-active canvas:active {
-            cursor: grabbing;
-        }
-        #ar-active-controls {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
-            z-index: 9999;
-        }
-        .loader {
-            border: 4px solid #f3f3f3;
-            border-top: 4px solid #3498db;
-            border-radius: 50%;
-            width: 40px;
-            height: 40px;
-            animation: spin 1s linear infinite;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }                        
-        #scanning-ui {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            z-index: 9991;
-            display: flex; flex-direction: column; justify-content: center; align-items: center;
-            pointer-events: none;
-            background-color: rgba(0,0,0,0.3);
-            transition: opacity 0.3s;
-        }
-        #scanning-ui.hidden {
-            display: none;
-        }
-        .scan-text {
-            margin-top: 24px;
-            padding: 8px 16px;
-            background-color: rgba(0,0,0,0.5);
-            color: white;
-            font-size: 1.1rem;
-            border-radius: 8px;
-            text-shadow: 1px 1px 2px black;
-        }
+        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; z-index: 10000; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #ar-controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; gap: 10px; }
+        .control-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; transition: background-color 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .control-button:hover { background-color: #45a049; }
+        .control-button:active { transform: translateY(1px); }
+        #message-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.7); color: white; padding: 10px 20px; border-radius: 8px; font-size: 1rem; z-index: 9999; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; }
+        #message-box.show { opacity: 1; }
+        #map-container { position: relative; width: 100%; height: 100%; }
+        #map-canvas { width: 100%; height: 100%; }
+        #model-preview-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        #map-controls { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 10px; }
     </style>
 </head>
-<body class="bg-gray-200 text-gray-800 font-sans">
-        
-    <div id="app" class="app-container container mx-auto p-6 md:p-8 max-w-5xl bg-white rounded-xl shadow-lg my-8 overflow-y-auto" style="max-height: 85vh;">
-        <div class="flex justify-center items-center mb-6">
-             <img src="https://placehold.co/120x80/e2e8f0/94a3b8?text=AR-Arq" alt="Logo Arquitectura" class="h-20 w-auto mr-4">
-             <div>
-                 <h1 class="text-3xl md:text-4xl font-bold text-center" style="color: #1e3a8a;">Visor de Arquitectura con Realidad Aumentada<span id="version-display" class="text-base align-middle font-normal text-gray-400 ml-2"></span></h1>
-                 <p class="text-center text-gray-500">Carga tus modelos 3D y visualízalos en AR.</p>
-             </div>
-        </div>
+<body>
+    <!-- PÁGINA 1: Carga de Archivos y Coordenadas -->
+    <div id="upload-page" class="page active">
+        <div class="flex items-center justify-center h-full bg-gray-100">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-md mx-4">
+                <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Configuración de Escena AR</h1>
 
-        <!-- PÁGINA 1: Carga de Archivos Locales -->
-        <div id="page-upload" class="page active bg-white p-6 rounded-lg shadow-md">
-            <h2 class="text-2xl font-semibold mb-4 border-b pb-2">Paso 1: Cargar Archivos para AR</h2>
-            <div id="welcome-box" class="bg-indigo-50 border-l-4 border-indigo-500 text-indigo-700 p-4 mb-6" role="alert">
-                <p class="font-bold">Instrucciones</p>
-                <p>Sube los tres archivos necesarios para la visualización de Realidad Aumentada:</p>
-                <ul class="list-disc list-inside mt-2">
-                    <li><strong>Modelo 3D:</strong> El archivo <code>.glb</code> de tu edificio, casa, etc.</li>
-                    <li><strong>Archivo de Anclaje:</strong> El archivo <code>.mind</code> compilado desde tu imagen/plano.</li>
-                    <li><strong>Imagen Marcador:</strong> La imagen (<code>.png</code>, <code>.jpg</code>) que usaste para crear el archivo <code>.mind</code>.</li>
-                </ul>
-            </div>
-
-            <div id="upload-section" class="space-y-4">
-                <div>
-                    <label for="model-upload" class="block mb-2 text-sm font-medium text-gray-700">1. Subir Modelo 3D (.glb)</label>
-                    <input type="file" id="model-upload" accept=".glb" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
-                </div>
-                <div>
-                    <label for="mind-upload" class="block mb-2 text-sm font-medium text-gray-700">2. Subir Archivo de Anclaje (.mind)</label>
-                    <input type="file" id="mind-upload" accept=".mind" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
-                </div>
-                <div>
-                    <label for="image-upload" class="block mb-2 text-sm font-medium text-gray-700">3. Subir Imagen Marcador (.png, .jpg)</label>
-                    <input type="file" id="image-upload" accept="image/png, image/jpeg" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
-                </div>
-            </div>
-
-            <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
-                <button id="load-from-upload-btn" class="bg-green-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-green-600 transition duration-300 text-lg shadow-md w-full sm:w-auto">
-                    Cargar Archivos
-                </button>
-                <button id="clear-cache-btn" class="bg-red-500 text-white font-bold py-3 px-6 rounded-lg hover:bg-red-600 transition duration-300 text-lg shadow-md w-full sm:w-auto flex justify-center items-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="inline-block mr-2"><polyline points="23 4 23 10 17 10"></polyline><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path></svg>
-                    Limpiar Caché
-                </button>
-            </div>
-
-            <div id="loading-status" class="mt-6 hidden">
-                <div class="flex justify-center items-center">
-                    <div class="loader"></div>
-                </div>
-                <p id="loading-text" class="text-center text-gray-600 mt-2">Iniciando...</p>
-                <div class="w-full bg-gray-200 rounded-full h-2.5 mt-2">
-                    <div id="loading-progress-bar" class="bg-blue-600 h-2.5 rounded-full" style="width: 0%"></div>
-                </div>
-            </div>                                    
-            <div id="image-preview-container" class="mt-6"></div>
-             <div class="mt-8 text-center">
-                <button id="goto-editor-btn" disabled class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 transition duration-300 disabled:bg-gray-300 mt-2">Siguiente: Editar Modelo 3D</button>
-            </div>
-        </div>
-
-        <!-- PÁGINA 2: Editor 3D -->
-        <div id="page-editor" class="page bg-white p-6 rounded-lg shadow-md">
-             <h2 class="text-2xl font-semibold mb-4 border-b pb-2">Paso 2: Ajustar Modelo 3D</h2>
-             <div class="bg-blue-50 border-l-4 border-blue-500 text-blue-700 p-4 mb-6 text-sm" role="alert">
-                 <p class="font-bold">Controles:</p>
-                 <ul class="list-disc list-inside mt-1">
-                     <li><strong>Mover Modelo:</strong> Arrastra el modelo con el ratón o un dedo.</li>
-                     <li><strong>Orbitar:</strong> Clic derecho y arrastrar o usar un dedo para orbitar la cámara.</li>
-                     <li><strong>Zoom:</strong> Rueda del ratón. En táctil, usa dos dedos (pellizcar).</li>
-                     <li><strong>Zoom Alternativo:</strong> Mantén presionado el clic izquierdo y usa la rueda del ratón.</li>
-                 </ul>
-             </div>
-            <div class="flex flex-col md:flex-row gap-6">
-                <div class="md:w-1/3">
-                    <label for="asset-selector" class="block mb-2 font-medium text-gray-700">Modelo Cargado:</label>
-                    <select id="asset-selector" class="w-full p-2 border rounded mb-4"></select>
-                                        
-                    <div class="mt-4"><input type="checkbox" id="move-conjunto-toggle" class="mr-2" checked><label for="move-conjunto-toggle">Mover en conjunto</label></div>
-
-                    <h3 class="font-semibold mt-4">Posición (X, Y, Z)</h3>
-                    <div class="grid grid-cols-3 gap-2">
-                        <input type="number" id="pos-x" class="w-full p-1 border rounded" step="0.01" value="0">
-                        <input type="number" id="pos-y" class="w-full p-1 border rounded" step="0.01" value="0">
-                        <input type="number" id="pos-z" class="w-full p-1 border rounded" step="0.01" value="0">
+                <div id="upload-section" class="space-y-4">
+                    <div>
+                        <label for="model-upload" class="block mb-2 text-sm font-medium text-gray-700">1. Subir Modelo 3D (.glb)</label>
+                        <input type="file" id="model-upload" accept=".glb" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
                     </div>
-                    <p class="text-xs text-gray-500 mt-1">Ajusta 'Z' para acercar o alejar el modelo del marcador.</p>
-                    <h3 class="font-semibold mt-4">Rotación (X, Y, Z)</h3>
-                     <div class="grid grid-cols-3 gap-2">
-                        <input type="number" id="rot-x" class="w-full p-1 border rounded" step="1" value="0">
-                        <input type="number" id="rot-y" class="w-full p-1 border rounded" step="1" value="0">
-                        <input type="number" id="rot-z" class="w-full p-1 border rounded" step="1" value="0">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label for="latitude-input" class="block mb-2 text-sm font-medium text-gray-700">2. Latitud</label>
+                            <input type="number" id="latitude-input" placeholder="Ej: 4.0950" step="any" class="w-full p-2 border rounded">
+                        </div>
+                        <div>
+                            <label for="longitude-input" class="block mb-2 text-sm font-medium text-gray-700">3. Longitud</label>
+                            <input type="number" id="longitude-input" placeholder="Ej: -76.1950" step="any" class="w-full p-2 border rounded">
+                        </div>
                     </div>
-                    <h3 class="font-semibold mt-4">Escala</h3>
-                    <input type="number" id="scale" class="w-full p-1 border rounded" step="0.1" value="1">
-                    <p class="text-xs text-gray-500 mt-1">Define el tamaño del modelo.</p>
+                     <button id="use-location-btn" class="w-full text-sm text-blue-500 hover:underline text-left pt-1">Usar mi ubicación actual</button>
                 </div>
-                <div class="md:w-2/3">
-                    <div id="editor-container"><canvas id="editor-canvas"></canvas></div>
+
+                <div id="status-section" class="mt-6 text-center hidden">
+                    <p id="status-text" class="text-lg font-semibold text-green-600">Modelo y ubicación cargados desde caché.</p>
                 </div>
-            </div>
-            <div class="mt-6 flex justify-between">
-                <button id="back-to-upload-btn" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">Atrás</button>
-                <button id="goto-ar-btn" class="bg-indigo-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-indigo-600 transition duration-300">Siguiente: Probar AR</button>
+
+                <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
+                    <button id="load-data-btn" class="control-button bg-green-500 hover:bg-green-600 w-full sm:w-auto">Cargar y Guardar</button>
+                    <button id="goto-map-btn" class="control-button bg-indigo-500 hover:bg-indigo-600 w-full sm:w-auto" disabled>Ver en Mapa</button>
+                </div>
+                <div class="mt-4 text-center">
+                    <button id="clear-cache-btn" class="text-sm text-red-500 hover:underline">Limpiar Caché y Recargar</button>
+                </div>
             </div>
         </div>
-
-        <!-- PÁGINA 3: Vista AR -->
-        <div id="page-ar" class="page">
-             <div class="relative">
-                 <div id="ar-ui-container" class="relative z-10">
-                     <h2 class="text-2xl font-semibold mb-4 text-center">Paso 3: Vista de Realidad Aumentada</h2>
-                     <div class="bg-white p-4 rounded-lg shadow-md mb-4">
-                         <p class="text-center">Apunta tu cámara a la imagen del marcador. <strong>Puedes girar y escalar el modelo 3D.</strong></p>
-                         <ul class="list-disc list-inside mt-2 text-center text-sm">
-                            <li><strong>Girar:</strong> Desliza un dedo o el ratón.</li>
-                            <li><strong>Zoom:</strong> Pellizca con dos dedos o usa la rueda del ratón.</li>
-                         </ul>
-                         <div id="ar-status" class="text-center font-mono p-2 bg-gray-100 rounded mt-2 flex justify-center items-center gap-2">
-                             <div class="loader hidden"></div>
-                             <span id="ar-status-text">Estado: Esperando cámara...</span>
-                         </div>
-                     </div>
-                                                             
-                     <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
-                         <button id="back-to-editor-btn-pre" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300 w-full sm:w-auto">Atrás</button>
-                         <button id="start-ar-pc-btn" disabled class="bg-sky-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-sky-600 transition duration-300 disabled:bg-gray-300 w-full sm:w-auto flex items-center justify-center gap-2">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect><line x1="8" y1="21" x2="16" y2="21"></line><line x1="2" y1="17" x2="12" y2="21"></line></svg>
-                             Activar AR en PC
-                         </button>
-                         <button id="start-ar-mobile-btn" disabled class="bg-green-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-600 transition duration-300 disabled:bg-gray-300 w-full sm:w-auto flex items-center justify-center gap-2">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect><line x1="12" y1="18" x2="12.01" y2="18"></line></svg>
-                             Iniciar AR en Celular
-                         </button>
-                     </div>
-                 </div>
-                 <div id="ar-preload-container" class="hidden"></div>
-                 <div id="ar-scene-container"></div>
-                 <div id="scanning-ui" class="hidden">
-                     <p class="scan-text">Apunte al marcador</p>
-                 </div>
-                 <div id="ar-active-controls" class="hidden p-4 bg-black bg-opacity-50">
-                     <div class="relative flex justify-center items-center gap-4 max-w-4xl mx-auto">
-                         <button id="back-to-editor-btn-post" class="bg-gray-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-gray-600 transition duration-300">Volver al Editor</button>
-                         <button id="stop-ar-btn" class="bg-red-500 text-white font-bold py-2 px-4 rounded-lg hover:bg-red-600 transition duration-300">Detener Cámara</button>
-                         <button id="fullscreen-ar-btn" title="Pantalla Completa" class="absolute right-0 top-1/2 -translate-y-1/2 bg-black bg-opacity-40 text-white p-2 rounded-full hover:bg-opacity-60">
-                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                 <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
-                             </svg>
-                         </button>
-                     </div>
-                 </div>
-             </div>
+    </div>
+    
+    <!-- PÁGINA 2: Vista de Mapa -->
+    <div id="map-page" class="page">
+        <div id="map-container">
+            <div id="map-canvas"></div>
+            <canvas id="model-preview-canvas"></canvas>
+        </div>
+        <div id="map-controls">
+            <button id="back-to-setup-from-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
+            <button id="goto-ar-from-map-btn" class="control-button bg-green-500 hover:bg-green-600">Iniciar AR</button>
         </div>
     </div>
 
-    <div id="ar-preloader" class="hidden fixed inset-0 bg-black bg-opacity-75 flex flex-col justify-center items-center z-[10000]">
-        <div class="loader"></div>
-        <p class="text-white text-lg mt-4">Iniciando cámara...</p>
+
+    <!-- PÁGINA 3: Vista de Realidad Aumentada -->
+    <div id="ar-page" class="page">
+        <div id="loading-screen">
+            <div class="loader"></div>
+            <p>Iniciando cámara y GPS...</p>
+        </div>
+
+        <a-scene id="ar-scene" vr-mode-ui="enabled: false" ar-js='sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;' renderer="logarithmicDepthBuffer: true;" loading-screen="enabled: false;">
+            <a-camera gps-camera rotation-reader></a-camera>
+            <a-sky color="#ECECEC"></a-sky>
+            <a-light type="directional" intensity="0.8" position="1 1 1"></a-light>
+            <a-light type="ambient" intensity="0.5"></a-light>
+        </a-scene>
+
+        <div id="ar-controls">
+             <button id="back-to-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver al Mapa</button>
+            <button id="toggle-interior-view" class="control-button bg-blue-500 hover:bg-blue-600">Ver Interior</button>
+        </div>
+
+        <div id="message-box"></div>
     </div>
 
     <script type="module">
-    import * as THREE from 'three';
-    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-    import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-    import { DragControls } from 'three/addons/controls/DragControls.js';
+        import * as THREE from 'three';
+        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const APP_VERSION = '1.5-Arch-Robust-Camera';
-        const CACHE_NAME = 'local-ar-assets-cache-v1'; 
-        const state = {
-            assets: [],
-            currentPage: 'page-upload',
-            isArActive: false,
-            areAssetsPreloaded: false,
+        // Global state
+        const CACHE_NAME = 'geo-ar-cache-v2';
+        let appState = {
+            modelURL: null, coords: null, normalizationFactor: 1,
+            isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
         };
-        let editor = {
-            scene: null, camera: null, renderer: null, controls: null, dragControls: null,
-            loader: new GLTFLoader(),
-            textureLoader: new THREE.TextureLoader(),
-            currentTarget: null,
-            currentPlane: null,
-        };                        
-        
-        // --- Components de AFRAME para interacción AR ---
-        AFRAME.registerComponent('texture-from-video', {
-            schema: {},
-            init: function () {
-                this.sceneEl = this.el.sceneEl; this.model = null; this.textureCanvas = null; this.textureContext = null; this.texture = null; this.video = null;
-                this.el.addEventListener('model-loaded', () => { this.model = this.el.getObject3D('mesh'); this.setupPaintLayer(); });
-            },
-            setupPaintLayer: function() {
-                if (!this.model) return;
-                this.textureCanvas = document.createElement('canvas'); this.textureCanvas.width = 512; this.textureCanvas.height = 512;
-                this.textureContext = this.textureCanvas.getContext('2d');
-                this.texture = new THREE.CanvasTexture(this.textureCanvas);
-                this.texture.minFilter = THREE.LinearFilter; this.texture.magFilter = THREE.LinearFilter; this.texture.colorSpace = THREE.SRGBColorSpace;
-                const processedMaterials = new Set();
-                this.model.traverse((node) => { 
-                    if (node.isMesh && node.material) {
-                        const materials = Array.isArray(node.material) ? node.material : [node.material];
-                        materials.forEach(material => {
-                            if (processedMaterials.has(material)) return;
-                            const newMaterial = material.clone();
-                            if (newMaterial.map) {
-                                newMaterial.emissiveMap = this.texture; newMaterial.emissive = new THREE.Color(0xFFFFFF); newMaterial.emissiveIntensity = 2.0;
-                            } else {
-                                newMaterial.color.set(0xFFFFFF); newMaterial.map = this.texture;
-                            }
-                            node.material = newMaterial; processedMaterials.add(newMaterial);
-                        });
-                    } 
-                });
-            },
-            tick: function() {
-                // FIX: Robustly find the video element if we haven't already.
-                if (!this.video) {
-                    this.video = document.querySelector('video');
-                    if (!this.video) { return; } // Video not ready yet, wait for the next frame.
-                }
+        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null };
 
-                if (this.video && this.textureContext && this.el.parentEl.object3D.visible) {
-                    try {
-                        const markerObject = this.el.parentEl.object3D;
-                        const markerMatrix = markerObject.matrixWorld;
-                        const localCorners = [ new THREE.Vector3(-0.5, 0.5, 0), new THREE.Vector3(0.5, 0.5, 0), new THREE.Vector3(0.5, -0.5, 0), new THREE.Vector3(-0.5, -0.5, 0) ];
-                        const markerCorners = localCorners.map(corner => corner.clone().applyMatrix4(markerMatrix));
-                        this.textureContext.clearRect(0, 0, this.textureCanvas.width, this.textureCanvas.height);
-                        const screenCoords = markerCorners.map(corner => { const vector = corner.project(this.el.sceneEl.camera); return { x: (vector.x + 1) * this.video.videoWidth / 2, y: (-vector.y + 1) * this.video.videoHeight / 2 }; });
-                        this.drawPerspectiveCorrectedImage(screenCoords);
-                        this.texture.needsUpdate = true;
-                    } catch(e) { /* Gracefully ignore errors that might happen during texture projection */ }
-                }
-            },
-            drawPerspectiveCorrectedImage: function(points) {
-                const ctx = this.textureContext, canvas = this.textureCanvas;
-                const to = [{ x: 0, y: 0 }, { x: canvas.width, y: 0 }, { x: canvas.width, y: canvas.height }, { x: 0, y: canvas.height }];
-                ctx.save(); ctx.beginPath(); ctx.moveTo(to[0].x, to[0].y); ctx.lineTo(to[1].x, to[1].y); ctx.lineTo(to[2].x, to[2].y); ctx.lineTo(to[3].x, to[3].y); ctx.closePath(); ctx.clip();
-                this.drawTriangle(points[0], points[1], points[3], to[0], to[1], to[3]); this.drawTriangle(points[1], points[2], points[3], to[1], to[2], to[3]);
-                ctx.restore();
-            },
-            drawTriangle: function(p0, p1, p2, t0, t1, t2) {
-                const ctx = this.textureContext, video = this.video;
-                ctx.beginPath(); ctx.moveTo(t0.x, t0.y); ctx.lineTo(t1.x, t1.y); ctx.lineTo(t2.x, t2.y); ctx.closePath(); ctx.clip(); ctx.save();
-                const det = p1.x * p2.y + p0.x * p1.y + p2.x * p0.y - p1.x * p0.y - p2.x * p1.y - p0.x * p2.y;
-                if (Math.abs(det) < 1e-8) { ctx.restore(); return; }
-                const a = (p2.y * t0.x - p0.y * t2.x + (p0.y - p2.y) * t1.x) / det, b = (p2.x * t0.x - p0.x * t2.x + (p0.x - p2.x) * t1.x) / det, c = t0.x - a * p0.x - b * p0.y;
-                const d = (p2.y * t0.y - p0.y * t2.y + (p0.y - p2.y) * t1.y) / det, e = (p2.x * t0.y - p0.x * t2.y + (p0.x - p2.x) * t1.y) / det, f = t0.y - d * p0.x - e * p0.y;
-                ctx.transform(a, d, b, e, c, f); ctx.drawImage(video, 0, 0); ctx.restore();
-            }
-        });
-        AFRAME.registerComponent('ar-zoomer', {
-            schema: { 
-                zoomSpeed: { default: 0.1 },
-                minScale: { default: 0.05 },
-                maxScale: { default: 5.0 }
-            },
-            init: function () {
-                this.pinchStartDistance = 0; this.initialScale = 1; this.isVisible = false;
-                const canvas = this.el.sceneEl.canvas;
-                const onTouchStart = (e) => {
-                    if (e.touches.length === 2 && this.isVisible) { e.preventDefault(); this.pinchStartDistance = getDistance(e.touches[0], e.touches[1]); this.initialScale = this.el.object3D.scale.x; }
-                };
-                const onTouchMove = (e) => {
-                    if (e.touches.length === 2 && this.isVisible) { e.preventDefault(); const currentDistance = getDistance(e.touches[0], e.touches[1]); const scaleFactor = currentDistance / this.pinchStartDistance; let newScale = this.initialScale * scaleFactor; newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale)); this.el.object3D.scale.set(newScale, newScale, newScale); }
-                };                                
-                const onTouchEnd = () => { this.pinchStartDistance = 0; };
-                const getDistance = (t1, t2) => { const dx = t1.clientX - t2.clientX; const dy = t1.clientY - t2.clientY; return Math.sqrt(dx * dx + dy * dy); };
-                const onWheel = (e) => {
-                    if (!this.isVisible) return;  e.preventDefault(); const currentScale = this.el.object3D.scale.x; const zoomFactor = e.deltaY > 0 ? -this.data.zoomSpeed : this.data.zoomSpeed; let newScale = currentScale + zoomFactor; newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale)); this.el.object3D.scale.set(newScale, newScale, newScale);
-                };
-                canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-                canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-                canvas.addEventListener('touchend', onTouchEnd);
-                canvas.addEventListener('wheel', onWheel, { passive: false });
-                this.el.parentEl.addEventListener('targetFound', () => { this.isVisible = true; });
-                this.el.parentEl.addEventListener('targetLost', () => { this.isVisible = false; });
-            }
-        });
-        AFRAME.registerComponent('ar-rotator', {
-            schema: { rotationFactor: { type: 'number', default: 1 } },
-            init: function () {
-                this.isVisible = false; this.isDragging = false; this.previousDrag = { x: 0, y: 0 }; const canvas = this.el.sceneEl.canvas;
-                const startDrag = (x, y) => { if (this.isVisible) { this.isDragging = true; this.previousDrag = { x, y }; } };
-                const drag = (x, y) => { if (this.isDragging && this.isVisible) { const deltaX = x - this.previousDrag.x; const deltaY = y - this.previousDrag.y; this.el.object3D.rotation.y += THREE.MathUtils.degToRad(deltaX * this.data.rotationFactor); this.el.object3D.rotation.x += THREE.MathUtils.degToRad(deltaY * this.data.rotationFactor); this.previousDrag = { x, y }; } };
-                const endDrag = () => { this.isDragging = false; };
-                canvas.addEventListener('touchstart', (e) => { if (e.touches.length === 1) startDrag(e.touches[0].clientX, e.touches[0].clientY); }); canvas.addEventListener('touchmove', (e) => { if (e.touches.length === 1) drag(e.touches[0].clientX, e.touches[0].clientY); }); canvas.addEventListener('touchend', endDrag);
-                canvas.addEventListener('mousedown', (e) => startDrag(e.clientX, e.clientY)); canvas.addEventListener('mousemove', (e) => drag(e.clientX, e.clientY)); canvas.addEventListener('mouseup', endDrag); canvas.addEventListener('mouseleave', endDrag);
-                this.el.parentEl.addEventListener('targetFound', () => { this.isVisible = true; }); this.el.parentEl.addEventListener('targetLost', () => { this.isVisible = false; });
-            },
-        });                
+        // DOM Elements
+        const pages = {
+            upload: document.getElementById('upload-page'),
+            map: document.getElementById('map-page'),
+            ar: document.getElementById('ar-page'),
+        };
+        const arScene = document.getElementById('ar-scene');
+        const messageBox = document.getElementById('message-box');
         
-        function displayLoadedImages(assets) {
-            const container = document.getElementById('image-preview-container');
-            container.innerHTML = `<h3 class="text-lg font-semibold mb-2 text-center">Imagen de Marcador Cargada</h3>`;
-            const grid = document.createElement('div');
-            grid.className = 'flex justify-center';
-            assets.forEach(asset => {
-                const img = document.createElement('img');
-                img.src = asset.imageDataUrl;
-                img.className = 'w-1/2 h-auto object-cover rounded-lg shadow-md';
-                grid.appendChild(img);
-            });
-            container.appendChild(grid);
+        function showMessage(msg, duration = 3000) {
+            messageBox.textContent = msg;
+            messageBox.classList.add('show');
+            setTimeout(() => messageBox.classList.remove('show'), duration);
+        }
+
+        function navigateTo(pageName) {
+            Object.values(pages).forEach(p => p.classList.remove('active'));
+            pages[pageName].classList.add('active');
+
+            if (pageName === 'map') {
+                initMapAndPreview();
+            } else if (modelPreview.animationFrameId) {
+                // Cleanup map preview animation when leaving the page
+                cancelAnimationFrame(modelPreview.animationFrameId);
+                modelPreview.animationFrameId = null;
+            }
         }
 
         async function clearCacheAndReload() {
-            try {
-                await caches.delete(CACHE_NAME);
-                alert('Caché limpiado. La página se recargará.');
-            } catch (error) {
-                console.error('Error al limpiar el caché:', error);
-                alert('No se pudo limpiar el caché.');
-            }
-            window.location.reload();
+            await caches.delete(CACHE_NAME);
+            showMessage('Caché limpiado.');
+            setTimeout(() => window.location.reload(), 1000);
         }
 
-        async function handleFileUploads() {
-            const modelFile = document.getElementById('model-upload').files[0];
-            const mindFile = document.getElementById('mind-upload').files[0];
-            const imageFile = document.getElementById('image-upload').files[0];
-            if (!modelFile || !mindFile || !imageFile) { alert("Por favor, selecciona los tres archivos requeridos."); return; }
-            const loadingStatusDiv = document.getElementById('loading-status');
-            const loadingText = document.getElementById('loading-text');
-            const progressBar = document.getElementById('loading-progress-bar');
-            loadingStatusDiv.classList.remove('hidden'); progressBar.style.width = `0%`; loadingText.textContent = `Procesando y guardando archivos...`;
+        async function loadDataFromCache() {
             try {
                 const cache = await caches.open(CACHE_NAME);
-                await cache.put('cached-model.glb', new Response(modelFile));
-                await cache.put('cached-marker.mind', new Response(mindFile));
-                await cache.put('cached-image.jpg', new Response(imageFile));
-                progressBar.style.width = `50%`;
-                await loadAssetsFromCacheOnStartup();
-                progressBar.style.width = `100%`;
-                loadingText.textContent = '¡Archivos cargados y guardados en caché!';
-                setTimeout(() => { loadingStatusDiv.classList.add('hidden'); }, 1500);
-            } catch (error) {
-                loadingText.textContent = 'Error al procesar los archivos.'; console.error("File processing failed:", error);
-            }
-        }
-        
-        async function loadAssetsFromCacheOnStartup() {
-            try {
-                const cache = await caches.open(CACHE_NAME);
-                const [modelRes, mindRes, imageRes] = await Promise.all([
-                    cache.match('cached-model.glb'), cache.match('cached-marker.mind'), cache.match('cached-image.jpg')
+                const [modelRes, coordsRes] = await Promise.all([
+                    cache.match('cached-model.glb'), cache.match('cached-coords.json')
                 ]);
-                if (!modelRes || !mindRes || !imageRes) throw new Error("Archivos no encontrados en caché.");
+                if (!modelRes || !coordsRes) throw new Error("Datos no encontrados en caché.");
 
-                const [modelBlob, mindBlob, imageBlob] = await Promise.all([ modelRes.blob(), mindRes.blob(), imageRes.blob() ]);
+                const modelBlob = await modelRes.blob();
+                appState.coords = await coordsRes.json();
+                appState.modelURL = URL.createObjectURL(modelBlob);
                 
-                const newAsset = {
-                    id: 0, name: 'modelo-cache', markerName: 'marcador-cache',
-                    markerDataUrl: URL.createObjectURL(mindBlob), modelDataUrl: URL.createObjectURL(modelBlob), imageDataUrl: URL.createObjectURL(imageBlob),
-                    transform: { position: { x: 0, y: 0, z: 0 }, rotation: { x: 0, y: 0, z: 0 }, scale: { x: 1, y: 1, z: 1 } },
-                    hasBeenNormalized: false, normalizationFactor: 1,
-                };
-                state.assets = [newAsset];
-
-                document.getElementById('welcome-box').innerHTML = `<p class="font-bold">¡Archivos cargados desde el caché!</p><p>Ya puedes ir al editor o limpiar el caché para subir nuevos archivos.</p>`;
                 document.getElementById('upload-section').classList.add('hidden');
-                document.getElementById('load-from-upload-btn').classList.add('hidden');
-                displayLoadedImages(state.assets);
-                document.getElementById('goto-editor-btn').disabled = false;
+                document.getElementById('load-data-btn').classList.add('hidden');
+                document.getElementById('status-section').classList.remove('hidden');
+                document.getElementById('goto-map-btn').disabled = false;
+                showMessage('Datos cargados desde el caché.');
                 return true;
             } catch (error) {
-                console.log("No se encontraron archivos en caché, listo para subir.", error.message);
+                console.log('No hay datos en caché.', error.message);
                 return false;
             }
         }
-        
-        function initEditor() {
-            const canvas = document.getElementById('editor-canvas');
-            const container = document.getElementById('editor-container');
-            if (!canvas || !container || editor.renderer) return;
-            editor.scene = new THREE.Scene();
-            editor.scene.background = new THREE.Color(0xeeeeee);
-            editor.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000); 
-            editor.camera.position.set(0, 0.5, 3.5);
-            editor.scene.add(new THREE.AmbientLight(0xffffff, 2));
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
-            directionalLight.position.set(2, 5, 3);
-            editor.scene.add(directionalLight);
-            editor.renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
-            editor.renderer.setSize(container.clientWidth, container.clientHeight);
-            editor.renderer.setPixelRatio(window.devicePixelRatio);
-            editor.controls = new OrbitControls(editor.camera, editor.renderer.domElement);
-            editor.controls.enableDamping = true;
-            setupEditorZoomControls(canvas);
-            const animate = () => { requestAnimationFrame(animate); editor.controls.update(); editor.renderer.render(editor.scene, editor.camera); };
-            animate();
-        }
 
-        function setupEditorZoomControls(canvas) {
-            let isMouseDown = false;
-            let initialPinchDistance = 0;
-            let initialScale = 1;
+        async function saveDataToCache() {
+            const modelFile = document.getElementById('model-upload').files[0];
+            const lat = parseFloat(document.getElementById('latitude-input').value);
+            const lon = parseFloat(document.getElementById('longitude-input').value);
 
-            const updateScale = (newScale) => {
-                const asset = state.assets[0];
-                if (!asset) return;
-                const clampedScale = Math.max(0.1, newScale);
-                asset.transform.scale = { x: clampedScale, y: clampedScale, z: clampedScale };
-                updateModelTransformFromState(asset.transform);
-                document.getElementById('scale').value = clampedScale.toFixed(2);
-            };
-            
-            canvas.addEventListener('mousedown', () => { isMouseDown = true; });
-            canvas.addEventListener('mouseup', () => { isMouseDown = false; });
-            canvas.addEventListener('mouseleave', () => { isMouseDown = false; });
-            canvas.addEventListener('wheel', (event) => {
-                if(isMouseDown || !event.ctrlKey) { 
-                    event.preventDefault();
-                    const zoomFactor = event.deltaY > 0 ? -0.1 : 0.1;
-                    const currentScale = state.assets[0]?.transform.scale.x || 1;
-                    updateScale(currentScale + zoomFactor);
-                }
-            }, { passive: false });
-
-            canvas.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) { e.preventDefault(); initialPinchDistance = getDistance(e.touches[0], e.touches[1]); initialScale = state.assets[0]?.transform.scale.x || 1; }
-            }, { passive: false });
-            canvas.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2) { e.preventDefault(); const newDist = getDistance(e.touches[0], e.touches[1]); const scaleRatio = newDist / initialPinchDistance; updateScale(initialScale * scaleRatio); }
-            }, { passive: false });
-            const getDistance = (t1, t2) => { const dx = t1.clientX - t2.clientX; const dy = t1.clientY - t2.clientY; return Math.sqrt(dx * dx + dy * dy); };
-        }
-
-        function populateEditorSelector() {
-            const assetSelector = document.getElementById('asset-selector');
-            assetSelector.innerHTML = '';
-            state.assets.forEach(asset => {
-                const option = document.createElement('option');
-                option.value = asset.id;
-                option.textContent = asset.name;
-                assetSelector.appendChild(option);
-            });
-        }
-        function updateTransformInputs(transform) {
-            document.getElementById('pos-x').value = transform.position.x.toFixed(2); document.getElementById('pos-y').value = transform.position.y.toFixed(2); document.getElementById('pos-z').value = transform.position.z.toFixed(2);
-            document.getElementById('rot-x').value = Math.round(transform.rotation.x); document.getElementById('rot-y').value = Math.round(transform.rotation.y); document.getElementById('rot-z').value = Math.round(transform.rotation.z);
-            document.getElementById('scale').value = transform.scale.x.toFixed(2);
-        }                
-        function getAllMeshes(object) {
-            const meshes = []; object.traverse(child => { if (child.isMesh) { meshes.push(child); } }); return meshes;
-        }
-        function setupDragControls() {
-            if (editor.dragControls) editor.dragControls.dispose();
-            const moveConjunto = document.getElementById('move-conjunto-toggle').checked;
-            const draggableObjects = moveConjunto || !editor.currentTarget ? [editor.currentTarget] : getAllMeshes(editor.currentTarget);
-            if (draggableObjects.length === 0 && !moveConjunto) draggableObjects.push(editor.currentTarget);
-            editor.dragControls = new DragControls(draggableObjects, editor.camera, editor.renderer.domElement);
-            editor.dragControls.addEventListener('dragstart', () => editor.controls.enabled = false);
-            editor.dragControls.addEventListener('dragend', (event) => {
-                editor.controls.enabled = true; if (moveConjunto) {
-                    const asset = state.assets.find(a => a.id === parseInt(document.getElementById('asset-selector').value));
-                    if (asset) { const { x, y, z } = event.object.position; Object.assign(asset.transform.position, { x, y, z }); updateTransformInputs(asset.transform); }
-                }
-            });
-        }
-
-        async function ensureAssetIsNormalized(asset) {
-            if (asset.hasBeenNormalized) {
+            if (!modelFile || isNaN(lat) || isNaN(lon)) {
+                showMessage('Por favor, completa todos los campos.');
                 return;
             }
+
+            showMessage('Guardando datos en caché...');
+            const cache = await caches.open(CACHE_NAME);
+            const coordsBlob = new Blob([JSON.stringify({ latitude: lat, longitude: lon })], { type: 'application/json' });
+            await Promise.all([
+                cache.put('cached-model.glb', new Response(modelFile)),
+                cache.put('cached-coords.json', new Response(coordsBlob))
+            ]);
+            await loadDataFromCache();
+        }
+
+        function useCurrentLocation() {
+            if (!navigator.geolocation) {
+                showMessage("Geolocalización no es soportada por tu navegador.");
+                return;
+            }
+            showMessage("Obteniendo ubicación...");
+            navigator.geolocation.getCurrentPosition(position => {
+                document.getElementById('latitude-input').value = position.coords.latitude.toFixed(6);
+                document.getElementById('longitude-input').value = position.coords.longitude.toFixed(6);
+                showMessage("Ubicación obtenida.");
+            }, () => {
+                showMessage("No se pudo obtener la ubicación. Revisa los permisos.");
+            });
+        }
+        
+        window.initMap = function() { /* Google Maps callback will call this */ };
+
+        function initMapAndPreview() {
+            if (!appState.coords) {
+                showMessage("No hay coordenadas para mostrar el mapa.");
+                navigateTo('upload');
+                return;
+            }
+            
+            const mapOptions = {
+                center: { lat: appState.coords.latitude, lng: appState.coords.longitude },
+                zoom: 18,
+                mapTypeId: 'satellite',
+                disableDefaultUI: true,
+            };
+            map = new google.maps.Map(document.getElementById("map-canvas"), mapOptions);
+            new google.maps.Marker({ position: mapOptions.center, map: map });
+            
+            initModelPreview();
+        }
+
+        async function initModelPreview() {
+            const canvas = document.getElementById('model-preview-canvas');
+            if (!modelPreview.renderer) {
+                modelPreview.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+            }
+            modelPreview.renderer.setSize(window.innerWidth, window.innerHeight);
+            modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
+
+            modelPreview.scene = new THREE.Scene();
+            modelPreview.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            modelPreview.camera.position.set(0, 30, 0); // Vista desde arriba
+            modelPreview.camera.lookAt(0, 0, 0);
+
+            modelPreview.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
+            modelPreview.scene.add(new THREE.DirectionalLight(0xffffff, 2));
+
+            if (modelPreview.model) modelPreview.scene.remove(modelPreview.model);
+            
             try {
-                const gltf = await editor.loader.loadAsync(asset.modelDataUrl);
-                const box = new THREE.Box3().setFromObject(gltf.scene);
+                const loader = new GLTFLoader();
+                const gltf = await loader.loadAsync(appState.modelURL);
+                modelPreview.model = gltf.scene;
+                
+                // Escalar el modelo para la vista previa
+                const box = new THREE.Box3().setFromObject(modelPreview.model);
                 const size = new THREE.Vector3();
                 box.getSize(size);
                 const maxSize = Math.max(size.x, size.y, size.z);
-                if (maxSize > 0 && Number.isFinite(maxSize)) {
-                    asset.normalizationFactor = 1.0 / maxSize;
-                } else {
-                    asset.normalizationFactor = 1.0; 
-                }
-                asset.hasBeenNormalized = true;
-            } catch (error) {
-                console.error("Error normalizing asset:", error);
-                asset.normalizationFactor = 1.0; 
-                asset.hasBeenNormalized = true; 
-            }
-        }
-
-        function displayAssetInEditor(assetId) {
-            const asset = state.assets.find(a => a.id === assetId); if (!asset || !editor.scene) return;
-            ensureAssetIsNormalized(asset).then(() => {
-                if (editor.currentTarget) { editor.scene.remove(editor.currentTarget); if (editor.dragControls) editor.dragControls.dispose(); }
-                if (editor.currentPlane) editor.scene.remove(editor.currentPlane);
-                editor.textureLoader.load(asset.imageDataUrl, (texture) => {
-                    const aspect = texture.image.width / texture.image.height;
-                    const planeGeom = new THREE.PlaneGeometry(2, 2 / aspect);
-                    editor.currentPlane = new THREE.Mesh(new THREE.MeshBasicMaterial({ map: texture, transparent: true, opacity: 0.9 }));
-                    editor.currentPlane.geometry = planeGeom; // Update geometry instead of creating new mesh
-                    editor.currentPlane.position.set(0, 0, 0); editor.scene.add(editor.currentPlane);
-                });                        
-                editor.loader.load(asset.modelDataUrl, (gltf) => {
-                    editor.currentTarget = gltf.scene; 
-                    editor.scene.add(editor.currentTarget); updateModelTransformFromState(asset.transform); updateTransformInputs(asset.transform); setupDragControls();
-                });
-            });
-        }                
-        function updateModelTransformFromState(transform) {
-            if (!editor.currentTarget) return;
-            const asset = state.assets.find(a => a.id === parseInt(document.getElementById('asset-selector').value)); if (!asset) return;
-            const finalScale = transform.scale.x * asset.normalizationFactor;
-            editor.currentTarget.position.set(transform.position.x, transform.position.y, transform.position.z);
-            editor.currentTarget.rotation.set( THREE.MathUtils.degToRad(transform.rotation.x), THREE.MathUtils.degToRad(transform.rotation.y), THREE.MathUtils.degToRad(transform.rotation.z) );
-            editor.currentTarget.scale.set(finalScale, finalScale, finalScale);
-        }                
-        function preloadARAssets() {
-            if (state.areAssetsPreloaded || state.assets.length === 0) {
-                 if(state.assets.length > 0) { document.getElementById('start-ar-pc-btn').disabled = false; document.getElementById('start-ar-mobile-btn').disabled = false; } return;
-            }
-            const arPreloadContainer = document.getElementById('ar-preload-container'); arPreloadContainer.innerHTML = ''; 
-            const tempScene = document.createElement('a-scene'); tempScene.setAttribute('embedded', ''); tempScene.style.cssText = 'position:fixed; height:1px; width:1px; top:-9999px; left:-9999px;';
-            const assetsEl = document.createElement('a-assets'); assetsEl.setAttribute('timeout', '30000');
-            state.assets.forEach((asset) => {
-                const assetItem = document.createElement('a-asset-item'); assetItem.id = `model-${asset.id}`; assetItem.setAttribute('src', asset.modelDataUrl); assetItem.setAttribute('response-type', 'arraybuffer'); assetsEl.appendChild(assetItem);
-            });
-            const arStatusText = document.getElementById('ar-status-text'); const arLoader = document.querySelector('#ar-status .loader'); arStatusText.textContent = 'Cargando modelo 3D...'; arLoader.classList.remove('hidden');
-            assetsEl.addEventListener('loaded', () => {
-                state.areAssetsPreloaded = true; arStatusText.textContent = '¡Recurso listo! Elige un modo para activar la cámara.'; arLoader.classList.add('hidden');
-                document.getElementById('start-ar-pc-btn').disabled = false; document.getElementById('start-ar-mobile-btn').disabled = false;
-            });
-            assetsEl.addEventListener('timeout', (e) => { arStatusText.textContent = 'Error: La carga del modelo tardó mucho.'; arLoader.classList.add('hidden'); console.error("Asset loading timed out:", e.detail.src); });
-            tempScene.appendChild(assetsEl); arPreloadContainer.appendChild(tempScene);
-        }                
-        function setupAndStartAR(shouldEnterFullscreen) {
-            if (!state.areAssetsPreloaded) { document.getElementById('ar-status-text').textContent = 'Error: Modelo 3D no listo.'; return; }
-            document.getElementById('ar-preloader').classList.remove('hidden');
-            const arSceneContainer = document.getElementById('ar-scene-container'); arSceneContainer.innerHTML = ''; 
-            const asset = state.assets[0]; const t = asset.transform; 
-            const finalScale = t.scale.x * asset.normalizationFactor;
-            const mindARSettings = `imageTargetSrc: ${asset.markerDataUrl}; maxTrackables: 1; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; filterMinCF: 0.001; filterBeta: 10;`;
-            const sceneHTML = `<a-scene id="ar-scene" embedded vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false" mindar-image="${mindARSettings}" color-space="sRGB" renderer="colorManagement: true, physicallyCorrectLights"> <a-assets><a-asset-item id="model-0" src="${asset.modelDataUrl}"></a-asset-item></a-assets> <a-camera position="0 0 0" look-controls="enabled: false" fov="75"></a-camera> <a-entity mindar-image-target="targetIndex: 0"> <a-gltf-model src="#model-0" position="${t.position.x} ${t.position.y} ${t.position.z}" rotation="${t.rotation.x} ${t.rotation.y} ${t.rotation.z}" scale="${finalScale} ${finalScale} ${finalScale}" ar-rotator ar-zoomer texture-from-video> </a-gltf-model> </a-entity> </a-scene>`;
-            arSceneContainer.innerHTML = sceneHTML; const sceneEl = document.getElementById('ar-scene'); const scanningUI = document.getElementById('scanning-ui');
-            sceneEl.addEventListener('arReady', () => { scanningUI.classList.remove('hidden'); document.getElementById('ar-preloader').classList.add('hidden'); });
-            sceneEl.addEventListener('targetFound', () => { scanningUI.classList.add('hidden'); }); sceneEl.addEventListener('targetLost', () => { scanningUI.classList.remove('hidden'); });
-            document.documentElement.classList.add('ar-active'); document.body.classList.add('ar-active');
-            const appContainer = document.getElementById('app'); appContainer.classList.add('ar-fullscreen'); appContainer.style.maxHeight = ''; 
-            arSceneContainer.classList.add('ar-active'); document.getElementById('ar-ui-container').classList.add('hidden'); document.getElementById('ar-active-controls').classList.remove('hidden');
-            state.isArActive = true;
-            if (shouldEnterFullscreen) { document.documentElement.requestFullscreen().catch(err => console.warn("Fullscreen failed.", err)); }
-        }
-        function stopAR() {
-            const arSceneContainer = document.getElementById('ar-scene-container'); const sceneEl = arSceneContainer.querySelector('a-scene');
-            if (sceneEl && sceneEl.systems['mindar-image-system']) { sceneEl.systems['mindar-image-system'].stop(); }
-            if (sceneEl && sceneEl.parentNode) { sceneEl.parentNode.removeChild(sceneEl); }
-            arSceneContainer.innerHTML = ''; 
-            // OPTIMIZATION: Don't reset preloaded state when stopping AR locally.
-            // It will be reset on full page reload anyway.
-            // state.areAssetsPreloaded = false; 
-            const appContainer = document.getElementById('app'); document.documentElement.classList.remove('ar-active'); document.body.classList.remove('ar-active');
-            appContainer.classList.remove('ar-fullscreen'); appContainer.style.maxHeight = '85vh'; 
-            document.getElementById('ar-ui-container').classList.remove('hidden'); document.getElementById('ar-active-controls').classList.add('hidden'); document.getElementById('scanning-ui').classList.add('hidden');
-            if (document.fullscreenElement) { document.exitFullscreen().catch(err => console.error("Exit fullscreen error:", err)); }
-            state.isArActive = false;
-        }                
-        function toggleFullScreen() {
-            if (!document.fullscreenElement) { document.documentElement.requestFullscreen().catch(err => console.error(`Fullscreen error: ${err.message}`));
-            } else { document.exitFullscreen(); }
-        }
-        async function navigateTo(pageId) {
-            if (state.isArActive) stopAR();
-            document.querySelectorAll('.page').forEach(page => page.classList.remove('active'));
-            document.getElementById(pageId)?.classList.add('active'); state.currentPage = pageId;
-
-            if (pageId === 'page-editor' && state.assets.length > 0) {
-                if (!editor.renderer) initEditor();
-                populateEditorSelector();
-                displayAssetInEditor(state.assets[0].id);
-            } else if (pageId === 'page-ar' && state.assets.length > 0) {
-                document.getElementById('start-ar-pc-btn').disabled = true; document.getElementById('start-ar-mobile-btn').disabled = true;
-                await ensureAssetIsNormalized(state.assets[0]);
+                const scale = 20 / maxSize; // Ajustar a un tamaño visible en el mapa
+                modelPreview.model.scale.set(scale, scale, scale);
                 
-                // OPTIMIZATION: Only preload if not already done in this session.
-                if (!state.areAssetsPreloaded) {
-                    preloadARAssets();
-                } else {
-                    document.getElementById('ar-status-text').textContent = '¡Recurso listo! Elige un modo para activar la cámara.';
-                    document.querySelector('#ar-status .loader').classList.add('hidden');
-                    document.getElementById('start-ar-pc-btn').disabled = false;
-                    document.getElementById('start-ar-mobile-btn').disabled = false;
-                }
+                modelPreview.scene.add(modelPreview.model);
+                animateModelPreview();
+            } catch (error) {
+                console.error("Error cargando modelo para vista previa:", error);
             }
         }
-        async function initializeApp() {
-            document.getElementById('version-display').textContent = `v${APP_VERSION}`;
-            await loadAssetsFromCacheOnStartup();
+        
+        function animateModelPreview() {
+            modelPreview.animationFrameId = requestAnimationFrame(animateModelPreview);
+            if (modelPreview.model) modelPreview.model.rotation.y += 0.01;
+            modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
+        }
+
+        async function startAR() {
+            if (!appState.modelURL || !appState.coords) {
+                showMessage("No hay modelo o coordenadas cargadas.");
+                return;
+            }
+            navigateTo('ar');
+            document.getElementById('loading-screen').style.display = 'flex';
+
+            const existingModel = arScene.querySelector('#arch-model');
+            if (existingModel) existingModel.parentNode.removeChild(existingModel);
+
+            try {
+                if(appState.normalizationFactor === 1) { // Normalize only if not done before
+                    const loader = new GLTFLoader();
+                    const gltf = await loader.loadAsync(appState.modelURL);
+                    const box = new THREE.Box3().setFromObject(gltf.scene);
+                    const size = new THREE.Vector3();
+                    box.getSize(size);
+                    const maxSize = Math.max(size.x, size.y, size.z);
+                    appState.normalizationFactor = maxSize > 0 ? 1.0 / maxSize : 1.0;
+                }
+                
+                const modelEntity = document.createElement('a-entity');
+                modelEntity.setAttribute('id', 'arch-model');
+                modelEntity.setAttribute('gltf-model', `url(${appState.modelURL})`);
+                modelEntity.setAttribute('scale', `${appState.normalizationFactor} ${appState.normalizationFactor} ${appState.normalizationFactor}`);
+                modelEntity.setAttribute('gps-entity-place', `latitude: ${appState.coords.latitude}; longitude: ${appState.coords.longitude};`);
+                arScene.appendChild(modelEntity);
+                
+                window.addEventListener('gps-camera-update-position', () => {
+                     document.getElementById('loading-screen').style.display = 'none';
+                }, { once: true });
+            } catch(error) {
+                console.error("Error al iniciar AR:", error);
+                showMessage("Error al cargar el modelo 3D.");
+                document.getElementById('loading-screen').style.display = 'none';
+                navigateTo('upload');
+            }
+        }
+
+        function toggleInteriorView() {
+            appState.isInteriorView = !appState.isInteriorView;
+            const cameraEl = arScene.querySelector('[gps-camera]');
+            const modelEl = arScene.querySelector('#arch-model');
+            if (!cameraEl || !modelEl) return;
+            
+            if(appState.isInteriorView) {
+                appState.initialCameraPosition.copy(cameraEl.object3D.position);
+                cameraEl.setAttribute('gps-camera', 'active', false);
+                cameraEl.setAttribute('look-controls', 'enabled', true);
+                cameraEl.object3D.position.set(0, 1.6, 0); 
+                modelEl.setAttribute('visible', false);
+                document.getElementById('toggle-interior-view').textContent = 'Ver Exterior';
+                showMessage('Vista Interior: Muévete con el ratón/dedo.');
+            } else {
+                cameraEl.setAttribute('look-controls', 'enabled', false);
+                cameraEl.setAttribute('gps-camera', 'active', true);
+                cameraEl.object3D.position.copy(appState.initialCameraPosition);
+                modelEl.setAttribute('visible', true);
+                document.getElementById('toggle-interior-view').textContent = 'Ver Interior';
+                showMessage('Vista Exterior por GPS.');
+            }
+        }
+        
+        function stopAR() {
+             const cameraEl = arScene.querySelector('[gps-camera]');
+             const stream = cameraEl?.components['gps-camera']?.video?.srcObject;
+             if (stream) stream.getTracks().forEach(track => track.stop());
+             navigateTo('map');
         }
 
         // --- Event Listeners ---
-        document.getElementById('load-from-upload-btn').addEventListener('click', handleFileUploads);
+        document.getElementById('load-data-btn').addEventListener('click', saveDataToCache);
         document.getElementById('clear-cache-btn').addEventListener('click', clearCacheAndReload);
-        document.getElementById('goto-editor-btn').addEventListener('click', () => navigateTo('page-editor'));
-        document.getElementById('goto-ar-btn').addEventListener('click', () => navigateTo('page-ar'));
-        document.getElementById('back-to-upload-btn').addEventListener('click', () => navigateTo('page-upload'));
-        document.getElementById('back-to-editor-btn-pre').addEventListener('click', () => navigateTo('page-editor'));                        
-        document.getElementById('start-ar-pc-btn').addEventListener('click', () => setupAndStartAR(false));
-        document.getElementById('start-ar-mobile-btn').addEventListener('click', () => setupAndStartAR(true));                        
-        document.getElementById('stop-ar-btn').addEventListener('click', stopAR);
-        document.getElementById('fullscreen-ar-btn').addEventListener('click', toggleFullScreen);
-        document.getElementById('back-to-editor-btn-post').addEventListener('click', () => navigateTo('page-editor'));
-        document.getElementById('asset-selector').addEventListener('change', (e) => displayAssetInEditor(parseInt(e.target.value)));
-        document.getElementById('move-conjunto-toggle').addEventListener('change', () => displayAssetInEditor(parseInt(document.getElementById('asset-selector').value)));
-        ['pos-x', 'pos-y', 'pos-z', 'rot-x', 'rot-y', 'rot-z', 'scale'].forEach(id => {
-            document.getElementById(id).addEventListener('input', () => {
-                const asset = state.assets.find(a => a.id === parseInt(document.getElementById('asset-selector').value)); if (!asset || !editor.currentTarget) return;
-                asset.transform.position = { x: parseFloat(document.getElementById('pos-x').value) || 0, y: parseFloat(document.getElementById('pos-y').value) || 0, z: parseFloat(document.getElementById('pos-z').value) || 0 };
-                asset.transform.rotation = { x: parseFloat(document.getElementById('rot-x').value) || 0, y: parseFloat(document.getElementById('rot-y').value) || 0, z: parseFloat(document.getElementById('rot-z').value) || 0 };
-                const scaleVal = parseFloat(document.getElementById('scale').value) || 0;
-                asset.transform.scale = { x: scaleVal, y: scaleVal, z: scaleVal };
-                updateModelTransformFromState(asset.transform);
-            });
-        });                                
-        window.addEventListener('resize', () => {
-            if (state.isArActive) {
-                const sceneEl = document.querySelector('#ar-scene-container a-scene');
-                if (sceneEl && sceneEl.renderer) { sceneEl.renderer.setSize(window.innerWidth, window.innerHeight); }
-            }
-        });
+        document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
+        document.getElementById('use-location-btn').addEventListener('click', useCurrentLocation);
+        document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
+        document.getElementById('goto-ar-from-map-btn').addEventListener('click', startAR);
+        document.getElementById('back-to-map-btn').addEventListener('click', stopAR);
+        document.getElementById('toggle-interior-view').addEventListener('click', toggleInteriorView);
 
-        initializeApp();
-    });
+        // --- Init ---
+        loadDataFromCache();
     </script>
 </body>
 </html>
+
+
 
 
 
