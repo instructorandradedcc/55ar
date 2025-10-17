@@ -10,6 +10,9 @@
     <!-- A-Frame y GeoAR.js -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/nicolocarpignoli/GeoAR.js/master/resources/js/aframe-geoar.js"></script>
+    <!-- Leaflet.js (Alternativa a Google Maps) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
     <script type="importmap">
         {
             "imports": {
@@ -18,25 +21,24 @@
             }
         }
     </script>
-    <!-- Google Maps API - REEMPLAZA 'YOUR_GOOGLE_MAPS_API_KEY' con tu clave -->
-    <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap" async defer></script>
     <style>
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; }
         .page { display: none; height: 100%; width: 100%; }
         .page.active { display: block; }
-        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; z-index: 10000; }
+        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.8); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; z-index: 10000; text-align: center; padding: 1em;}
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #ar-controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; gap: 10px; }
-        .control-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; transition: background-color 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .control-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         .control-button:hover { background-color: #45a049; }
         .control-button:active { transform: translateY(1px); }
         #message-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.7); color: white; padding: 10px 20px; border-radius: 8px; font-size: 1rem; z-index: 9999; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; }
         #message-box.show { opacity: 1; }
         #map-container { position: relative; width: 100%; height: 100%; }
-        #map-canvas { width: 100%; height: 100%; }
+        #map-canvas { width: 100%; height: 100%; background-color: #f0f0f0; }
         #model-preview-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        #map-controls { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 10px; }
+        .map-ui-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 401; /* Above map but below other popups */ background-color: rgba(255, 255, 255, 0.8); padding: 10px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); backdrop-filter: blur(5px); }
+        #map-controls { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); z-index: 401; display: flex; gap: 10px; }
     </style>
 </head>
 <body>
@@ -89,6 +91,10 @@
             <button id="back-to-setup-from-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
             <button id="goto-ar-from-map-btn" class="control-button bg-green-500 hover:bg-green-600">Iniciar AR</button>
         </div>
+        <div class="map-ui-container">
+            <label for="map-scale-slider" class="block text-sm font-medium text-gray-700">Escala del Modelo</label>
+            <input id="map-scale-slider" type="range" min="1" max="100" value="20" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+        </div>
     </div>
 
 
@@ -118,20 +124,54 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // Global state
-        const CACHE_NAME = 'geo-ar-cache-v2';
+        // --- Componente A-Frame para Zoom en AR ---
+        AFRAME.registerComponent('geo-ar-zoomer', {
+            schema: {
+                zoomSpeed: { default: 0.1 },
+                minScale: { default: 0.1 },
+                maxScale: { default: 10.0 }
+            },
+            init: function () {
+                this.initialScale = this.el.object3D.scale.clone();
+                this.pinchStartDistance = 0;
+                const canvas = this.el.sceneEl.canvas;
+
+                const onTouchStart = (e) => {
+                    if (e.touches.length === 2) { this.pinchStartDistance = getDistance(e.touches[0], e.touches[1]); }
+                };
+                const onTouchMove = (e) => {
+                    if (e.touches.length === 2) {
+                        const currentDistance = getDistance(e.touches[0], e.touches[1]);
+                        const scaleFactor = currentDistance / this.pinchStartDistance;
+                        let newScale = this.el.object3D.scale.x * scaleFactor;
+                        newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
+                        this.el.object3D.scale.set(newScale, newScale, newScale);
+                        this.pinchStartDistance = currentDistance;
+                    }
+                };
+                const onWheel = (e) => {
+                    const zoomFactor = e.deltaY > 0 ? -this.data.zoomSpeed : this.data.zoomSpeed;
+                    let newScale = this.el.object3D.scale.x + zoomFactor;
+                    newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
+                    this.el.object3D.scale.set(newScale, newScale, newScale);
+                };
+                const getDistance = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                
+                canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+                canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+                canvas.addEventListener('wheel', onWheel, { passive: false });
+            }
+        });
+
+        // --- Lógica de la Aplicación ---
+        const CACHE_NAME = 'geo-ar-cache-v4';
         let appState = {
-            modelURL: null, coords: null, normalizationFactor: 1,
+            modelURL: null, coords: null, normalizationFactor: 1, mapScale: 20,
             isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
         };
-        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null };
+        let map, marker, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null };
 
-        // DOM Elements
-        const pages = {
-            upload: document.getElementById('upload-page'),
-            map: document.getElementById('map-page'),
-            ar: document.getElementById('ar-page'),
-        };
+        const pages = { upload: document.getElementById('upload-page'), map: document.getElementById('map-page'), ar: document.getElementById('ar-page') };
         const arScene = document.getElementById('ar-scene');
         const messageBox = document.getElementById('message-box');
         
@@ -147,10 +187,12 @@
 
             if (pageName === 'map') {
                 initMapAndPreview();
-            } else if (modelPreview.animationFrameId) {
-                // Cleanup map preview animation when leaving the page
-                cancelAnimationFrame(modelPreview.animationFrameId);
-                modelPreview.animationFrameId = null;
+            } else {
+                if (map) { map.remove(); map = null; }
+                if (modelPreview.animationFrameId) {
+                    cancelAnimationFrame(modelPreview.animationFrameId);
+                    modelPreview.animationFrameId = null;
+                }
             }
         }
 
@@ -179,7 +221,6 @@
                 showMessage('Datos cargados desde el caché.');
                 return true;
             } catch (error) {
-                console.log('No hay datos en caché.', error.message);
                 return false;
             }
         }
@@ -205,54 +246,54 @@
         }
 
         function useCurrentLocation() {
-            if (!navigator.geolocation) {
-                showMessage("Geolocalización no es soportada por tu navegador.");
-                return;
-            }
+            if (!navigator.geolocation) { showMessage("Geolocalización no es soportada."); return; }
             showMessage("Obteniendo ubicación...");
             navigator.geolocation.getCurrentPosition(position => {
                 document.getElementById('latitude-input').value = position.coords.latitude.toFixed(6);
                 document.getElementById('longitude-input').value = position.coords.longitude.toFixed(6);
                 showMessage("Ubicación obtenida.");
-            }, () => {
-                showMessage("No se pudo obtener la ubicación. Revisa los permisos.");
-            });
+            }, () => showMessage("No se pudo obtener la ubicación. Revisa los permisos."));
         }
         
-        window.initMap = function() { /* Google Maps callback will call this */ };
-
         function initMapAndPreview() {
             if (!appState.coords) {
                 showMessage("No hay coordenadas para mostrar el mapa.");
                 navigateTo('upload');
                 return;
             }
+
+            if (map) map.remove(); // Remove previous map instance if it exists
             
-            const mapOptions = {
-                center: { lat: appState.coords.latitude, lng: appState.coords.longitude },
-                zoom: 18,
-                mapTypeId: 'satellite',
-                disableDefaultUI: true,
-            };
-            map = new google.maps.Map(document.getElementById("map-canvas"), mapOptions);
-            new google.maps.Marker({ position: mapOptions.center, map: map });
+            map = L.map('map-canvas').setView([appState.coords.latitude, appState.coords.longitude], 18);
+
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+                attribution: 'Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
+            }).addTo(map);
+
+            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            });
+
+            const baseMaps = { "Satélite": satelliteLayer, "Calles": streetLayer };
+            L.control.layers(baseMaps).addTo(map);
+
+            if (marker) marker.remove();
+            marker = L.marker([appState.coords.latitude, appState.coords.longitude]).addTo(map)
+                .bindPopup('Ubicación del Modelo').openPopup();
             
             initModelPreview();
         }
 
         async function initModelPreview() {
             const canvas = document.getElementById('model-preview-canvas');
-            if (!modelPreview.renderer) {
-                modelPreview.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
-            }
+            modelPreview.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
             modelPreview.renderer.setSize(window.innerWidth, window.innerHeight);
             modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
 
             modelPreview.scene = new THREE.Scene();
             modelPreview.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            modelPreview.camera.position.set(0, 30, 0); // Vista desde arriba
+            modelPreview.camera.position.set(0, 30, 0);
             modelPreview.camera.lookAt(0, 0, 0);
-
             modelPreview.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
             modelPreview.scene.add(new THREE.DirectionalLight(0xffffff, 2));
 
@@ -262,15 +303,6 @@
                 const loader = new GLTFLoader();
                 const gltf = await loader.loadAsync(appState.modelURL);
                 modelPreview.model = gltf.scene;
-                
-                // Escalar el modelo para la vista previa
-                const box = new THREE.Box3().setFromObject(modelPreview.model);
-                const size = new THREE.Vector3();
-                box.getSize(size);
-                const maxSize = Math.max(size.x, size.y, size.z);
-                const scale = 20 / maxSize; // Ajustar a un tamaño visible en el mapa
-                modelPreview.model.scale.set(scale, scale, scale);
-                
                 modelPreview.scene.add(modelPreview.model);
                 animateModelPreview();
             } catch (error) {
@@ -280,23 +312,26 @@
         
         function animateModelPreview() {
             modelPreview.animationFrameId = requestAnimationFrame(animateModelPreview);
-            if (modelPreview.model) modelPreview.model.rotation.y += 0.01;
+            if (modelPreview.model) {
+                const box = new THREE.Box3().setFromObject(modelPreview.model);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                const maxSize = Math.max(size.x, size.y, size.z) || 1;
+                const scale = appState.mapScale / maxSize;
+                modelPreview.model.scale.set(scale, scale, scale);
+                modelPreview.model.rotation.y += 0.01;
+            }
             modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
         }
 
         async function startAR() {
-            if (!appState.modelURL || !appState.coords) {
-                showMessage("No hay modelo o coordenadas cargadas.");
-                return;
-            }
             navigateTo('ar');
             document.getElementById('loading-screen').style.display = 'flex';
-
             const existingModel = arScene.querySelector('#arch-model');
             if (existingModel) existingModel.parentNode.removeChild(existingModel);
 
             try {
-                if(appState.normalizationFactor === 1) { // Normalize only if not done before
+                if(appState.normalizationFactor === 1) {
                     const loader = new GLTFLoader();
                     const gltf = await loader.loadAsync(appState.modelURL);
                     const box = new THREE.Box3().setFromObject(gltf.scene);
@@ -311,6 +346,7 @@
                 modelEntity.setAttribute('gltf-model', `url(${appState.modelURL})`);
                 modelEntity.setAttribute('scale', `${appState.normalizationFactor} ${appState.normalizationFactor} ${appState.normalizationFactor}`);
                 modelEntity.setAttribute('gps-entity-place', `latitude: ${appState.coords.latitude}; longitude: ${appState.coords.longitude};`);
+                modelEntity.setAttribute('geo-ar-zoomer', '');
                 arScene.appendChild(modelEntity);
                 
                 window.addEventListener('gps-camera-update-position', () => {
@@ -320,12 +356,12 @@
                 console.error("Error al iniciar AR:", error);
                 showMessage("Error al cargar el modelo 3D.");
                 document.getElementById('loading-screen').style.display = 'none';
-                navigateTo('upload');
+                navigateTo('map');
             }
         }
 
         function toggleInteriorView() {
-            appState.isInteriorView = !appState.isInteriorView;
+             appState.isInteriorView = !appState.isInteriorView;
             const cameraEl = arScene.querySelector('[gps-camera]');
             const modelEl = arScene.querySelector('#arch-model');
             if (!cameraEl || !modelEl) return;
@@ -364,13 +400,15 @@
         document.getElementById('goto-ar-from-map-btn').addEventListener('click', startAR);
         document.getElementById('back-to-map-btn').addEventListener('click', stopAR);
         document.getElementById('toggle-interior-view').addEventListener('click', toggleInteriorView);
+        document.getElementById('map-scale-slider').addEventListener('input', (e) => {
+            appState.mapScale = parseFloat(e.target.value);
+        });
 
         // --- Init ---
         loadDataFromCache();
     </script>
 </body>
 </html>
-
 
 
 
