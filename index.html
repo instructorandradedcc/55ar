@@ -163,8 +163,8 @@
             }
         });
 
-        const APP_VERSION = '2.2';
-        const CACHE_NAME = 'geo-ar-cache-v11';
+        const APP_VERSION = '2.3';
+        const CACHE_NAME = 'geo-ar-cache-v12';
         let appState = {
             modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
             isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
@@ -263,9 +263,16 @@
             
             map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
             
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
+            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { 
                 attribution: 'Tiles &copy; Esri' 
             }).addTo(map);
+
+            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            });
+
+            const baseMaps = { "Satélite": satelliteLayer, "Calles": streetLayer };
+            L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
             map.on('moveend', () => {
                 const newCoords = map.getCenter();
@@ -420,9 +427,3 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
