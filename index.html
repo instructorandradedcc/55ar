@@ -163,7 +163,7 @@
             }
         });
 
-        const APP_VERSION = '2.8';
+        const APP_VERSION = '2.9';
         const CACHE_NAME = 'geo-ar-cache-v16';
         let appState = {
             modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
@@ -263,39 +263,37 @@
             
             map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
             
-            // --- Capas de Mapa Mejoradas ---
+            // --- Capas de Mapa Mejoradas (usando Google) ---
 
-            // Capa de satélite pura (vista de las casas)
-            const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Tiles &copy; Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
-                maxZoom: 20
+            // Capa de satélite de Google (vista de las casas)
+            const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
+                maxZoom: 20,
+                subdomains:['mt0','mt1','mt2','mt3'],
+                attribution: 'Imagery &copy;2025 Google'
             });
 
-            // Capa de calles y etiquetas
-            const labelsLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                pane: 'shadowPane',
-                maxZoom: 20
+            // Capa híbrida de Google (Satélite + Etiquetas)
+            const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
+                maxZoom: 20,
+                subdomains:['mt0','mt1','mt2','mt3'],
+                attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google'
             });
-            
-            // Capa híbrida (Satélite + Etiquetas)
-            const hybridLayer = L.layerGroup([satelliteLayer, labelsLayer]);
 
-            // Capa de mapa de calles (OpenStreetMap)
+            // Capa de mapa de calles (OpenStreetMap, como alternativa)
             const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 20
             });
 
             const baseMaps = { 
-                "Satélite": satelliteLayer,
-                "Híbrido (Satélite + Calles)": hybridLayer, 
-                "Calles": streetLayer 
+                "Google Satélite": googleSat,
+                "Google Híbrido": googleHybrid, 
+                "OpenStreetMap": streetLayer 
             };
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
-            // Establecer la vista de satélite pura como predeterminada
-            satelliteLayer.addTo(map);
+            // Establecer la vista de satélite de Google como predeterminada
+            googleSat.addTo(map);
 
             map.on('moveend', () => {
                 const newCoords = map.getCenter();
