@@ -125,7 +125,6 @@
         </a-scene>
         <div id="ar-controls">
              <button id="back-to-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver al Mapa</button>
-            <button id="toggle-interior-view" class="control-button bg-blue-500 hover:bg-blue-600">Ver Interior</button>
         </div>
         <div id="message-box"></div>
     </div>
@@ -163,13 +162,11 @@
             }
         });
 
-        const APP_VERSION = '3.0';
+        const APP_VERSION = '3.1';
         const CACHE_NAME = 'geo-ar-cache-v16';
-        let appState = {
-            modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
-            isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
-        };
+        let appState = { modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50 };
         let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isRotating: false, previousMousePosition: { x: 0, y: 0 } };
+        let arInitializationTimeout = null;
 
         const pages = { upload: document.getElementById('upload-page'), map: document.getElementById('map-page'), ar: document.getElementById('ar-page') };
         const messageBox = document.getElementById('message-box');
@@ -263,23 +260,16 @@
             
             map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
             
-            // --- Capas de Mapa Mejoradas (usando Google) ---
-
-            // Capa de satélite de Google (vista de las casas)
             const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
                 maxZoom: 20,
                 subdomains:['mt0','mt1','mt2','mt3'],
                 attribution: 'Imagery &copy;2025 Google'
             });
-
-            // Capa híbrida de Google (Satélite + Etiquetas)
             const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
                 maxZoom: 20,
                 subdomains:['mt0','mt1','mt2','mt3'],
                 attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google'
             });
-
-            // Capa de mapa de calles (OpenStreetMap, como alternativa)
             const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
                 maxZoom: 20
@@ -291,8 +281,6 @@
                 "OpenStreetMap": streetLayer 
             };
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
-
-            // Establecer la vista de satélite de Google como predeterminada
             googleSat.addTo(map);
 
             map.on('moveend', () => {
@@ -313,15 +301,9 @@
 
         async function initModelPreview() {
             const canvas = document.getElementById('model-preview-canvas');
-            
-            // FIX: Se habilita logarithmicDepthBuffer para prevenir el parpadeo del modelo sobre el mapa.
             modelPreview.renderer = new THREE.WebGLRenderer({ 
-                canvas, 
-                alpha: true, 
-                antialias: true, 
-                logarithmicDepthBuffer: true 
+                canvas, alpha: true, antialias: true, logarithmicDepthBuffer: true 
             });
-
             modelPreview.renderer.setSize(window.innerWidth, window.innerHeight);
             modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
             modelPreview.scene = new THREE.Scene();
@@ -357,14 +339,25 @@
                 modelPreview.model.scale.set(scale, scale, scale);
             }
             if(modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
-                modelPreview.renderer.clearDepth(); // Previene conflictos de profundidad con el mapa
+                modelPreview.renderer.clearDepth();
                 modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
             }
         }
 
         async function startAR() {
             navigateTo('ar');
-            document.getElementById('loading-screen').style.display = 'flex';
+            const loadingScreen = document.getElementById('loading-screen');
+            loadingScreen.style.display = 'flex';
+
+            // Timeout para manejar fallos en la inicialización de AR
+            arInitializationTimeout = setTimeout(() => {
+                if (loadingScreen.style.display !== 'none') {
+                    loadingScreen.style.display = 'none';
+                    showMessage('Error al iniciar AR. Asegúrate de estar en un móvil con GPS y permisos activados.', 8000);
+                    navigateTo('map');
+                }
+            }, 20000); // 20 segundos de espera
+
             const arScene = document.getElementById('ar-scene');
             const existingModel = arScene.querySelector('#arch-model');
             if (existingModel) existingModel.parentNode.removeChild(existingModel);
@@ -388,45 +381,33 @@
                 modelEntity.setAttribute('geo-ar-zoomer', '');
                 arScene.appendChild(modelEntity);
                 
-                window.addEventListener('gps-camera-update-position', () => {
-                     document.getElementById('loading-screen').style.display = 'none';
-                }, { once: true });
+                // Listener para cuando el GPS se activa y posiciona la cámara
+                window.addEventListener('gps-camera-update-position', function onGPSUpdate(event) {
+                    clearTimeout(arInitializationTimeout); // Cancelar el timeout si el GPS funciona
+                    if (loadingScreen.style.display !== 'none') {
+                        loadingScreen.style.display = 'none';
+                        const pos = event.detail.position;
+                        showMessage(`GPS Fijado. Precisión: ${pos.accuracy.toFixed(2)}m`);
+                    }
+                    // Remover el listener para que no se ejecute múltiples veces
+                    window.removeEventListener('gps-camera-update-position', onGPSUpdate);
+                });
             } catch(error) {
                 console.error("Error al iniciar AR:", error);
                 showMessage("Error al cargar el modelo 3D.");
+                clearTimeout(arInitializationTimeout);
                 navigateTo('map');
-            }
-        }
-
-        function toggleInteriorView() {
-            appState.isInteriorView = !appState.isInteriorView;
-            const arScene = document.getElementById('ar-scene');
-            const cameraEl = arScene.querySelector('[gps-camera]');
-            const modelEl = arScene.querySelector('#arch-model');
-            if (!cameraEl || !modelEl) return;
-            if(appState.isInteriorView) {
-                appState.initialCameraPosition.copy(cameraEl.object3D.position);
-                cameraEl.setAttribute('gps-camera', 'active', false);
-                cameraEl.setAttribute('look-controls', 'enabled', true);
-                cameraEl.object3D.position.set(0, 1.6, 0); 
-                modelEl.setAttribute('visible', false);
-                document.getElementById('toggle-interior-view').textContent = 'Ver Exterior';
-                showMessage('Vista Interior: Muévete con el ratón/dedo.');
-            } else {
-                cameraEl.setAttribute('look-controls', 'enabled', false);
-                cameraEl.setAttribute('gps-camera', 'active', true);
-                cameraEl.object3D.position.copy(appState.initialCameraPosition);
-                modelEl.setAttribute('visible', true);
-                document.getElementById('toggle-interior-view').textContent = 'Ver Interior';
-                showMessage('Vista Exterior por GPS.');
             }
         }
         
         function stopAR() {
              const arScene = document.getElementById('ar-scene');
+             // Detener el stream de la cámara de forma segura
              const cameraEl = arScene.querySelector('[gps-camera]');
-             const stream = cameraEl?.components['gps-camera']?.video?.srcObject;
-             if (stream) stream.getTracks().forEach(track => track.stop());
+             if (cameraEl && cameraEl.components['gps-camera'] && cameraEl.components['gps-camera'].video) {
+                const stream = cameraEl.components['gps-camera'].video.srcObject;
+                if (stream) stream.getTracks().forEach(track => track.stop());
+             }
              navigateTo('map');
         }
         
@@ -445,16 +426,15 @@
         document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
         document.getElementById('goto-ar-from-map-btn').addEventListener('click', startAR);
         document.getElementById('back-to-map-btn').addEventListener('click', stopAR);
-        document.getElementById('toggle-interior-view').addEventListener('click', toggleInteriorView);
         document.getElementById('map-scale-slider').addEventListener('input', (e) => { appState.mapScale = parseFloat(e.target.value); });
         document.getElementById('map-zoom-slider').addEventListener('input', (e) => { if(map) map.setZoom(parseFloat(e.target.value)); });
         document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
 
-        // --- Rotation controls for map preview ---
+        // --- Controles de rotación para la vista previa del mapa ---
         const mapContainer = document.getElementById('map-container');
         mapContainer.addEventListener('contextmenu', e => e.preventDefault());
         mapContainer.addEventListener('mousedown', (e) => {
-            if (e.button === 2) { // Right mouse button
+            if (e.button === 2) { // Botón derecho del ratón
                 modelPreview.isRotating = true;
                 if(map) map.dragging.disable();
                 modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
@@ -464,13 +444,8 @@
             if (modelPreview.isRotating && modelPreview.model) {
                 const deltaX = e.clientX - modelPreview.previousMousePosition.x;
                 const deltaY = e.clientY - modelPreview.previousMousePosition.y;
-
-                // Rotar en eje Y (horizontal) basado en el movimiento horizontal del mouse
                 modelPreview.model.rotation.y += deltaX * 0.01;
-                
-                // Rotar en eje X (vertical) basado en el movimiento vertical del mouse
                 modelPreview.model.rotation.x += deltaY * 0.01;
-
                 modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
             }
         });
