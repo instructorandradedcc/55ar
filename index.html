@@ -162,12 +162,11 @@
             }
         });
 
-        const APP_VERSION = '3.1';
+        const APP_VERSION = '3.3';
         const CACHE_NAME = 'geo-ar-cache-v16';
         let appState = { modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50 };
         let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isRotating: false, previousMousePosition: { x: 0, y: 0 } };
-        let arInitializationTimeout = null;
-
+        
         const pages = { upload: document.getElementById('upload-page'), map: document.getElementById('map-page'), ar: document.getElementById('ar-page') };
         const messageBox = document.getElementById('message-box');
         
@@ -301,13 +300,17 @@
 
         async function initModelPreview() {
             const canvas = document.getElementById('model-preview-canvas');
+            const container = document.getElementById('map-container');
+            if (!container) return;
+
             modelPreview.renderer = new THREE.WebGLRenderer({ 
                 canvas, alpha: true, antialias: true, logarithmicDepthBuffer: true 
             });
-            modelPreview.renderer.setSize(window.innerWidth, window.innerHeight);
+            
+            modelPreview.renderer.setSize(container.clientWidth, container.clientHeight); 
             modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
             modelPreview.scene = new THREE.Scene();
-            modelPreview.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            modelPreview.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
             modelPreview.camera.position.set(0, 40, 30);
             modelPreview.camera.lookAt(0, 0, 0);
             modelPreview.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
@@ -349,15 +352,33 @@
             const loadingScreen = document.getElementById('loading-screen');
             loadingScreen.style.display = 'flex';
 
-            // Timeout para manejar fallos en la inicialización de AR
-            arInitializationTimeout = setTimeout(() => {
-                if (loadingScreen.style.display !== 'none') {
-                    loadingScreen.style.display = 'none';
-                    showMessage('Error al iniciar AR. Asegúrate de estar en un móvil con GPS y permisos activados.', 8000);
-                    navigateTo('map');
-                }
-            }, 20000); // 20 segundos de espera
+            // --- Solicitud de Permisos Proactiva ---
+            try {
+                // Solicitar acceso a la cámara. Esto disparará el aviso del navegador si es necesario.
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                // Si se obtiene el permiso, detener el stream temporal para que A-Frame pueda usar la cámara.
+                stream.getTracks().forEach(track => track.stop());
 
+                // Solicitar acceso a la ubicación.
+                await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 10000 });
+                });
+
+            } catch (error) {
+                console.error("Error de permisos:", error);
+                loadingScreen.style.display = 'none';
+                let message = 'Error: No se pudo activar la cámara o GPS. Revisa los permisos del sitio en los ajustes de tu navegador.';
+                if (error.name === 'NotAllowedError' || error.name === 'PermissionDeniedError') {
+                    message = 'Permiso denegado. Por favor, habilita la cámara y la ubicación en los ajustes de tu navegador para usar la Realidad Aumentada.';
+                }
+                showMessage(message, 8000);
+                navigateTo('map'); // Devolver al mapa
+                return; // Detener la ejecución de la función aquí
+            }
+            // --- Fin de la Solicitud de Permisos ---
+
+
+            // Si los permisos fueron otorgados, proceder con la inicialización de A-Frame.
             const arScene = document.getElementById('ar-scene');
             const existingModel = arScene.querySelector('#arch-model');
             if (existingModel) existingModel.parentNode.removeChild(existingModel);
@@ -381,28 +402,23 @@
                 modelEntity.setAttribute('geo-ar-zoomer', '');
                 arScene.appendChild(modelEntity);
                 
-                // Listener para cuando el GPS se activa y posiciona la cámara
                 window.addEventListener('gps-camera-update-position', function onGPSUpdate(event) {
-                    clearTimeout(arInitializationTimeout); // Cancelar el timeout si el GPS funciona
                     if (loadingScreen.style.display !== 'none') {
                         loadingScreen.style.display = 'none';
                         const pos = event.detail.position;
                         showMessage(`GPS Fijado. Precisión: ${pos.accuracy.toFixed(2)}m`);
                     }
-                    // Remover el listener para que no se ejecute múltiples veces
                     window.removeEventListener('gps-camera-update-position', onGPSUpdate);
                 });
             } catch(error) {
                 console.error("Error al iniciar AR:", error);
                 showMessage("Error al cargar el modelo 3D.");
-                clearTimeout(arInitializationTimeout);
                 navigateTo('map');
             }
         }
         
         function stopAR() {
              const arScene = document.getElementById('ar-scene');
-             // Detener el stream de la cámara de forma segura
              const cameraEl = arScene.querySelector('[gps-camera]');
              if (cameraEl && cameraEl.components['gps-camera'] && cameraEl.components['gps-camera'].video) {
                 const stream = cameraEl.components['gps-camera'].video.srcObject;
@@ -418,7 +434,21 @@
             map.setView([lat, lon], map.getZoom());
         }
 
+        function onWindowResize() {
+            if (pages.map.classList.contains('active') && modelPreview.renderer) {
+                const container = document.getElementById('map-container');
+                if (!container) return;
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+
+                modelPreview.camera.aspect = width / height;
+                modelPreview.camera.updateProjectionMatrix();
+                modelPreview.renderer.setSize(width, height);
+            }
+        }
+
         // --- Event Listeners ---
+        window.addEventListener('resize', onWindowResize, false);
         document.getElementById('load-data-btn').addEventListener('click', saveDataToCache);
         document.getElementById('clear-cache-btn').addEventListener('click', clearCacheAndReload);
         document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
@@ -465,7 +495,6 @@
     </script>
 </body>
 </html>
-
 
 
 
