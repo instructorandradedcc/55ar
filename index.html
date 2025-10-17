@@ -163,8 +163,8 @@
             }
         });
 
-        const APP_VERSION = '2.4';
-        const CACHE_NAME = 'geo-ar-cache-v13';
+        const APP_VERSION = '2.5';
+        const CACHE_NAME = 'geo-ar-cache-v14';
         let appState = {
             modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
             isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
@@ -268,7 +268,8 @@
                     attribution: 'Tiles &copy; Esri'
                 }),
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
-                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+                    pane: 'shadowPane' // Render labels underneath the model preview
                 })
             ]).addTo(map);
 
@@ -290,7 +291,9 @@
             document.getElementById('jumpto-lon').value = appState.coords.longitude.toFixed(6);
 
             initModelPreview();
-            showMessage("Arrastra el mapa para posicionar. Clic derecho y arrastra para girar el modelo.", 5000);
+            setTimeout(() => {
+                showMessage("Arrastra el mapa para posicionar. Clic derecho y arrastra para girar el modelo.", 5000);
+            }, 500);
         }
 
         async function initModelPreview() {
@@ -331,6 +334,7 @@
                 modelPreview.model.scale.set(scale, scale, scale);
             }
             if(modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
+                modelPreview.renderer.clearDepth(); // FIX: Prevents z-fighting with map
                 modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
             }
         }
@@ -456,3 +460,6 @@
     </script>
 </body>
 </html>
+
+
+
