@@ -163,8 +163,8 @@
             }
         });
 
-        const APP_VERSION = '2.5';
-        const CACHE_NAME = 'geo-ar-cache-v14';
+        const APP_VERSION = '2.6';
+        const CACHE_NAME = 'geo-ar-cache-v15';
         let appState = {
             modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50,
             isInteriorView: false, initialCameraPosition: new THREE.Vector3(),
@@ -265,11 +265,13 @@
             
             const hybridLayer = L.layerGroup([
                 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                    attribution: 'Tiles &copy; Esri'
+                    attribution: 'Tiles &copy; Esri',
+                    maxZoom: 19 // Match max zoom of labels
                 }),
                 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', {
                     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
-                    pane: 'shadowPane' // Render labels underneath the model preview
+                    pane: 'shadowPane',
+                    maxZoom: 19
                 })
             ]).addTo(map);
 
@@ -302,8 +304,8 @@
             modelPreview.renderer.setSize(window.innerWidth, window.innerHeight);
             modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
             modelPreview.scene = new THREE.Scene();
-            modelPreview.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-            modelPreview.camera.position.set(0, 30, 25);
+            modelPreview.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 1, 1000); // FIX: Adjusted near clipping plane
+            modelPreview.camera.position.set(0, 40, 30); // Adjusted camera position for better view
             modelPreview.camera.lookAt(0, 0, 0);
             modelPreview.scene.add(new THREE.AmbientLight(0xffffff, 1.5));
             const dirLight = new THREE.DirectionalLight(0xffffff, 2);
@@ -460,6 +462,4 @@
     </script>
 </body>
 </html>
-
-
 
