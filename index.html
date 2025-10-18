@@ -7,9 +7,35 @@
     <!-- Favicon -->
     <link rel="icon" href="https://raw.githubusercontent.com/instructorandradedcc/propuesta-AR/main/favicon3dAR.ico">
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- A-Frame y AR.js -->
-    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <!-- A-Frame y AR.js - CARGADO TARDÍAMENTE -->
+    <script>
+        // Variable global para controlar cuándo cargar AR.js
+        let arJsLoaded = false;
+        
+        // Función para cargar AR.js dinámicamente
+        function loadARJs() {
+            if (arJsLoaded) return Promise.resolve();
+            
+            return new Promise((resolve) => {
+                // Cargar A-Frame
+                const aframeScript = document.createElement('script');
+                aframeScript.src = 'https://aframe.io/releases/1.3.0/aframe.min.js';
+                document.head.appendChild(aframeScript);
+                
+                aframeScript.onload = () => {
+                    // Cargar AR.js después de A-Frame
+                    const arjsScript = document.createElement('script');
+                    arjsScript.src = 'https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js';
+                    document.head.appendChild(arjsScript);
+                    
+                    arjsScript.onload = () => {
+                        arJsLoaded = true;
+                        resolve();
+                    };
+                };
+            });
+        }
+    </script>
     <!-- Leaflet.js -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
@@ -228,7 +254,7 @@
         .permission-modal {
             position: fixed;
             top: 0;
-            left: 0;
+            left: 0,
             width: 100%;
             height: 100%;
             background-color: rgba(0, 0, 0, 0.8);
@@ -425,33 +451,8 @@
             </div>
         </div>
         
-        <!-- Escena AR con configuración corregida -->
-        <a-scene id="ar-scene" 
-                 embedded 
-                 arjs="sourceType: webcam; 
-                       debugUIEnabled: false; 
-                       detectionMode: mono_and_matrix; 
-                       trackingMethod: best; 
-                       matrixCodeType: 3x3;
-                       cameraParametersUrl: 'https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat';
-                       maxDetectionRate: 30;
-                       canvasWidth: window.innerWidth;
-                       canvasHeight: window.innerHeight;"
-                 vr-mode-ui="enabled: false"
-                 renderer="logarithmicDepthBuffer: true; 
-                          physicallyCorrectLights: true; 
-                          antialias: true; 
-                          alpha: true;
-                          precision: high;">
-            
-            <!-- Entidad de la cámara con GPS -->
-            <a-camera gps-camera="minDistance: 1; alert: true;" rotation-reader></a-camera>
-            
-            <!-- Luces mejoradas -->
-            <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
-            <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-0.5 1 1"></a-entity>
-            <a-entity light="type: point; color: #FFF; intensity: 0.5" position="0 10 0"></a-entity>
-        </a-scene>
+        <!-- Escena AR se creará dinámicamente -->
+        <div id="ar-scene-container"></div>
         
         <!-- Panel de información AR -->
         <div class="ar-info-panel">
@@ -487,68 +488,8 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // Componente para zoom en AR mejorado
-        AFRAME.registerComponent('geo-ar-zoomer', {
-            schema: { 
-                zoomSpeed: { default: 0.1 }, 
-                minScale: { default: 0.1 }, 
-                maxScale: { default: 5.0 }
-            },
-            init: function () {
-                this.pinchStartDistance = 0;
-                const canvas = this.el.sceneEl.canvas;
-                
-                const onTouchStart = (e) => { 
-                    if (e.touches.length === 2) { 
-                        this.pinchStartDistance = getDistance(e.touches[0], e.touches[1]); 
-                    }
-                };
-                
-                const onTouchMove = (e) => {
-                    if (e.touches.length === 2) {
-                        e.preventDefault();
-                        const currentDistance = getDistance(e.touches[0], e.touches[1]);
-                        const scaleFactor = currentDistance / this.pinchStartDistance;
-                        let newScale = this.el.object3D.scale.x * scaleFactor;
-                        newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
-                        this.el.object3D.scale.set(newScale, newScale, newScale);
-                        
-                        // Actualizar el slider de escala
-                        const arScaleSlider = document.getElementById('ar-scale-slider');
-                        if (arScaleSlider) {
-                            arScaleSlider.value = newScale;
-                            document.getElementById('current-scale').textContent = newScale.toFixed(1);
-                        }
-                        
-                        this.pinchStartDistance = currentDistance;
-                    }
-                };
-                
-                const onWheel = (e) => {
-                    e.preventDefault();
-                    const zoomFactor = e.deltaY > 0 ? -this.data.zoomSpeed : this.data.zoomSpeed;
-                    let newScale = this.el.object3D.scale.x + zoomFactor;
-                    newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
-                    this.el.object3D.scale.set(newScale, newScale, newScale);
-                    
-                    // Actualizar el slider de escala
-                    const arScaleSlider = document.getElementById('ar-scale-slider');
-                    if (arScaleSlider) {
-                        arScaleSlider.value = newScale;
-                        document.getElementById('current-scale').textContent = newScale.toFixed(1);
-                    }
-                };
-                
-                const getDistance = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
-                
-                canvas.addEventListener('touchstart', onTouchStart, { passive: false });
-                canvas.addEventListener('touchmove', onTouchMove, { passive: false });
-                canvas.addEventListener('wheel', onWheel, { passive: false });
-            }
-        });
-
-        const APP_VERSION = '4.1';
-        const CACHE_NAME = 'geo-ar-cache-v21';
+        const APP_VERSION = '4.2';
+        const CACHE_NAME = 'geo-ar-cache-v22';
         let appState = { 
             modelURL: null, 
             coords: null, 
@@ -610,7 +551,7 @@
             } else if (pageName === 'scale') {
                 loadScaleSettings();
             } else if (pageName === 'ar') {
-                // No iniciamos AR automáticamente, esperamos a que el usuario conceda permisos
+                // No hacemos nada aquí, AR se inicializará cuando el usuario haga clic
             } else {
                 if (map) { 
                     map.remove(); 
@@ -625,21 +566,23 @@
 
         // Función para solicitar permisos explícitamente
         async function requestPermissionsAndStartAR() {
-            // Mostrar modal de permisos en lugar del loader directamente
+            // Mostrar modal de permisos
             permissionModal.style.display = 'flex';
             
             // Configurar el botón de conceder permisos
             document.getElementById('grant-permissions-btn').onclick = async () => {
                 permissionModal.style.display = 'none';
                 arLoader.style.display = 'flex';
-                arLoadingText.textContent = 'Solicitando permisos de cámara y GPS...';
+                arLoadingText.textContent = 'Cargando bibliotecas AR...';
                 
                 try {
+                    // Cargar AR.js dinámicamente
+                    await loadARJs();
+                    
                     // Verificar si estamos en un dispositivo móvil
                     const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
                     
                     if (isMobile) {
-                        // En dispositivos móviles, solicitamos permisos de manera más directa
                         arLoadingText.textContent = 'Solicitando permisos de cámara...';
                         
                         // Solicitar permiso de cámara
@@ -660,11 +603,7 @@
                                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
                             );
                         });
-                        
-                        // Inicializar AR después de obtener permisos
-                        initializeAR();
                     } else {
-                        // En computadoras, mostramos un mensaje diferente
                         arLoadingText.textContent = 'Iniciando cámara en modo escritorio...';
                         
                         // Solicitar permiso de cámara
@@ -683,10 +622,10 @@
                                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
                             );
                         });
-                        
-                        // Inicializar AR después de obtener permisos
-                        initializeAR();
                     }
+                    
+                    // Inicializar AR después de obtener permisos
+                    initializeAR();
                     
                 } catch (error) {
                     console.error('Error al solicitar permisos:', error);
@@ -705,12 +644,104 @@
             };
         }
 
+        // Componente para zoom en AR mejorado
+        function registerARComponents() {
+            AFRAME.registerComponent('geo-ar-zoomer', {
+                schema: { 
+                    zoomSpeed: { default: 0.1 }, 
+                    minScale: { default: 0.1 }, 
+                    maxScale: { default: 5.0 }
+                },
+                init: function () {
+                    this.pinchStartDistance = 0;
+                    const canvas = this.el.sceneEl.canvas;
+                    
+                    const onTouchStart = (e) => { 
+                        if (e.touches.length === 2) { 
+                            this.pinchStartDistance = getDistance(e.touches[0], e.touches[1]); 
+                        }
+                    };
+                    
+                    const onTouchMove = (e) => {
+                        if (e.touches.length === 2) {
+                            e.preventDefault();
+                            const currentDistance = getDistance(e.touches[0], e.touches[1]);
+                            const scaleFactor = currentDistance / this.pinchStartDistance;
+                            let newScale = this.el.object3D.scale.x * scaleFactor;
+                            newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
+                            this.el.object3D.scale.set(newScale, newScale, newScale);
+                            
+                            // Actualizar el slider de escala
+                            const arScaleSlider = document.getElementById('ar-scale-slider');
+                            if (arScaleSlider) {
+                                arScaleSlider.value = newScale;
+                                document.getElementById('current-scale').textContent = newScale.toFixed(1);
+                            }
+                            
+                            this.pinchStartDistance = currentDistance;
+                        }
+                    };
+                    
+                    const onWheel = (e) => {
+                        e.preventDefault();
+                        const zoomFactor = e.deltaY > 0 ? -this.data.zoomSpeed : this.data.zoomSpeed;
+                        let newScale = this.el.object3D.scale.x + zoomFactor;
+                        newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
+                        this.el.object3D.scale.set(newScale, newScale, newScale);
+                        
+                        // Actualizar el slider de escala
+                        const arScaleSlider = document.getElementById('ar-scale-slider');
+                        if (arScaleSlider) {
+                            arScaleSlider.value = newScale;
+                            document.getElementById('current-scale').textContent = newScale.toFixed(1);
+                        }
+                    };
+                    
+                    const getDistance = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+                    
+                    canvas.addEventListener('touchstart', onTouchStart, { passive: false });
+                    canvas.addEventListener('touchmove', onTouchMove, { passive: false });
+                    canvas.addEventListener('wheel', onWheel, { passive: false });
+                }
+            });
+        }
+
         async function initializeAR() {
-            const arScene = document.getElementById('ar-scene');
+            arLoadingText.textContent = 'Creando escena AR...';
             
-            // Forzar la inicialización de la escena
-            arScene.setAttribute('embedded', '');
-            arScene.play();
+            // Registrar componentes personalizados
+            registerARComponents();
+            
+            // Crear la escena AR dinámicamente
+            const arSceneContainer = document.getElementById('ar-scene-container');
+            arSceneContainer.innerHTML = `
+                <a-scene id="ar-scene" 
+                         embedded 
+                         arjs="sourceType: webcam; 
+                               debugUIEnabled: false; 
+                               detectionMode: mono_and_matrix; 
+                               trackingMethod: best; 
+                               matrixCodeType: 3x3;
+                               cameraParametersUrl: 'https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat';
+                               maxDetectionRate: 30;
+                               canvasWidth: window.innerWidth;
+                               canvasHeight: window.innerHeight;"
+                         vr-mode-ui="enabled: false"
+                         renderer="logarithmicDepthBuffer: true; 
+                                  physicallyCorrectLights: true; 
+                                  antialias: true; 
+                                  alpha: true;
+                                  precision: high;">
+                    
+                    <!-- Entidad de la cámara con GPS -->
+                    <a-camera gps-camera="minDistance: 1; alert: true;" rotation-reader></a-camera>
+                    
+                    <!-- Luces mejoradas -->
+                    <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
+                    <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-0.5 1 1"></a-entity>
+                    <a-entity light="type: point; color: #FFF; intensity: 0.5" position="0 10 0"></a-entity>
+                </a-scene>
+            `;
             
             arLoadingText.textContent = 'Iniciando cámara AR...';
             
@@ -986,7 +1017,7 @@
             });
             
             // Añadir capa base por defecto
-            osmTiles.addTo(map);
+            googleSat.addTo(map);
             
             const baseMaps = { 
                 "OpenStreetMap": osmTiles,
@@ -1092,10 +1123,12 @@
              const arScene = document.getElementById('ar-scene');
              
              // Pausamos la escena
-             arScene.pause();
+             if (arScene) {
+                 arScene.pause();
+             }
              
              // Liberamos la cámara
-             const cameraEl = arScene.querySelector('[gps-camera]');
+             const cameraEl = arScene ? arScene.querySelector('[gps-camera]') : null;
              if (cameraEl && cameraEl.components['gps-camera'] && cameraEl.components['gps-camera'].video) {
                 const stream = cameraEl.components['gps-camera'].video.srcObject;
                 if (stream) {
@@ -1267,4 +1300,5 @@
     </script>
 </body>
 </html>
+
 
