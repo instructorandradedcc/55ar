@@ -292,21 +292,23 @@
         
         /* 
          * =================================================================================
-         * CORRECCIÓN CRÍTICA: Forzar la visualización del video de la cámara AR
+         * CORRECCIÓN CRÍTICA: Configuración de video basada en la aplicación con marcadores
          * =================================================================================
-         * Basado en el análisis de problemas comunes, estos estilos aseguran que el video
-         * de la cámara sea visible como fondo en todos los dispositivos, especialmente iOS.
+         * Basado en el análisis de la aplicación con marcadores que funciona correctamente,
+         * estos estilos aseguran que el video de la cámara sea visible como fondo.
          * =================================================================================
          */
         video {
             position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 0 !important;
-            transform: scale(-1, 1) !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            width: auto !important;
+            height: auto !important;
             object-fit: cover !important;
+            z-index: 0 !important;
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -315,20 +317,19 @@
             playsinline: true !important;
             webkit-playsinline: true !important;
             muted: true !important;
-            /* Evitar que el navegador lo pause */
-            -webkit-perspective: none !important;
-            perspective: none !important;
         }
         
         .arjs-video {
             position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 0 !important;
-            transform: scale(-1, 1) !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            width: auto !important;
+            height: auto !important;
             object-fit: cover !important;
+            z-index: 0 !important;
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -372,10 +373,10 @@
         
         /*
          * =================================================================================
-         * CORRECCIÓN: Asegurar que el video de la cámara esté siempre visible
+         * CORRECCIÓN CRÍTICA: Configuración del contenedor de la escena AR
          * =================================================================================
-         * Estilos adicionales para asegurar que el video de la cámara se muestre
-         * correctamente como fondo de la escena AR.
+         * Basado en la aplicación con marcadores, esta configuración asegura que
+         * el video y el canvas se muestren correctamente.
          * =================================================================================
          */
         #ar-scene-container {
@@ -390,11 +391,14 @@
         
         #ar-scene-container video, 
         #ar-scene-container canvas {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
+            position: absolute !important;
+            top: 50% !important;
+            left: 50% !important;
+            transform: translate(-50%, -50%) !important;
+            min-width: 100% !important;
+            min-height: 100% !important;
+            width: auto !important;
+            height: auto !important;
             object-fit: cover !important;
         }
         
@@ -404,7 +408,6 @@
         
         #ar-scene-container video {
             z-index: 0 !important;
-            transform: scale(-1, 1) !important;
         }
         
         /* Estilos para los inputs de escala */
@@ -878,8 +881,8 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.9'; // Incrementado por correcciones críticas
-        const CACHE_NAME = 'geo-ar-cache-v39';
+        const APP_VERSION = '6.0'; // Incrementado por correcciones críticas de cámara
+        const CACHE_NAME = 'geo-ar-cache-v40';
         let appState = {
             modelURL: null,
             coords: null,
@@ -1121,16 +1124,11 @@
             
             /*
              * =================================================================================
-             * CORRECCIÓN CRÍTICA 1: Configuración de AR.js para Geolocalización
+             * CORRECCIÓN CRÍTICA: Configuración de AR.js basada en la aplicación con marcadores
              * =================================================================================
-             * Se han eliminado los parámetros de detección de marcadores (detectionMode, matrixCodeType)
-             * que entraban en conflicto con el modo de geolocalización, causando la pantalla negra.
-             * 
-             * CORRECCIÓN CRÍTICA 2: Eliminación de Simulación de GPS
-             * =================================================================================
-             * Se han eliminado 'simulateLatitude' y 'simulateLongitude' del componente gps-camera.
-             * Esto permite que AR.js use la ubicación REAL del dispositivo en lugar de simular
-             * que el usuario ya está en la ubicación del modelo, lo que causaba el error de distancia.
+             * Se ha modificado la configuración de AR.js para asegurar que el video de la cámara
+             * se muestre correctamente, eliminando parámetros conflictivos y ajustando
+             * la configuración para que sea compatible con la visualización del video.
              * =================================================================================
              */
             arSceneContainer.innerHTML = `
@@ -1184,31 +1182,47 @@
                     showDebugInfo('Renderer configurado para transparencia');
                 }
                 
-                // Forzar la visualización del video y la transparencia del canvas
+                /*
+                 * =================================================================================
+                 * CORRECCIÓN CRÍTICA: Forzar visualización del video basada en la aplicación con marcadores
+                 * =================================================================================
+                 * Basado en el análisis de la aplicación con marcadores que funciona correctamente,
+                 * implementamos una solución para asegurar que el video de la cámara sea visible.
+                 * =================================================================================
+                 */
                 setTimeout(() => {
+                    // Forzar que todos los videos sean visibles con la configuración correcta
                     const videos = document.querySelectorAll('video');
                     if (videos.length > 0) {
                         videos.forEach(video => {
+                            // Configuración basada en la aplicación con marcadores
                             video.style.position = 'fixed';
-                            video.style.top = '0';
-                            video.style.left = '0';
-                            video.style.width = '100%';
-                            video.style.height = '100%';
+                            video.style.top = '50%';
+                            video.style.left = '50%';
+                            video.style.transform = 'translate(-50%, -50%)';
+                            video.style.minWidth = '100%';
+                            video.style.minHeight = '100%';
+                            video.style.width = 'auto';
+                            video.style.height = 'auto';
                             video.style.objectFit = 'cover';
                             video.style.zIndex = '0';
-                            video.style.transform = 'scale(-1, 1)';
                             video.style.display = 'block';
                             video.style.opacity = '1';
                             video.style.visibility = 'visible';
+                            
+                            // Atributos críticos para iOS y móviles
                             video.setAttribute('autoplay', 'true');
                             video.setAttribute('playsinline', 'true');
                             video.setAttribute('webkit-playsinline', 'true');
                             video.setAttribute('muted', 'true');
+                            
+                            // Forzar reproducción del video
                             forceVideoPlay(video);
                         });
                         showDebugInfo('Video de cámara configurado correctamente');
                     }
                     
+                    // Asegurar que el canvas esté sobre el video
                     const canvases = document.querySelectorAll('canvas');
                     if (canvases.length > 0) {
                         canvases.forEach(canvas => {
@@ -1225,6 +1239,21 @@
                         showDebugInfo('Canvas configurado correctamente');
                     }
                     
+                    // Forzar que el contenedor de la escena AR sea visible
+                    const arSceneContainer = document.getElementById('ar-scene-container');
+                    if (arSceneContainer) {
+                        arSceneContainer.style.position = 'fixed';
+                        arSceneContainer.style.top = '0';
+                        arSceneContainer.style.left = '0';
+                        arSceneContainer.style.width = '100%';
+                        arSceneContainer.style.height = '100%';
+                        arSceneContainer.style.zIndex = '1';
+                        arSceneContainer.style.display = 'block';
+                        arSceneContainer.style.backgroundColor = 'transparent';
+                        arSceneContainer.style.background = 'transparent';
+                    }
+                    
+                    // Mostrar botón de inicio para iOS si es necesario
                     if (appState.isIOS && !appState.videoStarted) {
                         iosStartButton.classList.add('show');
                         showDebugInfo('Mostrando botón de inicio para iOS');
@@ -1259,24 +1288,32 @@
 
         function forceVideoPlay(video) {
             if (!video) return;
+            
+            // Intentar reproducir el video directamente
             const playPromise = video.play();
+            
             if (playPromise !== undefined) {
                 playPromise.then(() => {
                     console.log('Video reproduciéndose correctamente');
                     appState.videoStarted = true;
                     showDebugInfo('Video iniciado correctamente');
+                    
+                    // Ocultar botón de iOS si está visible
                     if (appState.isIOS && iosStartButton.classList.contains('show')) {
                         iosStartButton.classList.remove('show');
                     }
                 }).catch(error => {
                     console.error('Error al reproducir video:', error);
                     showDebugInfo(`Error al reproducir video: ${error.message}`);
+                    
+                    // Si el video no puede reproducirse automáticamente, mostrar botón de inicio
                     if (appState.isIOS && !iosStartButton.classList.contains('show')) {
                         iosStartButton.classList.add('show');
                         showDebugInfo('Mostrando botón de inicio para iOS (requiere interacción del usuario)');
                     }
                 });
             } else {
+                // Para navegadores más antiguos que no devuelven una promesa
                 appState.videoStarted = true;
                 showDebugInfo('Video iniciado (método legacy)');
             }
@@ -1289,16 +1326,23 @@
                     forceVideoPlay(video);
                 });
             }
+            
+            // Ocultar botón de inicio
             iosStartButton.classList.remove('show');
+            
             showMessage('Cámara AR iniciada', 2000);
         }
 
+        // Event listener para el botón de inicio de iOS
         iosStartButton.addEventListener('click', startVideoWithUserInteraction);
+        
+        // Event listener global para interacción del usuario
         document.addEventListener('touchstart', function() {
             if (!appState.videoStarted && pages.ar.classList.contains('active')) {
                 startVideoWithUserInteraction();
             }
         }, { once: true });
+        
         document.addEventListener('click', function() {
             if (!appState.videoStarted && pages.ar.classList.contains('active')) {
                 startVideoWithUserInteraction();
@@ -1548,22 +1592,29 @@
         function setupModelInteraction() {
             if (!arModel || !arModel.object3D) return;
             
+            // Habilitar la interacción con el modelo
             arModel.setAttribute('class', 'intersectable');
             
+            // Configurar eventos de interacción
             arScene.addEventListener('click', (event) => {
                 if (!appState.explorationMode) return;
                 
+                // Obtener la posición del clic
                 mouse.x = (event.detail.clientX / window.innerWidth) * 2 - 1;
                 mouse.y = -(event.detail.clientY / window.innerHeight) * 2 + 1;
                 
+                // Actualizar el raycaster
                 raycaster.setFromCamera(mouse, arCamera.components.camera.camera);
                 
+                // Comprobar intersecciones con el modelo
                 const intersects = raycaster.intersectObject(arModel.object3D, true);
                 
                 if (intersects.length > 0) {
+                    // Si hay intersección, mostrar información del punto de intersección
                     const intersection = intersects[0];
                     showDebugInfo(`Intersección en: ${intersection.point.x.toFixed(2)}, ${intersection.point.y.toFixed(2)}, ${intersection.point.z.toFixed(2)}`);
                     
+                    // Cambiar el color del material para indicar la intersección
                     if (intersection.object.material) {
                         intersection.object.material.color.set(0xff0000);
                         setTimeout(() => {
@@ -1607,6 +1658,7 @@
                 
                 document.getElementById('current-scale').textContent = appState.initialARScale.toFixed(1);
                 
+                // Actualizar la posición del modelo después de escalarlo
                 updateModelPosition();
             }, undefined, (error) => {
                 console.error('Error al cargar el modelo para ajustar escala:', error);
@@ -1628,6 +1680,7 @@
                 arModel = null;
             }
             
+            // Ocultar indicadores de ubicación
             currentLocationIndicator.style.display = 'none';
             modelLocationIndicator.style.display = 'none';
             connectionLine.style.display = 'none';
@@ -1803,6 +1856,7 @@
 
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
+            // Marcador de ubicación inicial (azul)
             const initialMarker = L.marker([appState.coords.latitude, appState.coords.longitude], {
                 draggable: true,
                 autoPan: true
@@ -1819,6 +1873,7 @@
                 showMessage('Ubicación inicial actualizada.', 3000);
             });
             
+            // Marcador de ubicación del modelo (naranja)
             if (appState.arTargetCoords) {
                 modelLocationMarker = L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
                     .addTo(map)
@@ -1833,6 +1888,7 @@
                     }));
             }
             
+            // Marcador de ubicación actual GPS (verde)
             if (appState.currentGPSLocation) {
                 if (currentLocationMarker) {
                     map.removeLayer(currentLocationMarker);
@@ -2035,8 +2091,8 @@
             document.getElementById('distance-value').textContent = distanceValue.toFixed(0) + 'm';
         });
 
-        document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
-            const scaleValue = parseFloat(e.target.value);
+        document.getElementById('ar-scale-slider').addEventListener('input',) => {
+            const scaleValue = (e parseFloat(e.target.value);
             document.getElementById('current-scale').textContent = scaleValue.toFixed(1);
             
             if (arModel && arModel.object3D) {
@@ -2054,6 +2110,7 @@
             }
         });
         
+        // Event listener para el modo de exploración
         toggleExplorationBtn.addEventListener('click', () => {
             appState.explorationMode = !appState.explorationMode;
             
@@ -2062,6 +2119,7 @@
                 toggleExplorationBtn.textContent = 'Desactivar Exploración';
                 showMessage('Modo de exploración activado. Ahora puedes interactuar con el modelo.', 3000);
                 
+                // Hacer el modelo más grande para facilitar la interacción
                 if (arModel && arModel.object3D) {
                     const currentScale = arModel.getAttribute('scale');
                     const scaleValues = currentScale.split(' ').map(parseFloat);
@@ -2072,6 +2130,7 @@
                 toggleExplorationBtn.textContent = 'Activar Exploración';
                 showMessage('Modo de exploración desactivado.', 3000);
                 
+                // Restaurar la escala original del modelo
                 if (arModel && arModel.object3D) {
                     const currentScale = arModel.getAttribute('scale');
                     const scaleValues = currentScale.split(' ').map(parseFloat);
@@ -2165,6 +2224,7 @@
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
             
+            // Detectar si es iOS
             appState.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (appState.isIOS) {
                 showDebugInfo('Dispositivo iOS detectado');
@@ -2177,3 +2237,4 @@
     </script>
 </body>
 </html>
+
