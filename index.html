@@ -292,7 +292,7 @@
         
         /* 
          * =================================================================================
-         * CORRECCIÓN: Forzar la visualización del video de la cámara AR
+         * CORRECCIÓN CRÍTICA: Forzar la visualización del video de la cámara AR
          * =================================================================================
          * AR.js crea un elemento <video> que a veces queda oculto o detrás del canvas.
          * Este CSS asegura que el video de la cámara sea visible como fondo.
@@ -304,12 +304,13 @@
             left: 0 !important;
             width: 100% !important;
             height: 100% !important;
-            z-index: -1 !important; /* Detrás del canvas pero visible */
+            z-index: 1 !important; /* Asegurar que esté detrás pero visible */
             transform: scale(-1, 1) !important; /* Espejo para vista natural */
             object-fit: cover !important;
+            display: block !important;
         }
         .a-canvas {
-            z-index: 1 !important;
+            z-index: 2 !important;
         }
         
         /*
@@ -512,6 +513,33 @@
         .distance-value {
             color: #4CAF50;
             font-size: 18px;
+        }
+        
+        /* Estilos para el modo de exploración */
+        .exploration-mode {
+            position: fixed;
+            top: 140px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9998;
+            display: none;
+        }
+        .exploration-mode.active {
+            display: block;
+        }
+        .mode-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 10px;
+            width: 100%;
         }
     </style>
 </head>
@@ -723,6 +751,13 @@
             </div>
         </div>
         
+        <!-- Modo de exploración -->
+        <div id="exploration-mode" class="exploration-mode">
+            <h4 style="margin-bottom: 5px;">Modo de Exploración</h4>
+            <p style="font-size: 12px; margin-bottom: 10px;">Activa para explorar el interior del modelo</p>
+            <button id="toggle-exploration-btn" class="mode-button">Activar Exploración</button>
+        </div>
+        
         <div class="ar-info-panel">
             <div><strong>GPS:</strong> <span id="gps-status">Buscando...</span></div>
             <div><strong>Precisión:</strong> <span id="gps-accuracy" style="font-weight: bold;">--</span>m</div>
@@ -771,8 +806,8 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.5';
-        const CACHE_NAME = 'geo-ar-cache-v35';
+        const APP_VERSION = '5.6';
+        const CACHE_NAME = 'geo-ar-cache-v36';
         let appState = {
             modelURL: null,
             coords: null,
@@ -782,7 +817,8 @@
             initialARScale: 1.0,
             arDistance: 20.0, // Nueva propiedad para la distancia de visualización
             modelBounds: null,
-            mapScale: 50
+            mapScale: 50,
+            explorationMode: false
         };
         let map, modelPreview = {
             renderer: null,
@@ -806,6 +842,11 @@
         let gpsInitialized = false;
         let currentLocationMarker = null;
         let modelLocationMarker = null;
+        let userPosition = { x: 0, y: 0, z: 0 };
+        let modelPosition = { x: 0, y: 0, z: 0 };
+        let raycaster = new THREE.Raycaster();
+        let mouse = new THREE.Vector2();
+        let isIntersecting = false;
 
         const pages = {
             upload: document.getElementById('upload-page'),
@@ -828,6 +869,8 @@
         const connectionLine = document.getElementById('connection-line');
         const distancePanel = document.getElementById('distance-panel');
         const arDistanceValue = document.getElementById('ar-distance-value');
+        const explorationMode = document.getElementById('exploration-mode');
+        const toggleExplorationBtn = document.getElementById('toggle-exploration-btn');
 
         // Función para actualizar la pantalla de carga
         function updateLoadingScreen(step, progress, status) {
@@ -1079,6 +1122,7 @@
                  * =================================================================================
                  */
                 setTimeout(() => {
+                    // Forzar que todos los videos sean visibles
                     const videos = document.querySelectorAll('video');
                     if (videos.length > 0) {
                         videos.forEach(video => {
@@ -1091,6 +1135,8 @@
                             video.style.zIndex = '1';
                             video.style.transform = 'scale(-1, 1)';
                             video.style.display = 'block';
+                            video.style.opacity = '1';
+                            video.style.visibility = 'visible';
                         });
                         showDebugInfo('Video de cámara configurado correctamente');
                     }
@@ -1108,6 +1154,18 @@
                             canvas.style.pointerEvents = 'none';
                         });
                         showDebugInfo('Canvas configurado correctamente');
+                    }
+                    
+                    // Forzar que el contenedor de la escena AR sea visible
+                    const arSceneContainer = document.getElementById('ar-scene-container');
+                    if (arSceneContainer) {
+                        arSceneContainer.style.position = 'absolute';
+                        arSceneContainer.style.top = '0';
+                        arSceneContainer.style.left = '0';
+                        arSceneContainer.style.width = '100%';
+                        arSceneContainer.style.height = '100%';
+                        arSceneContainer.style.zIndex = '1';
+                        arSceneContainer.style.display = 'block';
                     }
                 }, 1000);
                 
@@ -1176,6 +1234,9 @@
                         
                         // Actualizar línea de conexión
                         updateConnectionLine();
+                        
+                        // Actualizar posición del modelo en la escena AR
+                        updateModelPosition();
                     }
                     
                     gpsInitialized = true;
@@ -1216,6 +1277,59 @@
                     maximumAge: 0
                 }
             );
+        }
+
+        function updateModelPosition() {
+            if (!arModel || !appState.currentGPSLocation || !appState.arTargetCoords) return;
+            
+            // Calcular la posición relativa del modelo respecto a la ubicación actual del usuario
+            const distance = calculateDistance(
+                appState.currentGPSLocation.latitude,
+                appState.currentGPSLocation.longitude,
+                appState.arTargetCoords.latitude,
+                appState.arTargetCoords.longitude
+            );
+            
+            // Calcular el ángulo entre la ubicación actual y el modelo
+            const angle = calculateBearing(
+                appState.currentGPSLocation.latitude,
+                appState.currentGPSLocation.longitude,
+                appState.arTargetCoords.latitude,
+                appState.arTargetCoords.longitude
+            );
+            
+            // Convertir el ángulo a radianes
+            const angleRad = angle * Math.PI / 180;
+            
+            // Calcular la posición del modelo en el espacio 3D
+            // La distancia se convierte a unidades de Three.js (aproximadamente 1 unidad = 1 metro)
+            const distanceInUnits = distance;
+            
+            // Posicionar el modelo en el espacio 3D
+            const x = Math.sin(angleRad) * distanceInUnits;
+            const z = Math.cos(angleRad) * distanceInUnits;
+            const y = appState.realDimensions.groundHeight;
+            
+            // Actualizar la posición del modelo
+            if (arModel && arModel.setAttribute) {
+                arModel.setAttribute('position', `${x} ${y} ${z}`);
+                showDebugInfo(`Modelo posicionado en: ${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}`);
+            }
+        }
+
+        function calculateBearing(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const y = Math.sin(Δλ) * Math.cos(φ2);
+            const x = Math.cos(φ1)*Math.sin(φ2) -
+                    Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+
+            const θ = Math.atan2(y, x);
+            const bearing = (θ*180/Math.PI + 360) % 360; // en grados
+
+            return bearing;
         }
 
         function updateConnectionLine() {
@@ -1308,12 +1422,51 @@
             if (gpsInitialized) {
                 adjustModelScale();
             }
+            
+            // Configurar interacción con el modelo
+            setupModelInteraction();
         }
 
         function onModelError(event) {
             console.error('Error al cargar el modelo 3D:', event.detail);
             showDebugInfo(`Error al cargar modelo: ${event.detail}`);
             showMessage('Error al cargar el modelo 3D. Verifica que el archivo sea válido.', 5000);
+        }
+
+        function setupModelInteraction() {
+            if (!arModel || !arModel.object3D) return;
+            
+            // Habilitar la interacción con el modelo
+            arModel.setAttribute('class', 'intersectable');
+            
+            // Configurar eventos de interacción
+            arScene.addEventListener('click', (event) => {
+                if (!appState.explorationMode) return;
+                
+                // Obtener la posición del clic
+                mouse.x = (event.detail.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.detail.clientY / window.innerHeight) * 2 + 1;
+                
+                // Actualizar el raycaster
+                raycaster.setFromCamera(mouse, arCamera.components.camera.camera);
+                
+                // Comprobar intersecciones con el modelo
+                const intersects = raycaster.intersectObject(arModel.object3D, true);
+                
+                if (intersects.length > 0) {
+                    // Si hay intersección, mostrar información del punto de intersección
+                    const intersection = intersects[0];
+                    showDebugInfo(`Intersección en: ${intersection.point.x.toFixed(2)}, ${intersection.point.y.toFixed(2)}, ${intersection.point.z.toFixed(2)}`);
+                    
+                    // Cambiar el color del material para indicar la intersección
+                    if (intersection.object.material) {
+                        intersection.object.material.color.set(0xff0000);
+                        setTimeout(() => {
+                            intersection.object.material.color.set(0xffffff);
+                        }, 500);
+                    }
+                }
+            });
         }
 
         function adjustModelScale() {
@@ -1348,6 +1501,9 @@
                 showDebugInfo(`Modelo escalado: ${finalScaleX.toFixed(2)}, ${finalScaleY.toFixed(2)}, ${finalScaleZ.toFixed(2)}`);
                 
                 document.getElementById('current-scale').textContent = appState.initialARScale.toFixed(1);
+                
+                // Actualizar la posición del modelo después de escalarlo
+                updateModelPosition();
             }, undefined, (error) => {
                 console.error('Error al cargar el modelo para ajustar escala:', error);
                 showDebugInfo(`Error al ajustar escala: ${error.message}`);
@@ -1373,6 +1529,7 @@
             modelLocationIndicator.style.display = 'none';
             connectionLine.style.display = 'none';
             distancePanel.style.display = 'none';
+            explorationMode.classList.remove('active');
             
             modelLoaded = false;
             gpsInitialized = false;
@@ -1794,6 +1951,35 @@
                 showMessage('Posición reiniciada', 2000);
             }
         });
+        
+        // Event listener para el modo de exploración
+        toggleExplorationBtn.addEventListener('click', () => {
+            appState.explorationMode = !appState.explorationMode;
+            
+            if (appState.explorationMode) {
+                explorationMode.classList.add('active');
+                toggleExplorationBtn.textContent = 'Desactivar Exploración';
+                showMessage('Modo de exploración activado. Ahora puedes interactuar con el modelo.', 3000);
+                
+                // Hacer el modelo más grande para facilitar la interacción
+                if (arModel && arModel.object3D) {
+                    const currentScale = arModel.getAttribute('scale');
+                    const scaleValues = currentScale.split(' ').map(parseFloat);
+                    arModel.setAttribute('scale', `${scaleValues[0] * 2} ${scaleValues[1] * 2} ${scaleValues[2] * 2}`);
+                }
+            } else {
+                explorationMode.classList.remove('active');
+                toggleExplorationBtn.textContent = 'Activar Exploración';
+                showMessage('Modo de exploración desactivado.', 3000);
+                
+                // Restaurar la escala original del modelo
+                if (arModel && arModel.object3D) {
+                    const currentScale = arModel.getAttribute('scale');
+                    const scaleValues = currentScale.split(' ').map(parseFloat);
+                    arModel.setAttribute('scale', `${scaleValues[0] / 2} ${scaleValues[1] / 2} ${scaleValues[2] / 2}`);
+                }
+            }
+        });
 
         const mapContainer = document.getElementById('map-container');
         let longPressTimeout = null;
@@ -1886,3 +2072,4 @@
     </script>
 </body>
 </html>
+
