@@ -878,8 +878,8 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.8';
-        const CACHE_NAME = 'geo-ar-cache-v38';
+        const APP_VERSION = '5.9'; // Incrementado por correcciones críticas
+        const CACHE_NAME = 'geo-ar-cache-v39';
         let appState = {
             modelURL: null,
             coords: null,
@@ -1121,10 +1121,16 @@
             
             /*
              * =================================================================================
-             * CORRECCIÓN CRÍTICA: Configuración mejorada para transparencia total
+             * CORRECCIÓN CRÍTICA 1: Configuración de AR.js para Geolocalización
              * =================================================================================
-             * He modificado la configuración de la escena A-Frame para asegurar
-             * una transparencia completa y forzar que el canvas se renderice sobre el video.
+             * Se han eliminado los parámetros de detección de marcadores (detectionMode, matrixCodeType)
+             * que entraban en conflicto con el modo de geolocalización, causando la pantalla negra.
+             * 
+             * CORRECCIÓN CRÍTICA 2: Eliminación de Simulación de GPS
+             * =================================================================================
+             * Se han eliminado 'simulateLatitude' y 'simulateLongitude' del componente gps-camera.
+             * Esto permite que AR.js use la ubicación REAL del dispositivo en lugar de simular
+             * que el usuario ya está en la ubicación del modelo, lo que causaba el error de distancia.
              * =================================================================================
              */
             arSceneContainer.innerHTML = `
@@ -1135,11 +1141,11 @@
                     renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true; preserveDrawingBuffer: true; premultipliedAlpha: false;"
                     background="color: transparent"
                     style="background: transparent;"
-                    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; detectionMode: mono_and_matrix; matrixCodeType: 3x3; sourceWidth: 1280; sourceHeight: 720; displayWidth: 1280; displayHeight: 720;">
+                    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; sourceWidth: 1280; sourceHeight: 720; displayWidth: 1280; displayHeight: 720;">
                     
                     <a-camera 
                         id="ar-camera"
-                        gps-camera="minDistance: 1; alert: true; simulateLatitude: ${targetCoords.latitude}; simulateLongitude: ${targetCoords.longitude};" 
+                        gps-camera="minDistance: 1; alert: true;" 
                         rotation-reader 
                         gps-new-position
                         camera="active: true">
@@ -1168,37 +1174,18 @@
                 console.log('Escena AR cargada correctamente');
                 showDebugInfo('Escena AR cargada');
                 
-                /*
-                 * =================================================================================
-                 * CORRECCIÓN CRÍTICA: Forzar transparencia en el renderer después de cargar
-                 * =================================================================================
-                 * Después de que la escena se carga, accedemos directamente al renderer
-                 * y forzamos la transparencia y el color de fondo transparente.
-                 * =================================================================================
-                 */
                 if (arScene.renderer) {
-                    arScene.renderer.setClearColor(0x000000, 0); // Color negro con alfa 0 (totalmente transparente)
+                    arScene.renderer.setClearColor(0x000000, 0);
                     arScene.renderer.setPixelRatio(window.devicePixelRatio);
                     arScene.renderer.setSize(window.innerWidth, window.innerHeight);
-                    
-                    // Forzar que el canvas tenga un fondo transparente
                     const canvas = arScene.renderer.domElement;
                     canvas.style.backgroundColor = 'transparent';
                     canvas.style.background = 'transparent';
-                    
                     showDebugInfo('Renderer configurado para transparencia');
                 }
                 
-                /*
-                 * =================================================================================
-                 * CORRECCIÓN CRÍTICA: Asegurar que el video de la cámara sea visible
-                 * =================================================================================
-                 * Basado en el análisis de problemas comunes, implementamos las soluciones
-                 * recomendadas para asegurar que el video sea visible en todos los dispositivos.
-                 * =================================================================================
-                 */
+                // Forzar la visualización del video y la transparencia del canvas
                 setTimeout(() => {
-                    // Forzar que todos los videos sean visibles con atributos críticos
                     const videos = document.querySelectorAll('video');
                     if (videos.length > 0) {
                         videos.forEach(video => {
@@ -1213,22 +1200,15 @@
                             video.style.display = 'block';
                             video.style.opacity = '1';
                             video.style.visibility = 'visible';
-                            video.style.backgroundColor = 'transparent';
-                            video.style.background = 'transparent';
-                            
-                            // Atributos críticos para iOS y móviles
                             video.setAttribute('autoplay', 'true');
                             video.setAttribute('playsinline', 'true');
                             video.setAttribute('webkit-playsinline', 'true');
                             video.setAttribute('muted', 'true');
-                            
-                            // Forzar reproducción del video
                             forceVideoPlay(video);
                         });
                         showDebugInfo('Video de cámara configurado correctamente');
                     }
                     
-                    // Asegurar que el canvas esté sobre el video
                     const canvases = document.querySelectorAll('canvas');
                     if (canvases.length > 0) {
                         canvases.forEach(canvas => {
@@ -1245,36 +1225,6 @@
                         showDebugInfo('Canvas configurado correctamente');
                     }
                     
-                    // Forzar que el contenedor de la escena AR sea visible
-                    const arSceneContainer = document.getElementById('ar-scene-container');
-                    if (arSceneContainer) {
-                        arSceneContainer.style.position = 'fixed';
-                        arSceneContainer.style.top = '0';
-                        arSceneContainer.style.left = '0';
-                        arSceneContainer.style.width = '100%';
-                        arSceneContainer.style.height = '100%';
-                        arSceneContainer.style.zIndex = '1';
-                        arSceneContainer.style.display = 'block';
-                        arSceneContainer.style.backgroundColor = 'transparent';
-                        arSceneContainer.style.background = 'transparent';
-                    }
-                    
-                    // Forzar que la página AR no tenga fondo
-                    const arPage = document.getElementById('ar-page');
-                    if (arPage) {
-                        arPage.style.backgroundColor = 'transparent';
-                        arPage.style.background = 'transparent';
-                    }
-                    
-                    // Forzar que el body no tenga fondo
-                    document.body.style.backgroundColor = 'transparent';
-                    document.body.style.background = 'transparent';
-                    
-                    // Forzar que el html no tenga fondo
-                    document.documentElement.style.backgroundColor = 'transparent';
-                    document.documentElement.style.background = 'transparent';
-                    
-                    // Mostrar botón de inicio para iOS si es necesario
                     if (appState.isIOS && !appState.videoStarted) {
                         iosStartButton.classList.add('show');
                         showDebugInfo('Mostrando botón de inicio para iOS');
@@ -1307,55 +1257,31 @@
             }, 10000);
         }
 
-        /*
-         * =================================================================================
-         * FUNCIÓN CRÍTICA: Forzar reproducción del video
-         * =================================================================================
-         * Basado en las recomendaciones de StackOverflow y la documentación,
-         * esta función fuerza la reproducción del video en dispositivos móviles.
-         * =================================================================================
-         */
         function forceVideoPlay(video) {
             if (!video) return;
-            
-            // Intentar reproducir el video directamente
             const playPromise = video.play();
-            
             if (playPromise !== undefined) {
                 playPromise.then(() => {
                     console.log('Video reproduciéndose correctamente');
                     appState.videoStarted = true;
                     showDebugInfo('Video iniciado correctamente');
-                    
-                    // Ocultar botón de iOS si está visible
                     if (appState.isIOS && iosStartButton.classList.contains('show')) {
                         iosStartButton.classList.remove('show');
                     }
                 }).catch(error => {
                     console.error('Error al reproducir video:', error);
                     showDebugInfo(`Error al reproducir video: ${error.message}`);
-                    
-                    // Si el video no puede reproducirse automáticamente, mostrar botón de inicio
                     if (appState.isIOS && !iosStartButton.classList.contains('show')) {
                         iosStartButton.classList.add('show');
                         showDebugInfo('Mostrando botón de inicio para iOS (requiere interacción del usuario)');
                     }
                 });
             } else {
-                // Para navegadores más antiguos que no devuelven una promesa
                 appState.videoStarted = true;
                 showDebugInfo('Video iniciado (método legacy)');
             }
         }
 
-        /*
-         * =================================================================================
-         * FUNCIÓN: Iniciar video con interacción del usuario
-         * =================================================================================
-         * Esta función se activa cuando el usuario toca la pantalla,
-         * requerido por iOS y algunos navegadores móviles.
-         * =================================================================================
-         */
         function startVideoWithUserInteraction() {
             const videos = document.querySelectorAll('video');
             if (videos.length > 0) {
@@ -1363,28 +1289,54 @@
                     forceVideoPlay(video);
                 });
             }
-            
-            // Ocultar botón de inicio
             iosStartButton.classList.remove('show');
-            
             showMessage('Cámara AR iniciada', 2000);
         }
 
-        // Event listener para el botón de inicio de iOS
         iosStartButton.addEventListener('click', startVideoWithUserInteraction);
-        
-        // Event listener global para interacción del usuario
         document.addEventListener('touchstart', function() {
             if (!appState.videoStarted && pages.ar.classList.contains('active')) {
                 startVideoWithUserInteraction();
             }
         }, { once: true });
-        
         document.addEventListener('click', function() {
             if (!appState.videoStarted && pages.ar.classList.contains('active')) {
                 startVideoWithUserInteraction();
             }
         }, { once: true });
+
+        /*
+         * =================================================================================
+         * FUNCIÓN NUEVA: Actualizar Indicadores de Ubicación en Tiempo Real
+         * =================================================================================
+         * Esta función se encarga de actualizar la interfaz de usuario con la ubicación
+         * actual del usuario y la ubicación del modelo, además de la distancia entre ellos.
+         * Se llama cada vez que el GPS del dispositivo se actualiza.
+         * =================================================================================
+         */
+        function updateLocationIndicators() {
+            if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
+            
+            // Actualizar indicador de ubicación actual
+            const currentLocText = `TÚ: ${appState.currentGPSLocation.latitude.toFixed(6)}, ${appState.currentGPSLocation.longitude.toFixed(6)}`;
+            currentLocationIndicator.querySelector('span').textContent = currentLocText;
+            
+            // Actualizar indicador de ubicación del modelo
+            const modelLocText = `MODELO: ${appState.arTargetCoords.latitude.toFixed(6)}, ${appState.arTargetCoords.longitude.toFixed(6)}`;
+            modelLocationIndicator.querySelector('span').textContent = modelLocText;
+            
+            // Calcular y mostrar distancia
+            const distance = calculateDistance(
+                appState.currentGPSLocation.latitude,
+                appState.currentGPSLocation.longitude,
+                appState.arTargetCoords.latitude,
+                appState.arTargetCoords.longitude
+            );
+            
+            arDistanceValue.textContent = `${distance.toFixed(1)}m`;
+            document.getElementById('model-distance').textContent = `${distance.toFixed(2)}m`;
+            document.getElementById('current-distance').textContent = distance.toFixed(0);
+        }
 
         function startGPSWatch() {
             if (gpsWatchId) {
@@ -1396,14 +1348,12 @@
                     console.log('Posición GPS actualizada:', position);
                     showDebugInfo(`GPS: ${position.coords.latitude}, ${position.coords.longitude} (Precisión: ${position.coords.accuracy}m)`);
                     
-                    // Actualizar estado del GPS
                     appState.currentGPSLocation = {
                         latitude: position.coords.latitude,
                         longitude: position.coords.longitude,
                         accuracy: position.coords.accuracy
                     };
                     
-                    // Actualizar indicador GPS
                     gpsIndicator.classList.add('active');
                     gpsIndicator.classList.remove('error');
                     gpsIndicatorText.textContent = `GPS: Activo (${position.coords.accuracy.toFixed(1)}m)`;
@@ -1411,26 +1361,8 @@
                     document.getElementById('gps-status').textContent = 'Activo';
                     document.getElementById('gps-accuracy').textContent = position.coords.accuracy.toFixed(1);
                     
-                    // Calcular distancia al modelo
-                    if (appState.arTargetCoords) {
-                        const distance = calculateDistance(
-                            position.coords.latitude,
-                            position.coords.longitude,
-                            appState.arTargetCoords.latitude,
-                            appState.arTargetCoords.longitude
-                        );
-                        
-                        // Actualizar todos los paneles de distancia
-                        document.getElementById('model-distance').textContent = distance.toFixed(2) + 'm';
-                        document.getElementById('current-distance').textContent = distance.toFixed(0);
-                        arDistanceValue.textContent = distance.toFixed(1) + 'm';
-                        
-                        // Actualizar línea de conexión
-                        updateConnectionLine();
-                        
-                        // Actualizar posición del modelo en la escena AR
-                        updateModelPosition();
-                    }
+                    // LLAMADA A LA NUEVA FUNCIÓN PARA ACTUALIZAR LA UI
+                    updateLocationIndicators();
                     
                     gpsInitialized = true;
                     
@@ -1442,7 +1374,6 @@
                     console.error('Error al obtener la posición GPS:', error);
                     showDebugInfo(`Error de GPS: ${error.message}`);
                     
-                    // Actualizar indicador GPS con error
                     gpsIndicator.classList.add('error');
                     gpsIndicator.classList.remove('active');
                     gpsIndicatorText.textContent = 'GPS: Error';
@@ -1475,7 +1406,6 @@
         function updateModelPosition() {
             if (!arModel || !appState.currentGPSLocation || !appState.arTargetCoords) return;
             
-            // Calcular la posición relativa del modelo respecto a la ubicación actual del usuario
             const distance = calculateDistance(
                 appState.currentGPSLocation.latitude,
                 appState.currentGPSLocation.longitude,
@@ -1483,7 +1413,6 @@
                 appState.arTargetCoords.longitude
             );
             
-            // Calcular el ángulo entre la ubicación actual y el modelo
             const angle = calculateBearing(
                 appState.currentGPSLocation.latitude,
                 appState.currentGPSLocation.longitude,
@@ -1491,19 +1420,13 @@
                 appState.arTargetCoords.longitude
             );
             
-            // Convertir el ángulo a radianes
             const angleRad = angle * Math.PI / 180;
-            
-            // Calcular la posición del modelo en el espacio 3D
-            // La distancia se convierte a unidades de Three.js (aproximadamente 1 unidad = 1 metro)
             const distanceInUnits = distance;
             
-            // Posicionar el modelo en el espacio 3D
             const x = Math.sin(angleRad) * distanceInUnits;
             const z = Math.cos(angleRad) * distanceInUnits;
             const y = appState.realDimensions.groundHeight;
             
-            // Actualizar la posición del modelo
             if (arModel && arModel.setAttribute) {
                 arModel.setAttribute('position', `${x} ${y} ${z}`);
                 showDebugInfo(`Modelo posicionado en: ${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}`);
@@ -1520,7 +1443,7 @@
                     Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
 
             const θ = Math.atan2(y, x);
-            const bearing = (θ*180/Math.PI + 360) % 360; // en grados
+            const bearing = (θ*180/Math.PI + 360) % 360;
 
             return bearing;
         }
@@ -1528,10 +1451,8 @@
         function updateConnectionLine() {
             if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
             
-            // Mostrar línea de conexión
             connectionLine.style.display = 'block';
             
-            // Calcular posición y ángulo de la línea
             const currentLoc = currentLocationIndicator.getBoundingClientRect();
             const modelLoc = modelLocationIndicator.getBoundingClientRect();
             
@@ -1540,7 +1461,6 @@
             const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
             const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
             
-            // Actualizar línea
             connectionLine.style.width = distance + 'px';
             connectionLine.style.left = currentLoc.right + 'px';
             connectionLine.style.top = (currentLoc.top + currentLoc.height / 2) + 'px';
@@ -1548,7 +1468,7 @@
         }
 
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // Radio de la Tierra en metros
+            const R = 6371e3;
             const φ1 = lat1 * Math.PI/180;
             const φ2 = lat2 * Math.PI/180;
             const Δφ = (lat2-lat1) * Math.PI/180;
@@ -1559,7 +1479,7 @@
                     Math.sin(Δλ/2) * Math.sin(Δλ/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-            return R * c; // Distancia en metros
+            return R * c;
         }
 
         function onGPSUpdate(event) {
@@ -1616,7 +1536,6 @@
                 adjustModelScale();
             }
             
-            // Configurar interacción con el modelo
             setupModelInteraction();
         }
 
@@ -1629,29 +1548,22 @@
         function setupModelInteraction() {
             if (!arModel || !arModel.object3D) return;
             
-            // Habilitar la interacción con el modelo
             arModel.setAttribute('class', 'intersectable');
             
-            // Configurar eventos de interacción
             arScene.addEventListener('click', (event) => {
                 if (!appState.explorationMode) return;
                 
-                // Obtener la posición del clic
                 mouse.x = (event.detail.clientX / window.innerWidth) * 2 - 1;
                 mouse.y = -(event.detail.clientY / window.innerHeight) * 2 + 1;
                 
-                // Actualizar el raycaster
                 raycaster.setFromCamera(mouse, arCamera.components.camera.camera);
                 
-                // Comprobar intersecciones con el modelo
                 const intersects = raycaster.intersectObject(arModel.object3D, true);
                 
                 if (intersects.length > 0) {
-                    // Si hay intersección, mostrar información del punto de intersección
                     const intersection = intersects[0];
                     showDebugInfo(`Intersección en: ${intersection.point.x.toFixed(2)}, ${intersection.point.y.toFixed(2)}, ${intersection.point.z.toFixed(2)}`);
                     
-                    // Cambiar el color del material para indicar la intersección
                     if (intersection.object.material) {
                         intersection.object.material.color.set(0xff0000);
                         setTimeout(() => {
@@ -1695,7 +1607,6 @@
                 
                 document.getElementById('current-scale').textContent = appState.initialARScale.toFixed(1);
                 
-                // Actualizar la posición del modelo después de escalarlo
                 updateModelPosition();
             }, undefined, (error) => {
                 console.error('Error al cargar el modelo para ajustar escala:', error);
@@ -1717,7 +1628,6 @@
                 arModel = null;
             }
             
-            // Ocultar indicadores de ubicación
             currentLocationIndicator.style.display = 'none';
             modelLocationIndicator.style.display = 'none';
             connectionLine.style.display = 'none';
@@ -1893,7 +1803,6 @@
 
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
-            // Marcador de ubicación inicial (azul)
             const initialMarker = L.marker([appState.coords.latitude, appState.coords.longitude], {
                 draggable: true,
                 autoPan: true
@@ -1910,7 +1819,6 @@
                 showMessage('Ubicación inicial actualizada.', 3000);
             });
             
-            // Marcador de ubicación del modelo (naranja)
             if (appState.arTargetCoords) {
                 modelLocationMarker = L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
                     .addTo(map)
@@ -1925,7 +1833,6 @@
                     }));
             }
             
-            // Marcador de ubicación actual GPS (verde)
             if (appState.currentGPSLocation) {
                 if (currentLocationMarker) {
                     map.removeLayer(currentLocationMarker);
@@ -2147,7 +2054,6 @@
             }
         });
         
-        // Event listener para el modo de exploración
         toggleExplorationBtn.addEventListener('click', () => {
             appState.explorationMode = !appState.explorationMode;
             
@@ -2156,7 +2062,6 @@
                 toggleExplorationBtn.textContent = 'Desactivar Exploración';
                 showMessage('Modo de exploración activado. Ahora puedes interactuar con el modelo.', 3000);
                 
-                // Hacer el modelo más grande para facilitar la interacción
                 if (arModel && arModel.object3D) {
                     const currentScale = arModel.getAttribute('scale');
                     const scaleValues = currentScale.split(' ').map(parseFloat);
@@ -2167,7 +2072,6 @@
                 toggleExplorationBtn.textContent = 'Activar Exploración';
                 showMessage('Modo de exploración desactivado.', 3000);
                 
-                // Restaurar la escala original del modelo
                 if (arModel && arModel.object3D) {
                     const currentScale = arModel.getAttribute('scale');
                     const scaleValues = currentScale.split(' ').map(parseFloat);
@@ -2261,7 +2165,6 @@
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
             
-            // Detectar si es iOS
             appState.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (appState.isIOS) {
                 showDebugInfo('Dispositivo iOS detectado');
