@@ -25,7 +25,7 @@
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; }
         .page { display: none; height: 100%; width: 100%; }
         .page.active { display: block; }
-        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; z-index: 10000; text-align: center; padding: 1em;}
+        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); color: white; display: none; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; z-index: 10000; text-align: center; padding: 1em;}
         .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         #ar-controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; gap: 10px; }
@@ -53,7 +53,7 @@
             height: 100%; 
             background: rgba(0, 0, 0, 0.8); 
             color: white; 
-            display: flex; 
+            display: none; 
             flex-direction: column; 
             justify-content: center; 
             align-items: center; 
@@ -65,6 +65,35 @@
         }
         .arjs-loader p { 
             margin-top: 20px; 
+        }
+        /* Estilos para el botón de permisos */
+        .permission-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 10001;
+        }
+        .permission-content {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 80%;
+            text-align: center;
+        }
+        .permission-button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
         }
     </style>
 </head>
@@ -139,7 +168,7 @@
         <div class="arjs-loader">
             <div>
                 <div class="loader"></div>
-                <p>Solicitando permisos de cámara y GPS...</p>
+                <p id="ar-loading-text">Iniciando cámara y GPS...</p>
             </div>
         </div>
         
@@ -170,6 +199,15 @@
              <button id="back-to-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver al Mapa</button>
         </div>
         <div id="message-box"></div>
+    </div>
+
+    <!-- Modal para solicitar permisos -->
+    <div id="permission-modal" class="permission-modal">
+        <div class="permission-content">
+            <h2>Permisos necesarios</h2>
+            <p>Esta aplicación necesita acceso a tu cámara y ubicación para funcionar correctamente.</p>
+            <button id="grant-permissions-btn" class="permission-button">Conceder permisos</button>
+        </div>
     </div>
 
     <script type="module">
@@ -221,8 +259,8 @@
             }
         });
 
-        const APP_VERSION = '3.8';
-        const CACHE_NAME = 'geo-ar-cache-v18';
+        const APP_VERSION = '3.9';
+        const CACHE_NAME = 'geo-ar-cache-v19';
         let appState = { 
             modelURL: null, 
             coords: null, 
@@ -249,6 +287,9 @@
             ar: document.getElementById('ar-page') 
         };
         const messageBox = document.getElementById('message-box');
+        const arLoader = document.querySelector('.arjs-loader');
+        const permissionModal = document.getElementById('permission-modal');
+        const arLoadingText = document.getElementById('ar-loading-text');
         
         function showMessage(msg, duration = 3000) {
             messageBox.textContent = msg;
@@ -263,8 +304,8 @@
             if (pageName === 'map') {
                 setTimeout(initMapAndPreview, 100);
             } else if (pageName === 'ar') {
-                // Solicitar permisos explícitamente
-                requestPermissionsAndStartAR();
+                // No iniciamos AR automáticamente, esperamos a que el usuario conceda permisos
+                // Esto evita que el loader se muestre antes de tiempo
             } else {
                 if (map) { 
                     map.remove(); 
@@ -279,54 +320,93 @@
 
         // Función para solicitar permisos explícitamente
         async function requestPermissionsAndStartAR() {
-            const arLoader = document.querySelector('.arjs-loader');
-            arLoader.style.display = 'flex';
+            // Mostrar modal de permisos en lugar del loader directamente
+            permissionModal.style.display = 'flex';
             
-            try {
-                // Solicitar permiso de cámara
-                const stream = await navigator.mediaDevices.getUserMedia({ 
-                    video: { facingMode: 'environment' } 
-                });
+            // Configurar el botón de conceder permisos
+            document.getElementById('grant-permissions-btn').onclick = async () => {
+                permissionModal.style.display = 'none';
+                arLoader.style.display = 'flex';
+                arLoadingText.textContent = 'Solicitando permisos de cámara y GPS...';
                 
-                // Detener el stream inicial (AR.js lo gestionará)
-                stream.getTracks().forEach(track => track.stop());
-                
-                // Solicitar permiso de geolocalización
-                await new Promise((resolve, reject) => {
-                    navigator.geolocation.getCurrentPosition(
-                        resolve, 
-                        reject, 
-                        { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
-                    );
-                });
-                
-                // Inicializar AR después de obtener permisos
-                initializeAR();
-                
-            } catch (error) {
-                console.error('Error al solicitar permisos:', error);
-                arLoader.style.display = 'none';
-                
-                if (error.name === 'NotAllowedError') {
-                    showMessage('Por favor, permite el acceso a la cámara y GPS en los ajustes del navegador.', 5000);
-                } else if (error.name === 'PositionError') {
-                    showMessage('Por favor, permite el acceso a la ubicación en los ajustes del navegador.', 5000);
-                } else {
-                    showMessage('Error al solicitar permisos: ' + error.message, 5000);
+                try {
+                    // Verificar si estamos en un dispositivo móvil
+                    const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+                    
+                    if (isMobile) {
+                        // En dispositivos móviles, solicitamos permisos de manera más directa
+                        arLoadingText.textContent = 'Solicitando permisos de cámara...';
+                        
+                        // Solicitar permiso de cámara
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { facingMode: 'environment' } 
+                        });
+                        
+                        // Detener el stream inicial (AR.js lo gestionará)
+                        stream.getTracks().forEach(track => track.stop());
+                        
+                        arLoadingText.textContent = 'Solicitando permisos de GPS...';
+                        
+                        // Solicitar permiso de geolocalización
+                        await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(
+                                resolve, 
+                                reject, 
+                                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                            );
+                        });
+                        
+                        // Inicializar AR después de obtener permisos
+                        initializeAR();
+                    } else {
+                        // En computadoras, mostramos un mensaje diferente
+                        arLoadingText.textContent = 'Iniciando cámara en modo escritorio...';
+                        
+                        // Solicitar permiso de cámara
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: true 
+                        });
+                        
+                        // Detener el stream inicial (AR.js lo gestionará)
+                        stream.getTracks().forEach(track => track.stop());
+                        
+                        // Solicitar permiso de geolocalización
+                        await new Promise((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(
+                                resolve, 
+                                reject, 
+                                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                            );
+                        });
+                        
+                        // Inicializar AR después de obtener permisos
+                        initializeAR();
+                    }
+                    
+                } catch (error) {
+                    console.error('Error al solicitar permisos:', error);
+                    arLoader.style.display = 'none';
+                    
+                    if (error.name === 'NotAllowedError') {
+                        showMessage('Por favor, permite el acceso a la cámara y GPS en los ajustes del navegador.', 5000);
+                    } else if (error.name === 'PositionError' || error.name === 'GeolocationPositionError') {
+                        showMessage('Por favor, permite el acceso a la ubicación en los ajustes del navegador.', 5000);
+                    } else {
+                        showMessage('Error al solicitar permisos: ' + error.message, 5000);
+                    }
+                    
+                    navigateTo('map');
                 }
-                
-                navigateTo('map');
-            }
+            };
         }
 
         async function initializeAR() {
             const arScene = document.getElementById('ar-scene');
-            const arLoader = document.querySelector('.arjs-loader');
             
             // Escuchar evento de carga de AR.js
             window.addEventListener('arjs-video-loaded', () => {
                 console.log('Video de AR cargado');
-                arLoader.querySelector('p').textContent = 'Iniciando GPS...';
+                arLoadingText.textContent = 'Iniciando GPS...';
             });
             
             // Escuchar evento de GPS listo
@@ -672,7 +752,7 @@
         document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
         document.getElementById('use-location-btn').addEventListener('click', useCurrentLocation);
         document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
-        document.getElementById('goto-ar-from-map-btn').addEventListener('click', () => navigateTo('ar'));
+        document.getElementById('goto-ar-from-map-btn').addEventListener('click', requestPermissionsAndStartAR);
         document.getElementById('back-to-map-btn').addEventListener('click', stopAR);
         document.getElementById('map-scale-slider').addEventListener('input', (e) => { 
             appState.mapScale = parseFloat(e.target.value); 
