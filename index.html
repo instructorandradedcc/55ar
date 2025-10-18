@@ -117,9 +117,8 @@
             <div class="loader"></div>
             <p>Iniciando cámara y GPS...</p>
         </div>
-        <a-scene id="ar-scene" vr-mode-ui="enabled: false" ar-js='sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;' renderer="logarithmicDepthBuffer: true;" loading-screen="enabled: false;">
+        <a-scene id="ar-scene" embedded vr-mode-ui="enabled: false" ar-js='sourceType: webcam; detectionMode: mono_and_matrix; debugUIEnabled: false;' renderer="logarithmicDepthBuffer: true; physicallyCorrectLights: true;" loading-screen="enabled: false;">
             <a-camera gps-camera rotation-reader></a-camera>
-            <a-sky color="#ECECEC"></a-sky>
             <a-light type="directional" intensity="0.8" position="1 1 1"></a-light>
             <a-light type="ambient" intensity="0.5"></a-light>
         </a-scene>
@@ -162,10 +161,10 @@
             }
         });
 
-        const APP_VERSION = '3.4';
+        const APP_VERSION = '3.5';
         const CACHE_NAME = 'geo-ar-cache-v16';
         let appState = { modelURL: null, coords: null, normalizationFactor: 1, mapScale: 50 };
-        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isRotating: false, previousMousePosition: { x: 0, y: 0 } };
+        let map, modelPreview = { renderer: null, scene: null, camera: null, model: null, animationFrameId: null, isRotating: false, previousMousePosition: { x: 0, y: 0 }, maxSize: 1 };
         
         const pages = { upload: document.getElementById('upload-page'), map: document.getElementById('map-page'), ar: document.getElementById('ar-page') };
         const messageBox = document.getElementById('message-box');
@@ -225,12 +224,12 @@
             if (!modelFile || isNaN(lat) || isNaN(lon)) { showMessage('Por favor, modelo y coordenadas son requeridos.'); return; }
             
             showMessage('Guardando datos en caché...');
-            const cache = await caches.open(CACHE_NAME);
-            const coords = { latitude: lat, longitude: lon };
+            appState.coords = { latitude: lat, longitude: lon }; // Update app state immediately
             
+            const cache = await caches.open(CACHE_NAME);
             await Promise.all([ 
                 cache.put('cached-model.glb', new Response(modelFile)), 
-                cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(coords)], {type : 'application/json'})))
+                cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(appState.coords)], {type : 'application/json'})))
             ]);
             await loadDataFromCache();
         }
@@ -259,26 +258,11 @@
             
             map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
             
-            const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
-                maxZoom: 20,
-                subdomains:['mt0','mt1','mt2','mt3'],
-                attribution: 'Imagery &copy;2025 Google'
-            });
-            const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
-                maxZoom: 20,
-                subdomains:['mt0','mt1','mt2','mt3'],
-                attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google'
-            });
-            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-                maxZoom: 20
-            });
+            const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Imagery &copy;2025 Google' });
+            const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google' });
+            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', maxZoom: 20 });
 
-            const baseMaps = { 
-                "Google Satélite": googleSat,
-                "Google Híbrido": googleHybrid, 
-                "OpenStreetMap": streetLayer 
-            };
+            const baseMaps = { "Google Satélite": googleSat, "Google Híbrido": googleHybrid, "OpenStreetMap": streetLayer };
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
             googleSat.addTo(map);
 
@@ -293,9 +277,7 @@
             document.getElementById('jumpto-lon').value = appState.coords.longitude.toFixed(6);
 
             initModelPreview();
-            setTimeout(() => {
-                showMessage("Mover mapa. Toca y Sostén para girar modelo.", 5000);
-            }, 500);
+            setTimeout(() => { showMessage("Mover mapa. Toca y Sostén para girar modelo.", 5000); }, 500);
         }
 
         async function initModelPreview() {
@@ -303,10 +285,7 @@
             const container = document.getElementById('map-container');
             if (!container) return;
 
-            modelPreview.renderer = new THREE.WebGLRenderer({ 
-                canvas, alpha: true, antialias: true, logarithmicDepthBuffer: true 
-            });
-            
+            modelPreview.renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true, logarithmicDepthBuffer: true });
             modelPreview.renderer.setSize(container.clientWidth, container.clientHeight); 
             modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
             modelPreview.scene = new THREE.Scene();
@@ -324,7 +303,21 @@
                 const loader = new GLTFLoader();
                 const gltf = await loader.loadAsync(appState.modelURL);
                 modelPreview.model = gltf.scene;
+
+                // --- Solid Model & Anti-Flicker Fix ---
+                modelPreview.model.traverse((node) => {
+                    if (node.isMesh && node.material) {
+                        node.material.transparent = false;
+                        node.material.depthWrite = true;
+                    }
+                });
+                
                 const box = new THREE.Box3().setFromObject(modelPreview.model);
+                // --- Stable Scaling Fix ---
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                modelPreview.maxSize = Math.max(size.x, size.y, size.z) || 1;
+                
                 modelPreview.model.position.sub(box.getCenter(new THREE.Vector3()));
                 modelPreview.scene.add(modelPreview.model);
                 animateModelPreview();
@@ -334,11 +327,7 @@
         function animateModelPreview() {
             modelPreview.animationFrameId = requestAnimationFrame(animateModelPreview);
             if (modelPreview.model) {
-                const box = new THREE.Box3().setFromObject(modelPreview.model);
-                const size = new THREE.Vector3();
-                box.getSize(size);
-                const maxSize = Math.max(size.x, size.y, size.z) || 1;
-                const scale = (appState.mapScale * 0.5) / maxSize;
+                const scale = (appState.mapScale * 0.5) / modelPreview.maxSize;
                 modelPreview.model.scale.set(scale, scale, scale);
             }
             if(modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
@@ -520,3 +509,5 @@
     </script>
 </body>
 </html>
+
+
