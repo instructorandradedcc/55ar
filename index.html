@@ -311,6 +311,19 @@
         .a-canvas {
             z-index: -1 !important;
         }
+        
+        /*
+         * =================================================================================
+         * CORRECCIÓN CRÍTICA: Forzar transparencia completa en el canvas de A-Frame
+         * =================================================================================
+         * El problema es que A-Frame está creando un canvas con un fondo opaco.
+         * Este CSS asegura que el canvas de A-Frame sea completamente transparente.
+         * =================================================================================
+         */
+        #ar-scene .a-canvas {
+            background: transparent !important;
+            background-color: rgba(0, 0, 0, 0) !important;
+        }
     </style>
 </head>
 <body>
@@ -508,14 +521,14 @@
          * es OBLIGATORIO incrementar el número de versión en la constante 'APP_VERSION'
          * que se encuentra más abajo.
          *
-         * Ejemplo: Si la versión actual es '4.9', la siguiente versión debe ser '5.0'.
+         * Ejemplo: Si la versión actual es '5.0', la siguiente versión debe ser '5.1'.
          *
          * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.0';
-        const CACHE_NAME = 'geo-ar-cache-v30';
+        const APP_VERSION = '5.1';
+        const CACHE_NAME = 'geo-ar-cache-v31';
         let appState = {
             modelURL: null,
             coords: null,
@@ -667,7 +680,7 @@
                         navigator.geolocation.getCurrentPosition(resolve, reject, { 
                             enableHighAccuracy: true,
                             timeout: 10000,
-                            maximumAge: 0 // Forzar datos frescos para la prueba inicial
+                            maximumAge: 0
                         });
                     });
                     showDebugInfo('Permiso de GPS concedido');
@@ -723,13 +736,22 @@
             
             const targetCoords = appState.arTargetCoords || appState.coords;
             
+            /*
+             * =================================================================================
+             * CORRECCIÓN CRÍTICA: Configuración mejorada para transparencia total
+             * =================================================================================
+             * He modificado la configuración de la escena A-Frame para asegurar
+             * una transparencia completa y forzar que el canvas se renderice sobre el video.
+             * =================================================================================
+             */
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
                     embedded
                     vr-mode-ui="enabled: false"
-                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true; preserveDrawingBuffer: true;"
+                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true; preserveDrawingBuffer: true; premultipliedAlpha: false;"
                     background="color: transparent"
+                    style="background: transparent;"
                     arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; detectionMode: mono_and_matrix; matrixCodeType: 3x3; sourceWidth: 1280; sourceHeight: 720; displayWidth: 1280; displayHeight: 720;">
                     
                     <a-camera 
@@ -763,6 +785,27 @@
                 console.log('Escena AR cargada correctamente');
                 showDebugInfo('Escena AR cargada');
                 
+                /*
+                 * =================================================================================
+                 * CORRECCIÓN CRÍTICA: Forzar transparencia en el renderer después de cargar
+                 * =================================================================================
+                 * Después de que la escena se carga, accedemos directamente al renderer
+                 * y forzamos la transparencia y el color de fondo transparente.
+                 * =================================================================================
+                 */
+                if (arScene.renderer) {
+                    arScene.renderer.setClearColor(0x000000, 0); // Color negro con alfa 0 (totalmente transparente)
+                    arScene.renderer.setPixelRatio(window.devicePixelRatio);
+                    arScene.renderer.setSize(window.innerWidth, window.innerHeight);
+                    
+                    // Forzar que el canvas tenga un fondo transparente
+                    const canvas = arScene.renderer.domElement;
+                    canvas.style.backgroundColor = 'transparent';
+                    canvas.style.background = 'transparent';
+                    
+                    showDebugInfo('Renderer configurado para transparencia');
+                }
+                
                 window.addEventListener('gps-camera-update-position', onGPSUpdate);
                 window.addEventListener('gps-camera-error', onGPSError);
                 arModel.addEventListener('model-loaded', onModelLoaded);
@@ -792,16 +835,6 @@
                 navigator.geolocation.clearWatch(gpsWatchId);
             }
             
-            /*
-             * =================================================================================
-             * MEJORA: Optimización de la precisión del GPS
-             * =================================================================================
-             * Usamos 'watchPosition' con la configuración más precisa posible.
-             * NOTA: La precisión del GPS de un móvil está limitada por el hardware.
-             * Un margen de 3-5 metros es considerado excelente y estándar.
-             * No es posible alcanzar una precisión de centímetros sin hardware especializado.
-             * =================================================================================
-             */
             gpsWatchId = navigator.geolocation.watchPosition(
                 (position) => {
                     console.log('Posición GPS actualizada:', position);
@@ -839,7 +872,7 @@
                 { 
                     enableHighAccuracy: true, 
                     timeout: 10000, 
-                    maximumAge: 0 // CHANGED: No usar datos en caché para máxima precisión
+                    maximumAge: 0
                 }
             );
         }
@@ -852,14 +885,13 @@
             document.getElementById('gps-status').textContent = 'Activo';
             document.getElementById('gps-accuracy').textContent = pos.accuracy.toFixed(1);
             
-            // Indicador visual de precisión
             const accuracyElement = document.getElementById('gps-accuracy');
             if (pos.accuracy < 5) {
-                accuracyElement.style.color = '#4CAF50'; // Verde: Buena
+                accuracyElement.style.color = '#4CAF50';
             } else if (pos.accuracy < 10) {
-                accuracyElement.style.color = '#FFC107'; // Amarillo: Regular
+                accuracyElement.style.color = '#FFC107';
             } else {
-                accuracyElement.style.color = '#F44336'; // Rojo: Mala
+                accuracyElement.style.color = '#F44336';
             }
             
             if (arLoadingScreen.classList.contains('active')) {
@@ -885,24 +917,11 @@
             showDebugInfo('Modelo 3D cargado');
             modelLoaded = true;
             
-            /*
-             * =================================================================================
-             * CORRECCIÓN CLAVE: Forzar transparencia en el modelo 3D
-             * =================================================================================
-             * El problema del fondo blanco está en los materiales del modelo.
-             * Recorremos todos los meshes del modelo y ajustamos sus materiales para que
-             * usen 'alphaTest', que descarta los píxeles con transparencia baja,
-             * eliminando eficazmente el fondo blanco y dejando solo el objeto visible.
-             * =================================================================================
-             */
             if (arModel && arModel.object3D) {
                 arModel.object3D.traverse((node) => {
                     if (node.isMesh && node.material) {
-                        // Habilitar la transparencia en el material
                         node.material.transparent = true;
-                        // Usar alphaTest para recortar los píxeles casi transparentes (fondo blanco)
-                        node.material.alphaTest = 0.1; // Un valor bajo para ser agresivo
-                        // Forzar la actualización del material
+                        node.material.alphaTest = 0.1;
                         node.material.needsUpdate = true;
                     }
                 });
@@ -1446,4 +1465,5 @@
     </script>
 </body>
 </html>
+
 
