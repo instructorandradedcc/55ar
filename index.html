@@ -22,35 +22,186 @@
         }
     </script>
     <style>
-        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; }
-        .page { display: none; height: 100%; width: 100%; }
-        .page.active { display: block; }
-        #loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.9); color: white; display: none; flex-direction: column; justify-content: center; align-items: center; font-size: 1.5rem; z-index: 10000; text-align: center; padding: 1em;}
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        #ar-controls { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 9999; display: flex; gap: 10px; }
-        .control-button { background-color: #4CAF50; color: white; padding: 10px 20px; border: none; border-radius: 8px; font-size: 16px; cursor: pointer; transition: background-color 0.3s; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .control-button:hover { background-color: #45a049; }
-        .control-button:active { transform: translateY(1px); }
-        #message-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(0, 0, 0, 0.7); color: white; padding: 10px 20px; border-radius: 8px; font-size: 1rem; z-index: 10001; opacity: 0; transition: opacity 0.5s ease-in-out; pointer-events: none; }
-        #message-box.show { opacity: 1; }
-        #map-container { position: relative; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-        #map-container:active { cursor: grabbing; }
-        #map-canvas { width: 100%; height: 100%; background-color: #f0f0f0; }
-        #model-preview-canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 401; }
-        .map-ui-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 402; background-color: rgba(255, 255, 255, 0.8); padding: 15px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.2); backdrop-filter: blur(5px); display: flex; flex-direction: column; gap: 10px; width: 300px; }
-        #map-controls { position: fixed; top: 20px; right: 20px; z-index: 402; display: flex; flex-direction: column; gap: 10px; }
-        .slider-container { display: flex; flex-direction: column; gap: 5px; }
-        #map-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px black; pointer-events: none; z-index: 402; }
-        #coords-jumpto { position: fixed; top: 20px; left: 20px; z-index: 402; background-color: rgba(255, 255, 255, 0.8); padding: 10px; border-radius: 8px; display: flex; gap: 5px; align-items: center; }
-        /* Estilos específicos para AR */
-        a-scene { 
-            background-color: transparent; 
+        html, body { 
+            margin: 0; 
+            padding: 0; 
+            width: 100%; 
+            height: 100%; 
+            overflow: hidden; 
+            font-family: 'Inter', sans-serif; 
+            background-color: #f0f0f0;
+        }
+        .page { 
+            display: none; 
+            height: 100%; 
+            width: 100%; 
+            position: relative;
+        }
+        .page.active { 
+            display: block; 
+        }
+        #loading-screen { 
+            position: fixed; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            background: rgba(0, 0, 0, 0.9); 
+            color: white; 
+            display: none; 
+            flex-direction: column; 
+            justify-content: center; 
+            align-items: center; 
+            font-size: 1.5rem; 
+            z-index: 10000; 
+            text-align: center; 
+            padding: 1em;
+        }
+        .loader { 
+            border: 4px solid #f3f3f3; 
+            border-top: 4px solid #3498db; 
+            border-radius: 50%; 
+            width: 40px; 
+            height: 40px; 
+            animation: spin 1s linear infinite; 
+            margin-bottom: 20px; 
+        }
+        @keyframes spin { 
+            0% { transform: rotate(0deg); } 
+            100% { transform: rotate(360deg); } 
+        }
+        #ar-controls { 
+            position: fixed; 
+            bottom: 20px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            z-index: 9999; 
+            display: flex; 
+            gap: 10px; 
+        }
+        .control-button { 
+            background-color: #4CAF50; 
+            color: white; 
+            padding: 10px 20px; 
+            border: none; 
+            border-radius: 8px; 
+            font-size: 16px; 
+            cursor: pointer; 
+            transition: background-color 0.3s; 
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); 
+        }
+        .control-button:hover { 
+            background-color: #45a049; 
+        }
+        .control-button:active { 
+            transform: translateY(1px); 
+        }
+        #message-box { 
+            position: fixed; 
+            top: 20px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            background-color: rgba(0, 0, 0, 0.7); 
+            color: white; 
+            padding: 10px 20px; 
+            border-radius: 8px; 
+            font-size: 1rem; 
+            z-index: 10001; 
+            opacity: 0; 
+            transition: opacity 0.5s ease-in-out; 
+            pointer-events: none; 
+        }
+        #message-box.show { 
+            opacity: 1; 
+        }
+        #map-container { 
             position: absolute; 
             top: 0; 
             left: 0; 
             width: 100%; 
             height: 100%; 
+            z-index: 1; 
+        }
+        #map-canvas { 
+            width: 100%; 
+            height: 100%; 
+            z-index: 1; 
+        }
+        #model-preview-canvas { 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+            pointer-events: none; 
+            z-index: 401; 
+        }
+        .map-ui-container { 
+            position: fixed; 
+            bottom: 20px; 
+            left: 50%; 
+            transform: translateX(-50%); 
+            z-index: 402; 
+            background-color: rgba(255, 255, 255, 0.9); 
+            padding: 15px; 
+            border-radius: 12px; 
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2); 
+            backdrop-filter: blur(5px); 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+            width: 300px; 
+        }
+        #map-controls { 
+            position: fixed; 
+            top: 20px; 
+            right: 20px; 
+            z-index: 402; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 10px; 
+        }
+        .slider-container { 
+            display: flex; 
+            flex-direction: column; 
+            gap: 5px; 
+        }
+        #map-crosshair { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%); 
+            width: 30px; 
+            height: 30px; 
+            border: 2px solid white; 
+            border-radius: 50%; 
+            box-shadow: 0 0 10px black; 
+            pointer-events: none; 
+            z-index: 402; 
+        }
+        #coords-jumpto { 
+            position: fixed; 
+            top: 20px; 
+            left: 20px; 
+            z-index: 402; 
+            background-color: rgba(255, 255, 255, 0.9); 
+            padding: 10px; 
+            border-radius: 8px; 
+            display: flex; 
+            gap: 5px; 
+            align-items: center; 
+        }
+        /* Estilos específicos para AR */
+        #ar-page {
+            background-color: black;
+        }
+        a-scene { 
+            position: absolute !important; 
+            top: 0 !important; 
+            left: 0 !important; 
+            width: 100% !important; 
+            height: 100% !important; 
+            z-index: 1 !important;
         }
         .arjs-loader { 
             position: fixed; 
@@ -145,6 +296,20 @@
         .ar-scale-slider {
             width: 150px;
             margin-top: 5px;
+        }
+        /* Video de AR.js */
+        .arjs-video-container {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 0 !important;
+        }
+        .arjs-video-container video {
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
         }
     </style>
 </head>
@@ -280,7 +445,7 @@
                           precision: high;">
             
             <!-- Entidad de la cámara con GPS -->
-            <a-camera gps-camera="minDistance: 1; alert: true; simulateLatitude: 4.095; simulateLongitude: -76.195;" rotation-reader></a-camera>
+            <a-camera gps-camera="minDistance: 1; alert: true;" rotation-reader></a-camera>
             
             <!-- Luces mejoradas -->
             <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
@@ -382,8 +547,8 @@
             }
         });
 
-        const APP_VERSION = '4.0';
-        const CACHE_NAME = 'geo-ar-cache-v20';
+        const APP_VERSION = '4.1';
+        const CACHE_NAME = 'geo-ar-cache-v21';
         let appState = { 
             modelURL: null, 
             coords: null, 
@@ -433,7 +598,15 @@
             pages[pageName].classList.add('active');
             
             if (pageName === 'map') {
-                setTimeout(initMapAndPreview, 100);
+                setTimeout(() => {
+                    initMapAndPreview();
+                    // Forzar el redimensionamiento del mapa
+                    setTimeout(() => {
+                        if (map) {
+                            map.invalidateSize();
+                        }
+                    }, 100);
+                }, 100);
             } else if (pageName === 'scale') {
                 loadScaleSettings();
             } else if (pageName === 'ar') {
@@ -545,6 +718,19 @@
             window.addEventListener('arjs-video-loaded', () => {
                 console.log('Video de AR cargado');
                 arLoadingText.textContent = 'Iniciando GPS...';
+                
+                // Asegurarse de que el video sea visible
+                setTimeout(() => {
+                    const videoContainer = document.querySelector('.arjs-video-container');
+                    if (videoContainer) {
+                        videoContainer.style.zIndex = '0';
+                        videoContainer.style.position = 'absolute';
+                        videoContainer.style.top = '0';
+                        videoContainer.style.left = '0';
+                        videoContainer.style.width = '100%';
+                        videoContainer.style.height = '100%';
+                    }
+                }, 500);
             });
             
             // Escuchar evento de GPS listo
@@ -774,33 +960,41 @@
                 map = null; 
             }
             
-            map = L.map('map-canvas', { zoomControl: false }).setView([appState.coords.latitude, appState.coords.longitude], 18);
+            // Inicializar el mapa con el contenedor correcto
+            const mapContainer = document.getElementById('map-canvas');
+            map = L.map(mapContainer, { 
+                zoomControl: false,
+                preferCanvas: true
+            }).setView([appState.coords.latitude, appState.coords.longitude], 18);
             
-            const googleSat = L.tileLayer('https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{ 
-                maxZoom: 20, 
-                subdomains:['mt0','mt1','mt2','mt3'], 
-                attribution: 'Imagery &copy;2025 Google' 
+            // Usar diferentes fuentes de tiles para asegurar que se carguen
+            const osmTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
             });
             
-            const googleHybrid = L.tileLayer('https://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ 
-                maxZoom: 20, 
-                subdomains:['mt0','mt1','mt2','mt3'], 
-                attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google' 
+            const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: 'Imagery &copy;2025 Google'
             });
             
-            const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors', 
-                maxZoom: 20 
+            const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google'
             });
-
+            
+            // Añadir capa base por defecto
+            osmTiles.addTo(map);
+            
             const baseMaps = { 
+                "OpenStreetMap": osmTiles,
                 "Google Satélite": googleSat, 
-                "Google Híbrido": googleHybrid, 
-                "OpenStreetMap": streetLayer 
+                "Google Híbrido": googleHybrid
             };
             
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
-            googleSat.addTo(map);
 
             // Añadir marcador en la ubicación
             L.marker([appState.coords.latitude, appState.coords.longitude])
@@ -944,6 +1138,13 @@
                 modelPreview.camera.aspect = width / height;
                 modelPreview.camera.updateProjectionMatrix();
                 modelPreview.renderer.setSize(width, height);
+            }
+            
+            // Redimensionar el mapa si está activo
+            if (pages.map.classList.contains('active') && map) {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100);
             }
         }
 
