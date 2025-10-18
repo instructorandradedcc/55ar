@@ -385,6 +385,134 @@
             border-color: #4CAF50;
             box-shadow: 0 0 0 3px rgba(76, 175, 80, 0.1);
         }
+        
+        /* Estilos para el indicador de GPS */
+        .gps-indicator {
+            position: fixed;
+            top: 80px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9998;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .gps-indicator.active {
+            background-color: rgba(76, 175, 80, 0.8);
+        }
+        .gps-indicator.error {
+            background-color: rgba(244, 67, 54, 0.8);
+        }
+        .gps-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #4CAF50;
+            animation: gps-pulse 2s infinite;
+        }
+        @keyframes gps-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(76, 175, 80, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(76, 175, 80, 0); }
+        }
+        
+        /* Estilos para el panel de coordenadas del modelo */
+        .model-coords-panel {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9998;
+            min-width: 200px;
+        }
+        .coord-item {
+            margin: 5px 0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .coord-label {
+            font-weight: bold;
+            color: #4CAF50;
+        }
+        .coord-value {
+            font-family: monospace;
+        }
+        
+        /* Estilos para los indicadores de ubicación en AR */
+        .location-indicator {
+            position: fixed;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 9997;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            pointer-events: none;
+        }
+        .current-location-indicator {
+            bottom: 100px;
+            left: 20px;
+            background-color: rgba(76, 175, 80, 0.9);
+            border: 2px solid #4CAF50;
+        }
+        .model-location-indicator {
+            bottom: 100px;
+            right: 20px;
+            background-color: rgba(255, 152, 0, 0.9);
+            border: 2px solid #FF9800;
+        }
+        .location-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: white;
+        }
+        
+        /* Estilos para la línea de conexión */
+        .connection-line {
+            position: fixed;
+            background: linear-gradient(90deg, #4CAF50, #FF9800);
+            height: 3px;
+            transform-origin: left center;
+            z-index: 9996;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+        
+        /* Estilos para el panel de distancia */
+        .distance-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 30px;
+            font-size: 16px;
+            font-weight: bold;
+            z-index: 9997;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 2px solid #4CAF50;
+        }
+        .distance-value {
+            color: #4CAF50;
+            font-size: 18px;
+        }
     </style>
 </head>
 <body>
@@ -493,7 +621,7 @@
                         </p>
                     </div>
                 </div>
-                <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
+                <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap:4">
                     <button id="back-to-map-from-scale-btn" class="control-button bg-gray-500 hover:bg-gray-600 w-full sm:w-auto">Volver al Mapa</button>
                     <button id="goto-ar-from-scale-btn" class="control-button bg-green-500 hover:bg-green-600 w-full sm:w-auto">Iniciar AR</button>
                 </div>
@@ -547,6 +675,54 @@
             </div>
         </div>
         <div id="ar-scene-container"></div>
+        
+        <!-- Indicador de GPS -->
+        <div id="gps-indicator" class="gps-indicator">
+            <div class="gps-dot"></div>
+            <span id="gps-indicator-text">GPS: Buscando...</span>
+        </div>
+        
+        <!-- Indicadores de ubicación en AR -->
+        <div id="current-location-indicator" class="location-indicator current-location-indicator" style="display: none;">
+            <div class="location-dot"></div>
+            <span>TU UBICACIÓN</span>
+        </div>
+        
+        <div id="model-location-indicator" class="location-indicator model-location-indicator" style="display: none;">
+            <div class="location-dot"></div>
+            <span>MODELO 3D</span>
+        </div>
+        
+        <!-- Línea de conexión -->
+        <div id="connection-line" class="connection-line" style="display: none;"></div>
+        
+        <!-- Panel de distancia -->
+        <div id="distance-panel" class="distance-panel" style="display: none;">
+            <span>Distancia:</span>
+            <span class="distance-value" id="ar-distance-value">--</span>
+        </div>
+        
+        <!-- Panel de coordenadas del modelo -->
+        <div class="model-coords-panel">
+            <h3 style="margin-bottom: 10px; text-align: center; color: #4CAF50;">Georreferencia del Modelo</h3>
+            <div class="coord-item">
+                <span class="coord-label">Latitud:</span>
+                <span class="coord-value" id="model-lat">--</span>
+            </div>
+            <div class="coord-item">
+                <span class="coord-label">Longitud:</span>
+                <span class="coord-value" id="model-lon">--</span>
+            </div>
+            <div class="coord-item">
+                <span class="coord-label">Altura:</span>
+                <span class="coord-value" id="model-height">--</span>
+            </div>
+            <div class="coord-item">
+                <span class="coord-label">Distancia:</span>
+                <span class="coord-value" id="model-distance">--</span>
+            </div>
+        </div>
+        
         <div class="ar-info-panel">
             <div><strong>GPS:</strong> <span id="gps-status">Buscando...</span></div>
             <div><strong>Precisión:</strong> <span id="gps-accuracy" style="font-weight: bold;">--</span>m</div>
@@ -595,12 +771,13 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.3';
-        const CACHE_NAME = 'geo-ar-cache-v33';
+        const APP_VERSION = '5.5';
+        const CACHE_NAME = 'geo-ar-cache-v35';
         let appState = {
             modelURL: null,
             coords: null,
             arTargetCoords: null,
+            currentGPSLocation: null,
             realDimensions: { width: 10.0, length: 15.0, height: 3.0, groundHeight: 0.0 },
             initialARScale: 1.0,
             arDistance: 20.0, // Nueva propiedad para la distancia de visualización
@@ -627,6 +804,8 @@
         let gpsWatchId = null;
         let modelLoaded = false;
         let gpsInitialized = false;
+        let currentLocationMarker = null;
+        let modelLocationMarker = null;
 
         const pages = {
             upload: document.getElementById('upload-page'),
@@ -642,6 +821,13 @@
         const loadingProgressBar = document.getElementById('loading-progress-bar');
         const loadingStatusText = document.getElementById('loading-status-text');
         const arDebugInfo = document.getElementById('ar-debug-info');
+        const gpsIndicator = document.getElementById('gps-indicator');
+        const gpsIndicatorText = document.getElementById('gps-indicator-text');
+        const currentLocationIndicator = document.getElementById('current-location-indicator');
+        const modelLocationIndicator = document.getElementById('model-location-indicator');
+        const connectionLine = document.getElementById('connection-line');
+        const distancePanel = document.getElementById('distance-panel');
+        const arDistanceValue = document.getElementById('ar-distance-value');
 
         // Función para actualizar la pantalla de carga
         function updateLoadingScreen(step, progress, status) {
@@ -805,6 +991,16 @@
             
             const targetCoords = appState.arTargetCoords || appState.coords;
             
+            // Actualizar el panel de coordenadas del modelo
+            document.getElementById('model-lat').textContent = targetCoords.latitude.toFixed(6);
+            document.getElementById('model-lon').textContent = targetCoords.longitude.toFixed(6);
+            document.getElementById('model-height').textContent = appState.realDimensions.groundHeight.toFixed(2) + 'm';
+            
+            // Mostrar indicadores de ubicación en AR
+            currentLocationIndicator.style.display = 'flex';
+            modelLocationIndicator.style.display = 'flex';
+            distancePanel.style.display = 'flex';
+            
             /*
              * =================================================================================
              * CORRECCIÓN CRÍTICA: Configuración mejorada para transparencia total
@@ -949,8 +1145,38 @@
                     console.log('Posición GPS actualizada:', position);
                     showDebugInfo(`GPS: ${position.coords.latitude}, ${position.coords.longitude} (Precisión: ${position.coords.accuracy}m)`);
                     
+                    // Actualizar estado del GPS
+                    appState.currentGPSLocation = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+                    
+                    // Actualizar indicador GPS
+                    gpsIndicator.classList.add('active');
+                    gpsIndicator.classList.remove('error');
+                    gpsIndicatorText.textContent = `GPS: Activo (${position.coords.accuracy.toFixed(1)}m)`;
+                    
                     document.getElementById('gps-status').textContent = 'Activo';
                     document.getElementById('gps-accuracy').textContent = position.coords.accuracy.toFixed(1);
+                    
+                    // Calcular distancia al modelo
+                    if (appState.arTargetCoords) {
+                        const distance = calculateDistance(
+                            position.coords.latitude,
+                            position.coords.longitude,
+                            appState.arTargetCoords.latitude,
+                            appState.arTargetCoords.longitude
+                        );
+                        
+                        // Actualizar todos los paneles de distancia
+                        document.getElementById('model-distance').textContent = distance.toFixed(2) + 'm';
+                        document.getElementById('current-distance').textContent = distance.toFixed(0);
+                        arDistanceValue.textContent = distance.toFixed(1) + 'm';
+                        
+                        // Actualizar línea de conexión
+                        updateConnectionLine();
+                    }
                     
                     gpsInitialized = true;
                     
@@ -961,6 +1187,12 @@
                 (error) => {
                     console.error('Error al obtener la posición GPS:', error);
                     showDebugInfo(`Error de GPS: ${error.message}`);
+                    
+                    // Actualizar indicador GPS con error
+                    gpsIndicator.classList.add('error');
+                    gpsIndicator.classList.remove('active');
+                    gpsIndicatorText.textContent = 'GPS: Error';
+                    
                     document.getElementById('gps-status').textContent = 'Error';
                     
                     let errorMessage = 'Error de GPS desconocido';
@@ -984,6 +1216,43 @@
                     maximumAge: 0
                 }
             );
+        }
+
+        function updateConnectionLine() {
+            if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
+            
+            // Mostrar línea de conexión
+            connectionLine.style.display = 'block';
+            
+            // Calcular posición y ángulo de la línea
+            const currentLoc = currentLocationIndicator.getBoundingClientRect();
+            const modelLoc = modelLocationIndicator.getBoundingClientRect();
+            
+            const deltaX = modelLoc.left - currentLoc.left;
+            const deltaY = modelLoc.top - currentLoc.top;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+            
+            // Actualizar línea
+            connectionLine.style.width = distance + 'px';
+            connectionLine.style.left = currentLoc.right + 'px';
+            connectionLine.style.top = (currentLoc.top + currentLoc.height / 2) + 'px';
+            connectionLine.style.transform = `rotate(${angle}deg)`;
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radio de la Tierra en metros
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c; // Distancia en metros
         }
 
         function onGPSUpdate(event) {
@@ -1098,6 +1367,12 @@
                 arCamera = null;
                 arModel = null;
             }
+            
+            // Ocultar indicadores de ubicación
+            currentLocationIndicator.style.display = 'none';
+            modelLocationIndicator.style.display = 'none';
+            connectionLine.style.display = 'none';
+            distancePanel.style.display = 'none';
             
             modelLoaded = false;
             gpsInitialized = false;
@@ -1266,6 +1541,7 @@
 
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
+            // Marcador de ubicación inicial (azul)
             const initialMarker = L.marker([appState.coords.latitude, appState.coords.longitude], {
                 draggable: true,
                 autoPan: true
@@ -1281,12 +1557,39 @@
                 document.getElementById('jumpto-lon').value = newPosition.lng.toFixed(6);
                 showMessage('Ubicación inicial actualizada.', 3000);
             });
-                
+            
+            // Marcador de ubicación del modelo (naranja)
             if (appState.arTargetCoords) {
-                L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
+                modelLocationMarker = L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
                     .addTo(map)
-                    .bindPopup('Ubicación para AR')
-                    .setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]}));
+                    .bindPopup('Ubicación del Modelo 3D')
+                    .setIcon(L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', 
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', 
+                        iconSize: [25, 41], 
+                        iconAnchor: [12, 41], 
+                        popupAnchor: [1, -34], 
+                        shadowSize: [41, 41]
+                    }));
+            }
+            
+            // Marcador de ubicación actual GPS (verde)
+            if (appState.currentGPSLocation) {
+                if (currentLocationMarker) {
+                    map.removeLayer(currentLocationMarker);
+                }
+                
+                currentLocationMarker = L.marker([appState.currentGPSLocation.latitude, appState.currentGPSLocation.longitude])
+                    .addTo(map)
+                    .bindPopup('Tu ubicación actual (GPS)')
+                    .setIcon(L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', 
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', 
+                        iconSize: [25, 41], 
+                        iconAnchor: [12, 41], 
+                        popupAnchor: [1, -34], 
+                        shadowSize: [41, 41]
+                    }));
             }
 
             map.on('moveend', () => {
