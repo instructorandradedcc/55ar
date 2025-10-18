@@ -292,20 +292,20 @@
         
         /* 
          * =================================================================================
-         * CORRECCIÓN CRÍTICA: Forzar la visualización del video de la cámara AR
+         * CORRECCIÓN CRÍTICA: Estrategia de capas para video y canvas
          * =================================================================================
-         * Estilos agresivos para asegurar que el video de la cámara sea visible
-         * como fondo en todos los dispositivos, especialmente iOS y Android.
+         * Usamos z-index: 0 para el video y z-index: 1 para el canvas para una
+         * compatibilidad máxima. El video debe cubrir toda la pantalla.
          * =================================================================================
          */
         video {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
+            width: 100vw !important; /* Usar vw/vh para mayor robustez */
+            height: 100vh !important;
             object-fit: cover !important;
-            z-index: -1 !important;
+            z-index: 0 !important; /* Capa de fondo */
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -320,10 +320,10 @@
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
+            width: 100vw !important;
+            height: 100vh !important;
             object-fit: cover !important;
-            z-index: -1 !important;
+            z-index: 0 !important;
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -334,7 +334,7 @@
         }
         
         .a-canvas {
-            z-index: 1 !important;
+            z-index: 1 !important; /* Capa de contenido AR */
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
@@ -836,7 +836,7 @@
          * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
          * =================================================================================
          */
-        const APP_VERSION = '0.02'; // INCREMENTADO POR CORRECCIONES CRÍTICAS
+        const APP_VERSION = '0.03'; // INCREMENTADO POR CORRECCIONES DE RENDERIZADO Y ORIENTACIÓN
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
@@ -990,7 +990,6 @@
                 updateLoadingScreen('step-permissions', 25, 'Verificando permisos de cámara y GPS...');
                 showDebugInfo('Verificando permisos de cámara y GPS');
 
-                // **MEJORA: Comprobación de permisos más robusta**
                 let cameraPermission = 'prompt';
                 let locationPermission = 'prompt';
 
@@ -1012,7 +1011,6 @@
                     throw new Error('Permisos de cámara o ubicación denegados. Por favor, habilítalos en la configuración de tu navegador.');
                 }
                 
-                // Solicitar permisos de cámara
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ 
                         video: { 
@@ -1029,7 +1027,6 @@
                     throw new Error('No se pudo acceder a la cámara. Asegúrate de haber concedido los permisos.');
                 }
 
-                // Solicitar permisos de GPS
                 try {
                     await new Promise((resolve, reject) => {
                         navigator.geolocation.getCurrentPosition(resolve, reject, { 
@@ -1091,24 +1088,14 @@
             
             const targetCoords = appState.arTargetCoords || appState.coords;
             
-            // Actualizar el panel de coordenadas del modelo
             document.getElementById('model-lat').textContent = targetCoords.latitude.toFixed(6);
             document.getElementById('model-lon').textContent = targetCoords.longitude.toFixed(6);
             document.getElementById('model-height').textContent = appState.realDimensions.groundHeight.toFixed(2) + 'm';
             
-            // Mostrar indicadores de ubicación en AR
             currentLocationIndicator.style.display = 'flex';
             modelLocationIndicator.style.display = 'flex';
             distancePanel.style.display = 'flex';
             
-            /*
-             * =================================================================================
-             * CORRECCIÓN CRÍTICA: Configuración simplificada de AR.js
-             * =================================================================================
-             * Se ha simplificado al máximo la configuración de AR.js para evitar conflictos
-             * que impedían la visualización del video de la cámara.
-             * =================================================================================
-             */
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
@@ -1150,16 +1137,8 @@
                 console.log('Escena AR cargada correctamente');
                 showDebugInfo('Escena AR cargada');
                 
-                /*
-                 * =================================================================================
-                 * CORRECCIÓN CRÍTICA: Forzar video y transparencia de forma más agresiva
-                 * =================================================================================
-                 * Se aplica una solución más robusta para asegurar que el video de la cámara
-                 * sea visible y el canvas sea transparente.
-                 * =================================================================================
-                 */
                 if (arScene.renderer) {
-                    arScene.renderer.setClearColor(0x000000, 0); // Transparente
+                    arScene.renderer.setClearColor(0x000000, 0);
                     arScene.renderer.setPixelRatio(window.devicePixelRatio);
                     arScene.renderer.setSize(window.innerWidth, window.innerHeight);
                     const canvas = arScene.renderer.domElement;
@@ -1168,10 +1147,18 @@
                     showDebugInfo('Renderer configurado para transparencia');
                 }
                 
-                // Forzar la visualización del video con un retardo mayor
                 setTimeout(() => {
                     forceVideoVisibility();
-                }, 2000); // Retardo aumentado a 2s
+                    /*
+                     * =================================================================================
+                     * CORRECCIÓN CRÍTICA: Añadir listener para el cambio de orientación
+                     * =================================================================================
+                     * Este es el evento clave que faltaba para solucionar los problemas de
+                     * deformación y desaparición del modelo.
+                     * =================================================================================
+                     */
+                    window.addEventListener('resize', onARWindowResize);
+                }, 2000);
                 
                 window.addEventListener('gps-camera-update-position', onGPSUpdate);
                 window.addEventListener('gps-camera-error', onGPSError);
@@ -1194,17 +1181,49 @@
                     arLoadingScreen.classList.remove('active');
                     showMessage('La escena AR está cargando, puede tardar unos segundos...', 3000);
                 }
-            }, 15000); // Aumentado a 15s
+            }, 15000);
         }
 
         /*
          * =================================================================================
-         * FUNCIÓN NUEVA: Forzar visualización del video de forma más robusta
+         * FUNCIÓN NUEVA: Manejador de cambio de tamaño y orientación
          * =================================================================================
-         * Esta función aplica estilos y atributos de forma más agresiva para asegurar
-         * que el video de la cámara sea visible como fondo de la escena AR.
+         * Esta función es la solución central para los problemas de renderizado.
+         * Se asegura de que el renderer, la cámara y las capas de video/canvas
+         * se actualicen correctamente cada vez que la ventana cambia de tamaño.
          * =================================================================================
          */
+        function onARWindowResize() {
+            showDebugInfo('Evento de resize detectado, ajustando escena AR...');
+            
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+
+            // 1. Actualizar el renderer de A-Frame
+            if (arScene && arScene.renderer) {
+                arScene.renderer.setSize(width, height);
+                showDebugInfo(`Renderer actualizado a ${width}x${height}`);
+            }
+
+            // 2. Actualizar la relación de aspecto de la cámara
+            if (arCamera && arCamera.components.camera) {
+                const camera = arCamera.components.camera.camera;
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                showDebugInfo(`Relación de aspecto de cámara actualizada a ${camera.aspect}`);
+            }
+
+            // 3. Forzar la visibilidad y el tamaño correctos del video y el canvas
+            setTimeout(() => {
+                forceVideoVisibility();
+                // Forzar un re-posicionamiento del modelo para evitar que se pierda
+                if (arModel && arModel.components['gps-entity-place']) {
+                    arModel.components['gps-entity-place'].updatePosition();
+                    showDebugInfo('Posición del modelo GPS forzada a actualizarse');
+                }
+            }, 100); // Pequeño retardo para asegurar que el DOM se actualice
+        }
+
         function forceVideoVisibility() {
             const videos = document.querySelectorAll('video');
             if (videos.length > 0) {
@@ -1212,14 +1231,13 @@
                     video.style.position = 'fixed';
                     video.style.top = '0';
                     video.style.left = '0';
-                    video.style.width = '100%';
-                    video.style.height = '100%';
+                    video.style.width = '100vw';
+                    video.style.height = '100vh';
                     video.style.objectFit = 'cover';
-                    video.style.zIndex = '-1'; // Detrás de todo
+                    video.style.zIndex = '0';
                     video.style.display = 'block';
                     video.style.opacity = '1';
                     video.style.visibility = 'visible';
-                    video.style.backgroundColor = 'black';
                     
                     video.setAttribute('autoplay', 'true');
                     video.setAttribute('playsinline', 'true');
@@ -1328,20 +1346,12 @@
             document.getElementById('current-distance').textContent = distance.toFixed(0);
         }
 
-        /*
-         * =================================================================================
-         * CORRECCIÓN CRÍTICA: Suavizado de GPS para evitar cambios de distancia bruscos
-         * =================================================================================
-         * Se ha añadido un umbral mínimo de distancia para actualizar la ubicación.
-         * Esto evita que el modelo "tiemble" por las pequeñas imprecisiones del GPS.
-         * =================================================================================
-         */
         function startGPSWatch() {
             if (gpsWatchId) {
                 navigator.geolocation.clearWatch(gpsWatchId);
             }
             
-            const MIN_DISTANCE_UPDATE = 2; // Mínimo 2 metros de cambio para actualizar
+            const MIN_DISTANCE_UPDATE = 2;
             
             gpsWatchId = navigator.geolocation.watchPosition(
                 (position) => {
@@ -1351,11 +1361,9 @@
                         accuracy: position.coords.accuracy
                     };
 
-                    // Si no hay ubicación previa, la establecemos
                     if (!appState.currentGPSLocation) {
                         appState.currentGPSLocation = newLocation;
                     } else {
-                        // Calculamos la distancia desde la última ubicación conocida
                         const distanceMoved = calculateDistance(
                             appState.currentGPSLocation.latitude,
                             appState.currentGPSLocation.longitude,
@@ -1363,12 +1371,10 @@
                             newLocation.longitude
                         );
 
-                        // Solo actualizamos si el movimiento es significativo
                         if (distanceMoved > MIN_DISTANCE_UPDATE) {
                             appState.currentGPSLocation = newLocation;
                             showDebugInfo(`GPS actualizado (movió ${distanceMoved.toFixed(2)}m)`);
                         } else {
-                            // Si el movimiento es pequeño, actualizamos solo la precisión para el panel
                             appState.currentGPSLocation.accuracy = newLocation.accuracy;
                         }
                     }
@@ -1424,15 +1430,6 @@
             );
         }
 
-        // **CORRECCIÓN: Esta función ya no es necesaria y puede causar conflictos**
-        // AR.js con gps-entity-place maneja el posicionamiento del modelo.
-        // La comentamos para evitar interferencias.
-        /*
-        function updateModelPosition() {
-            // ... código anterior ...
-        }
-        */
-
         function calculateBearing(lat1, lon1, lat2, lon2) {
             const φ1 = lat1 * Math.PI/180;
             const φ2 = lat2 * Math.PI/180;
@@ -1468,7 +1465,7 @@
         }
 
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3; // Radio de la Tierra en metros
+            const R = 6371e3;
             const φ1 = lat1 * Math.PI/180;
             const φ2 = lat2 * Math.PI/180;
             const Δφ = (lat2-lat1) * Math.PI/180;
@@ -1479,7 +1476,7 @@
                     Math.sin(Δλ/2) * Math.sin(Δλ/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 
-            return R * c; // Distancia en metros
+            return R * c;
         }
 
         function onGPSUpdate(event) {
@@ -1606,9 +1603,6 @@
                 showDebugInfo(`Modelo escalado: ${finalScaleX.toFixed(2)}, ${finalScaleY.toFixed(2)}, ${finalScaleZ.toFixed(2)}`);
                 
                 document.getElementById('current-scale').textContent = appState.initialARScale.toFixed(1);
-                
-                // **CORRECCIÓN: Ya no llamamos a updateModelPosition aquí**
-                // AR.js se encarga de posicionar el modelo.
             }, undefined, (error) => {
                 console.error('Error al cargar el modelo para ajustar escala:', error);
                 showDebugInfo(`Error al ajustar escala: ${error.message}`);
@@ -1621,6 +1615,10 @@
                 gpsWatchId = null;
             }
             
+            // **CORRECCIÓN CRÍTICA: Eliminar el listener de resize al detener AR**
+            // Esto evita que la función se ejecute cuando la página AR ya no está activa.
+            window.removeEventListener('resize', onARWindowResize);
+
             if (arScene) {
                 arScene.pause();
                 arScene.parentNode.removeChild(arScene);
