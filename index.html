@@ -53,7 +53,7 @@
             height: 100%;
             overflow: hidden;
             font-family: 'Inter', sans-serif;
-            background-color: #f0f0f0;
+            background-color: transparent !important;
         }
         .page {
             display: none;
@@ -156,9 +156,9 @@
             padding: 10px; border-radius: 8px; display: flex; gap: 5px; align-items: center;
         }
         a-scene {
-            position: absolute !important; top: 0 !important; left: 0 !important;
+            position: fixed !important; top: 0 !important; left: 0 !important;
             width: 100% !important; height: 100% !important; z-index: 1 !important;
-            background: none !important;
+            background: transparent !important;
         }
         .arjs-loader {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -294,8 +294,8 @@
          * =================================================================================
          * CORRECCIÓN CRÍTICA: Forzar la visualización del video de la cámara AR
          * =================================================================================
-         * AR.js crea un elemento <video> que a veces queda oculto o detrás del canvas.
-         * Este CSS asegura que el video de la cámara sea visible como fondo.
+         * Basado en el análisis de problemas comunes, estos estilos aseguran que el video
+         * de la cámara sea visible como fondo en todos los dispositivos, especialmente iOS.
          * =================================================================================
          */
         video {
@@ -310,6 +310,14 @@
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
+            /* Atributos críticos para iOS y móviles */
+            autoplay: true !important;
+            playsinline: true !important;
+            webkit-playsinline: true !important;
+            muted: true !important;
+            /* Evitar que el navegador lo pause */
+            -webkit-perspective: none !important;
+            perspective: none !important;
         }
         
         .arjs-video {
@@ -324,6 +332,10 @@
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
+            autoplay: true !important;
+            playsinline: true !important;
+            webkit-playsinline: true !important;
+            muted: true !important;
         }
         
         .a-canvas {
@@ -574,6 +586,28 @@
             margin-top: 10px;
             width: 100%;
         }
+        
+        /* Botón de inicio forzado para iOS */
+        .ios-start-button {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #4CAF50;
+            color: white;
+            padding: 20px 40px;
+            border-radius: 10px;
+            font-size: 18px;
+            font-weight: bold;
+            z-index: 10004;
+            display: none;
+            cursor: pointer;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .ios-start-button.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -737,6 +771,11 @@
         </div>
         <div id="ar-scene-container"></div>
         
+        <!-- Botón de inicio para iOS -->
+        <button id="ios-start-button" class="ios-start-button">
+            Toca para iniciar la cámara AR
+        </button>
+        
         <!-- Indicador de GPS -->
         <div id="gps-indicator" class="gps-indicator">
             <div class="gps-dot"></div>
@@ -839,8 +878,8 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.7';
-        const CACHE_NAME = 'geo-ar-cache-v37';
+        const APP_VERSION = '5.8';
+        const CACHE_NAME = 'geo-ar-cache-v38';
         let appState = {
             modelURL: null,
             coords: null,
@@ -851,7 +890,9 @@
             arDistance: 20.0, // Nueva propiedad para la distancia de visualización
             modelBounds: null,
             mapScale: 50,
-            explorationMode: false
+            explorationMode: false,
+            videoStarted: false,
+            isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent)
         };
         let map, modelPreview = {
             renderer: null,
@@ -904,6 +945,7 @@
         const arDistanceValue = document.getElementById('ar-distance-value');
         const explorationMode = document.getElementById('exploration-mode');
         const toggleExplorationBtn = document.getElementById('toggle-exploration-btn');
+        const iosStartButton = document.getElementById('ios-start-button');
 
         // Función para actualizar la pantalla de carga
         function updateLoadingScreen(step, progress, status) {
@@ -1151,11 +1193,12 @@
                  * =================================================================================
                  * CORRECCIÓN CRÍTICA: Asegurar que el video de la cámara sea visible
                  * =================================================================================
-                 * Buscamos el elemento de video creado por AR.js y nos aseguramos de que sea visible.
+                 * Basado en el análisis de problemas comunes, implementamos las soluciones
+                 * recomendadas para asegurar que el video sea visible en todos los dispositivos.
                  * =================================================================================
                  */
                 setTimeout(() => {
-                    // Forzar que todos los videos sean visibles
+                    // Forzar que todos los videos sean visibles con atributos críticos
                     const videos = document.querySelectorAll('video');
                     if (videos.length > 0) {
                         videos.forEach(video => {
@@ -1172,6 +1215,15 @@
                             video.style.visibility = 'visible';
                             video.style.backgroundColor = 'transparent';
                             video.style.background = 'transparent';
+                            
+                            // Atributos críticos para iOS y móviles
+                            video.setAttribute('autoplay', 'true');
+                            video.setAttribute('playsinline', 'true');
+                            video.setAttribute('webkit-playsinline', 'true');
+                            video.setAttribute('muted', 'true');
+                            
+                            // Forzar reproducción del video
+                            forceVideoPlay(video);
                         });
                         showDebugInfo('Video de cámara configurado correctamente');
                     }
@@ -1222,6 +1274,12 @@
                     document.documentElement.style.backgroundColor = 'transparent';
                     document.documentElement.style.background = 'transparent';
                     
+                    // Mostrar botón de inicio para iOS si es necesario
+                    if (appState.isIOS && !appState.videoStarted) {
+                        iosStartButton.classList.add('show');
+                        showDebugInfo('Mostrando botón de inicio para iOS');
+                    }
+                    
                     showDebugInfo('Fondo transparente forzado');
                 }, 1000);
                 
@@ -1248,6 +1306,85 @@
                 }
             }, 10000);
         }
+
+        /*
+         * =================================================================================
+         * FUNCIÓN CRÍTICA: Forzar reproducción del video
+         * =================================================================================
+         * Basado en las recomendaciones de StackOverflow y la documentación,
+         * esta función fuerza la reproducción del video en dispositivos móviles.
+         * =================================================================================
+         */
+        function forceVideoPlay(video) {
+            if (!video) return;
+            
+            // Intentar reproducir el video directamente
+            const playPromise = video.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('Video reproduciéndose correctamente');
+                    appState.videoStarted = true;
+                    showDebugInfo('Video iniciado correctamente');
+                    
+                    // Ocultar botón de iOS si está visible
+                    if (appState.isIOS && iosStartButton.classList.contains('show')) {
+                        iosStartButton.classList.remove('show');
+                    }
+                }).catch(error => {
+                    console.error('Error al reproducir video:', error);
+                    showDebugInfo(`Error al reproducir video: ${error.message}`);
+                    
+                    // Si el video no puede reproducirse automáticamente, mostrar botón de inicio
+                    if (appState.isIOS && !iosStartButton.classList.contains('show')) {
+                        iosStartButton.classList.add('show');
+                        showDebugInfo('Mostrando botón de inicio para iOS (requiere interacción del usuario)');
+                    }
+                });
+            } else {
+                // Para navegadores más antiguos que no devuelven una promesa
+                appState.videoStarted = true;
+                showDebugInfo('Video iniciado (método legacy)');
+            }
+        }
+
+        /*
+         * =================================================================================
+         * FUNCIÓN: Iniciar video con interacción del usuario
+         * =================================================================================
+         * Esta función se activa cuando el usuario toca la pantalla,
+         * requerido por iOS y algunos navegadores móviles.
+         * =================================================================================
+         */
+        function startVideoWithUserInteraction() {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+                videos.forEach(video => {
+                    forceVideoPlay(video);
+                });
+            }
+            
+            // Ocultar botón de inicio
+            iosStartButton.classList.remove('show');
+            
+            showMessage('Cámara AR iniciada', 2000);
+        }
+
+        // Event listener para el botón de inicio de iOS
+        iosStartButton.addEventListener('click', startVideoWithUserInteraction);
+        
+        // Event listener global para interacción del usuario
+        document.addEventListener('touchstart', function() {
+            if (!appState.videoStarted && pages.ar.classList.contains('active')) {
+                startVideoWithUserInteraction();
+            }
+        }, { once: true });
+        
+        document.addEventListener('click', function() {
+            if (!appState.videoStarted && pages.ar.classList.contains('active')) {
+                startVideoWithUserInteraction();
+            }
+        }, { once: true });
 
         function startGPSWatch() {
             if (gpsWatchId) {
@@ -1586,9 +1723,11 @@
             connectionLine.style.display = 'none';
             distancePanel.style.display = 'none';
             explorationMode.classList.remove('active');
+            iosStartButton.classList.remove('show');
             
             modelLoaded = false;
             gpsInitialized = false;
+            appState.videoStarted = false;
             
             if (arDebugInfo) {
                 arDebugInfo.style.display = 'none';
@@ -2121,6 +2260,13 @@
 
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
+            
+            // Detectar si es iOS
+            appState.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            if (appState.isIOS) {
+                showDebugInfo('Dispositivo iOS detectado');
+            }
+            
             loadDataFromCache();
         }
 
@@ -2128,4 +2274,3 @@
     </script>
 </body>
 </html>
-
