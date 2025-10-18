@@ -304,12 +304,12 @@
             left: 0 !important;
             width: 100% !important;
             height: 100% !important;
-            z-index: -2 !important; /* Detrás del canvas pero visible */
+            z-index: -1 !important; /* Detrás del canvas pero visible */
             transform: scale(-1, 1) !important; /* Espejo para vista natural */
             object-fit: cover !important;
         }
         .a-canvas {
-            z-index: -1 !important;
+            z-index: 1 !important;
         }
         
         /*
@@ -570,8 +570,8 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.2';
-        const CACHE_NAME = 'geo-ar-cache-v32';
+        const APP_VERSION = '5.3';
+        const CACHE_NAME = 'geo-ar-cache-v33';
         let appState = {
             modelURL: null,
             coords: null,
@@ -849,6 +849,46 @@
                     
                     showDebugInfo('Renderer configurado para transparencia');
                 }
+                
+                /*
+                 * =================================================================================
+                 * CORRECCIÓN CRÍTICA: Asegurar que el video de la cámara sea visible
+                 * =================================================================================
+                 * Buscamos el elemento de video creado por AR.js y nos aseguramos de que sea visible.
+                 * =================================================================================
+                 */
+                setTimeout(() => {
+                    const videos = document.querySelectorAll('video');
+                    if (videos.length > 0) {
+                        videos.forEach(video => {
+                            video.style.position = 'absolute';
+                            video.style.top = '0';
+                            video.style.left = '0';
+                            video.style.width = '100%';
+                            video.style.height = '100%';
+                            video.style.objectFit = 'cover';
+                            video.style.zIndex = '1';
+                            video.style.transform = 'scale(-1, 1)';
+                            video.style.display = 'block';
+                        });
+                        showDebugInfo('Video de cámara configurado correctamente');
+                    }
+                    
+                    // Asegurar que el canvas esté sobre el video
+                    const canvases = document.querySelectorAll('canvas');
+                    if (canvases.length > 0) {
+                        canvases.forEach(canvas => {
+                            canvas.style.zIndex = '2';
+                            canvas.style.position = 'absolute';
+                            canvas.style.top = '0';
+                            canvas.style.left = '0';
+                            canvas.style.width = '100%';
+                            canvas.style.height = '100%';
+                            canvas.style.pointerEvents = 'none';
+                        });
+                        showDebugInfo('Canvas configurado correctamente');
+                    }
+                }, 1000);
                 
                 window.addEventListener('gps-camera-update-position', onGPSUpdate);
                 window.addEventListener('gps-camera-error', onGPSError);
@@ -1221,301 +1261,4 @@
                 L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
                     .addTo(map)
                     .bindPopup('Ubicación para AR')
-                    .setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]}));
-            }
-
-            map.on('moveend', () => {
-                const newCoords = map.getCenter();
-                updateCoordsInCache({ latitude: newCoords.lat, longitude: newCoords.lng });
-                document.getElementById('jumpto-lat').value = newCoords.lat.toFixed(6);
-                document.getElementById('jumpto-lon').value = newCoords.lng.toFixed(6);
-            });
-
-            document.getElementById('jumpto-lat').value = appState.coords.latitude.toFixed(6);
-            document.getElementById('jumpto-lon').value = appState.coords.longitude.toFixed(6);
-
-            initModelPreview();
-            setTimeout(() => {
-                showMessage("1 dedo: inclinar. 2 dedos: girar.", 5000);
-            }, 500);
-        }
-
-        async function initModelPreview() {
-            const canvas = document.getElementById('model-preview-canvas');
-            const container = document.getElementById('map-container');
-
-            if (!container) return;
-
-            canvas.style.display = 'block';
-            canvas.style.zIndex = '401';
-            
-            modelPreview.renderer = new THREE.WebGLRenderer({
-                canvas,
-                alpha: true,
-                antialias: true,
-                logarithmicDepthBuffer: true
-            });
-
-            modelPreview.renderer.setSize(container.clientWidth, container.clientHeight);
-            modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
-            modelPreview.renderer.setClearColor(0x000000, 0);
-            
-            modelPreview.scene = new THREE.Scene();
-            modelPreview.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-            modelPreview.camera.position.set(0, 40, 30);
-            modelPreview.camera.lookAt(0, 0, 0);
-
-            modelPreview.scene.add(new THREE.AmbientLight(0xffffff, 1.8));
-
-            const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
-            dirLight.position.set(5, 10, 7.5);
-            modelPreview.scene.add(dirLight);
-
-            if (modelPreview.model) {
-                modelPreview.scene.remove(modelPreview.model);
-            }
-
-            try {
-                const loader = new GLTFLoader();
-                const gltf = await loader.loadAsync(appState.modelURL);
-                modelPreview.model = gltf.scene;
-
-                modelPreview.model.traverse((node) => {
-                    if (node.isMesh && node.material) {
-                        node.material.transparent = false;
-                        node.material.depthWrite = true;
-                        node.material.needsUpdate = true;
-                    }
-                });
-
-                const box = new THREE.Box3().setFromObject(modelPreview.model);
-                const size = new THREE.Vector3();
-                box.getSize(size);
-                modelPreview.maxSize = Math.max(size.x, size.y, size.z) || 1;
-
-                appState.modelBounds = {
-                    width: size.x,
-                    length: size.z,
-                    height: size.y
-                };
-
-                modelPreview.model.position.sub(box.getCenter(new THREE.Vector3()));
-                modelPreview.scene.add(modelPreview.model);
-                
-                animateModelPreview();
-            } catch (error) {
-                console.error("Error cargando modelo para vista previa:", error);
-                showMessage("Error al cargar el modelo 3D para vista previa.");
-            }
-        }
-
-        function animateModelPreview() {
-            modelPreview.animationFrameId = requestAnimationFrame(animateModelPreview);
-
-            if (modelPreview.model) {
-                const scale = (appState.mapScale * 0.5) / modelPreview.maxSize;
-                modelPreview.model.scale.set(scale, scale, scale);
-            }
-
-            if (modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
-                modelPreview.renderer.clearDepth();
-                modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
-            }
-        }
-
-        function jumpToCoords() {
-            const lat = parseFloat(document.getElementById('jumpto-lat').value);
-            const lon = parseFloat(document.getElementById('jumpto-lon').value);
-            if (isNaN(lat) || isNaN(lon) || !map) return;
-            map.setView([lat, lon], map.getZoom());
-        }
-
-        function onWindowResize() {
-            if (pages.map.classList.contains('active') && modelPreview.renderer) {
-                const container = document.getElementById('map-container');
-                if (!container) return;
-                const width = container.clientWidth;
-                const height = container.clientHeight;
-
-                modelPreview.camera.aspect = width / height;
-                modelPreview.camera.updateProjectionMatrix();
-                modelPreview.renderer.setSize(width, height);
-            }
-
-            if (pages.map.classList.contains('active') && map) {
-                setTimeout(() => {
-                    map.invalidateSize();
-                }, 100);
-            }
-        }
-
-        function loadScaleSettings() {
-            document.getElementById('real-width-input').value = appState.realDimensions.width;
-            document.getElementById('real-length-input').value = appState.realDimensions.length;
-            document.getElementById('real-height-input').value = appState.realDimensions.height;
-            document.getElementById('ground-height-input').value = appState.realDimensions.groundHeight;
-            
-            document.getElementById('initial-ar-scale-slider').value = appState.initialARScale;
-            document.getElementById('initial-scale-value').textContent = appState.initialARScale.toFixed(1) + 'x';
-            
-            document.getElementById('ar-distance-slider').value = appState.arDistance;
-            document.getElementById('distance-value').textContent = appState.arDistance.toFixed(0) + 'm';
-        }
-
-        function saveScaleSettings() {
-            appState.realDimensions.width = parseFloat(document.getElementById('real-width-input').value) || 10.0;
-            appState.realDimensions.length = parseFloat(document.getElementById('real-length-input').value) || 15.0;
-            appState.realDimensions.height = parseFloat(document.getElementById('real-height-input').value) || 3.0;
-            appState.realDimensions.groundHeight = parseFloat(document.getElementById('ground-height-input').value) || 0.0;
-            
-            appState.initialARScale = parseFloat(document.getElementById('initial-ar-scale-slider').value);
-            appState.arDistance = parseFloat(document.getElementById('ar-distance-slider').value);
-
-            showMessage('Configuración de escala guardada', 2000);
-        }
-
-        // --- Event Listeners ---
-        window.addEventListener('resize', onWindowResize, false);
-        document.getElementById('load-data-btn').addEventListener('click', saveDataToCache);
-        document.getElementById('clear-cache-btn').addEventListener('click', clearCacheAndReload);
-        document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
-        document.getElementById('use-location-btn').addEventListener('click', useCurrentLocation);
-        document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
-        document.getElementById('goto-scale-btn').addEventListener('click', () => navigateTo('scale'));
-        document.getElementById('back-to-map-from-scale-btn').addEventListener('click', () => navigateTo('map'));
-        document.getElementById('goto-ar-from-scale-btn').addEventListener('click', () => {
-            saveScaleSettings();
-            startARFlow();
-        });
-        document.getElementById('back-to-scale-btn').addEventListener('click', stopAR);
-        document.getElementById('map-scale-slider').addEventListener('input', (e) => {
-            appState.mapScale = parseFloat(e.target.value);
-        });
-        document.getElementById('map-zoom-slider').addEventListener('input', (e) => {
-            if (map) map.setZoom(parseFloat(e.target.value));
-        });
-        document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
-        
-        document.getElementById('apply-coords-btn').addEventListener('click', applyCoordsToAR);
-        
-        document.getElementById('initial-ar-scale-slider').addEventListener('input', (e) => {
-            const scaleValue = parseFloat(e.target.value);
-            document.getElementById('initial-scale-value').textContent = scaleValue.toFixed(1) + 'x';
-        });
-        
-        document.getElementById('ar-distance-slider').addEventListener('input', (e) => {
-            const distanceValue = parseFloat(e.target.value);
-            document.getElementById('distance-value').textContent = distanceValue.toFixed(0) + 'm';
-        });
-
-        document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
-            const scaleValue = parseFloat(e.target.value);
-            document.getElementById('current-scale').textContent = scaleValue.toFixed(1);
-            
-            if (arModel && arModel.object3D) {
-                const currentScale = arModel.getAttribute('scale');
-                const baseScale = currentScale.split(' ').map(parseFloat);
-                const dynamicScale = scaleValue / appState.initialARScale;
-                arModel.setAttribute('scale', `${baseScale[0] * dynamicScale} ${baseScale[1] * dynamicScale} ${baseScale[2] * dynamicScale}`);
-            }
-        });
-
-        document.getElementById('reset-position-btn').addEventListener('click', () => {
-            if (arCamera && arCamera.components['gps-camera']) {
-                arCamera.components['gps-camera'].resetPosition();
-                showMessage('Posición reiniciada', 2000);
-            }
-        });
-
-        const mapContainer = document.getElementById('map-container');
-        let longPressTimeout = null;
-
-        const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
-
-        mapContainer.addEventListener('contextmenu', e => e.preventDefault());
-        mapContainer.addEventListener('mousedown', (e) => {
-            if (e.button === 2) {
-                modelPreview.isRotating = true;
-                if (map) map.dragging.disable();
-                modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
-            }
-        });
-        window.addEventListener('mousemove', (e) => {
-            if (modelPreview.isRotating && e.buttons === 2 && modelPreview.model) {
-                const deltaX = e.clientX - modelPreview.previousMousePosition.x;
-                const deltaY = e.clientY - modelPreview.previousMousePosition.y;
-                modelPreview.model.rotation.y += deltaX * 0.01;
-                modelPreview.model.rotation.x += deltaY * 0.01;
-                modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
-            }
-        });
-        window.addEventListener('mouseup', (e) => {
-            if (e.button === 2 && modelPreview.isRotating) {
-                modelPreview.isRotating = false;
-                if (map) map.dragging.enable();
-            }
-        });
-
-        mapContainer.addEventListener('touchstart', (e) => {
-            clearTimeout(longPressTimeout);
-            if (e.touches.length === 1) {
-                modelPreview.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                longPressTimeout = setTimeout(() => {
-                    modelPreview.isRotating = true;
-                    if (map) map.dragging.disable();
-                    showMessage('Modo Inclinación Activado', 2000);
-                }, 1000);
-            } else if (e.touches.length === 2) {
-                modelPreview.isTwoFingerRotating = true;
-                if (map) map.dragging.disable();
-                modelPreview.previousTouchAngle = getAngle(e.touches[0], e.touches[1]);
-            }
-        }, { passive: false });
-
-        mapContainer.addEventListener('touchmove', (e) => {
-            if (modelPreview.isRotating && e.touches.length === 1) {
-                e.preventDefault();
-                const deltaX = e.touches[0].clientX - modelPreview.previousMousePosition.x;
-                const deltaY = e.touches[0].clientY - modelPreview.previousMousePosition.y;
-                if (modelPreview.model) {
-                    modelPreview.model.rotation.y += deltaX * 0.02;
-                    modelPreview.model.rotation.x += deltaY * 0.02;
-                }
-                modelPreview.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-            } else if (modelPreview.isTwoFingerRotating && e.touches.length === 2) {
-                e.preventDefault();
-                const currentAngle = getAngle(e.touches[0], e.touches[1]);
-                const deltaAngle = currentAngle - modelPreview.previousTouchAngle;
-                if (modelPreview.model) {
-                    modelPreview.model.rotation.z += deltaAngle;
-                }
-                modelPreview.previousTouchAngle = currentAngle;
-            }
-        });
-
-        mapContainer.addEventListener('touchend', (e) => {
-            clearTimeout(longPressTimeout);
-            if (modelPreview.isRotating || modelPreview.isTwoFingerRotating) {
-                modelPreview.isRotating = false;
-                modelPreview.isTwoFingerRotating = false;
-                if (map) map.dragging.enable();
-            }
-        });
-
-        document.addEventListener('DOMContentLoaded', () => {
-            window.addEventListener('model-error', (event) => {
-                console.error('Error al cargar el modelo:', event.detail);
-                showMessage('Error al cargar el modelo 3D. Verifica que el archivo sea válido.', 5000);
-            });
-        });
-
-        function initializeApp() {
-            document.getElementById('version-display').textContent = `v${APP_VERSION}`;
-            loadDataFromCache();
-        }
-
-        initializeApp();
-    </script>
-</body>
-</html>
-
+                    .setIcon(L.icon({iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', shadowUrl: 'https://cdnjs.cloudflare.com
