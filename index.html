@@ -44,7 +44,14 @@
         #map-crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 30px; height: 30px; border: 2px solid white; border-radius: 50%; box-shadow: 0 0 10px black; pointer-events: none; z-index: 402; }
         #coords-jumpto { position: fixed; top: 20px; left: 20px; z-index: 402; background-color: rgba(255, 255, 255, 0.8); padding: 10px; border-radius: 8px; display: flex; gap: 5px; align-items: center; }
         /* Estilos específicos para AR */
-        a-scene { background-color: transparent; }
+        a-scene { 
+            background-color: transparent; 
+            position: absolute; 
+            top: 0; 
+            left: 0; 
+            width: 100%; 
+            height: 100%; 
+        }
         .arjs-loader { 
             position: fixed; 
             top: 0; 
@@ -94,6 +101,50 @@
             border-radius: 5px;
             cursor: pointer;
             margin-top: 15px;
+        }
+        /* Estilos para la página de escala */
+        .scale-input-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+        .scale-input {
+            width: 100px;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .scale-label {
+            min-width: 120px;
+            text-align: right;
+        }
+        /* Controles AR mejorados */
+        .ar-info-panel {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            font-size: 14px;
+            z-index: 9998;
+            max-width: 200px;
+        }
+        .ar-scale-control {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            border-radius: 8px;
+            z-index: 9998;
+        }
+        .ar-scale-slider {
+            width: 150px;
+            margin-top: 5px;
         }
     </style>
 </head>
@@ -148,7 +199,7 @@
         </div>
         <div id="map-controls">
             <button id="back-to-setup-from-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
-            <button id="goto-ar-from-map-btn" class="control-button bg-green-500 hover:bg-green-600">Iniciar AR</button>
+            <button id="goto-scale-btn" class="control-button bg-purple-500 hover:bg-purple-600">Configurar Escala</button>
         </div>
         <div class="map-ui-container">
             <div class="slider-container">
@@ -162,7 +213,44 @@
         </div>
     </div>
 
-    <!-- PÁGINA 3: Vista de Realidad Aumentada -->
+    <!-- PÁGINA 3: Configuración de Escala -->
+    <div id="scale-page" class="page">
+        <div class="flex items-center justify-center h-full bg-gray-100">
+            <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg mx-4">
+                <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Configuración de Escala Real</h1>
+                <div class="space-y-4">
+                    <div class="scale-input-group">
+                        <label class="scale-label">Ancho real (m):</label>
+                        <input type="number" id="real-width-input" class="scale-input" placeholder="10.0" step="0.1" min="0.1">
+                    </div>
+                    <div class="scale-input-group">
+                        <label class="scale-label">Largo real (m):</label>
+                        <input type="number" id="real-length-input" class="scale-input" placeholder="15.0" step="0.1" min="0.1">
+                    </div>
+                    <div class="scale-input-group">
+                        <label class="scale-label">Alto real (m):</label>
+                        <input type="number" id="real-height-input" class="scale-input" placeholder="3.0" step="0.1" min="0.1">
+                    </div>
+                    <div class="scale-input-group">
+                        <label class="scale-label">Altura sobre terreno (m):</label>
+                        <input type="number" id="ground-height-input" class="scale-input" placeholder="0.0" step="0.1">
+                    </div>
+                    <div class="mt-6 p-4 bg-blue-50 rounded-lg">
+                        <p class="text-sm text-blue-800">
+                            <strong>Nota:</strong> Estas medidas definirán la escala real del modelo en la vista AR. 
+                            El modelo se ajustará automáticamente para que coincida con las dimensiones especificadas.
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
+                    <button id="back-to-map-from-scale-btn" class="control-button bg-gray-500 hover:bg-gray-600 w-full sm:w-auto">Volver al Mapa</button>
+                    <button id="goto-ar-from-scale-btn" class="control-button bg-green-500 hover:bg-green-600 w-full sm:w-auto">Iniciar AR</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PÁGINA 4: Vista de Realidad Aumentada -->
     <div id="ar-page" class="page">
         <!-- Loader de AR.js -->
         <div class="arjs-loader">
@@ -179,24 +267,44 @@
                        debugUIEnabled: false; 
                        detectionMode: mono_and_matrix; 
                        trackingMethod: best; 
-                       matrixCodeType: 3x3;"
+                       matrixCodeType: 3x3;
+                       cameraParametersUrl: 'https://raw.githack.com/AR-js-org/AR.js/master/data/data/camera_para.dat';
+                       maxDetectionRate: 30;
+                       canvasWidth: window.innerWidth;
+                       canvasHeight: window.innerHeight;"
                  vr-mode-ui="enabled: false"
                  renderer="logarithmicDepthBuffer: true; 
                           physicallyCorrectLights: true; 
                           antialias: true; 
-                          alpha: true;">
+                          alpha: true;
+                          precision: high;">
             
             <!-- Entidad de la cámara con GPS -->
-            <a-camera gps-camera="minDistance: 5; alert: true;" rotation-reader></a-camera>
+            <a-camera gps-camera="minDistance: 1; alert: true; simulateLatitude: 4.095; simulateLongitude: -76.195;" rotation-reader></a-camera>
             
             <!-- Luces mejoradas -->
-            <a-entity light="type: ambient; color: #BBB; intensity: 0.5"></a-entity>
+            <a-entity light="type: ambient; color: #BBB; intensity: 0.6"></a-entity>
             <a-entity light="type: directional; color: #FFF; intensity: 0.8" position="-0.5 1 1"></a-entity>
             <a-entity light="type: point; color: #FFF; intensity: 0.5" position="0 10 0"></a-entity>
         </a-scene>
         
+        <!-- Panel de información AR -->
+        <div class="ar-info-panel">
+            <div><strong>GPS:</strong> <span id="gps-status">Buscando...</span></div>
+            <div><strong>Precisión:</strong> <span id="gps-accuracy">--</span>m</div>
+            <div><strong>Escala:</strong> <span id="current-scale">1.0</span>x</div>
+        </div>
+        
+        <!-- Control de escala AR -->
+        <div class="ar-scale-control">
+            <label for="ar-scale-slider" class="text-sm">Escala del Modelo</label>
+            <input id="ar-scale-slider" type="range" min="0.1" max="5" step="0.1" value="1" class="ar-scale-slider">
+            <div class="text-xs mt-1">Pellizca para escalar</div>
+        </div>
+        
         <div id="ar-controls">
-             <button id="back-to-map-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver al Mapa</button>
+             <button id="back-to-scale-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
+             <button id="reset-position-btn" class="control-button bg-blue-500 hover:bg-blue-600">Resetear Posición</button>
         </div>
         <div id="message-box"></div>
     </div>
@@ -214,12 +322,12 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        // Componente para zoom en AR
+        // Componente para zoom en AR mejorado
         AFRAME.registerComponent('geo-ar-zoomer', {
             schema: { 
                 zoomSpeed: { default: 0.1 }, 
                 minScale: { default: 0.1 }, 
-                maxScale: { default: 10.0 }
+                maxScale: { default: 5.0 }
             },
             init: function () {
                 this.pinchStartDistance = 0;
@@ -239,6 +347,14 @@
                         let newScale = this.el.object3D.scale.x * scaleFactor;
                         newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
                         this.el.object3D.scale.set(newScale, newScale, newScale);
+                        
+                        // Actualizar el slider de escala
+                        const arScaleSlider = document.getElementById('ar-scale-slider');
+                        if (arScaleSlider) {
+                            arScaleSlider.value = newScale;
+                            document.getElementById('current-scale').textContent = newScale.toFixed(1);
+                        }
+                        
                         this.pinchStartDistance = currentDistance;
                     }
                 };
@@ -249,6 +365,13 @@
                     let newScale = this.el.object3D.scale.x + zoomFactor;
                     newScale = Math.max(this.data.minScale, Math.min(this.data.maxScale, newScale));
                     this.el.object3D.scale.set(newScale, newScale, newScale);
+                    
+                    // Actualizar el slider de escala
+                    const arScaleSlider = document.getElementById('ar-scale-slider');
+                    if (arScaleSlider) {
+                        arScaleSlider.value = newScale;
+                        document.getElementById('current-scale').textContent = newScale.toFixed(1);
+                    }
                 };
                 
                 const getDistance = (t1, t2) => Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
@@ -259,14 +382,21 @@
             }
         });
 
-        const APP_VERSION = '3.9';
-        const CACHE_NAME = 'geo-ar-cache-v19';
+        const APP_VERSION = '4.0';
+        const CACHE_NAME = 'geo-ar-cache-v20';
         let appState = { 
             modelURL: null, 
             coords: null, 
             normalizationFactor: 1, 
             mapScale: 50,
-            arModelScale: 1.0
+            arModelScale: 1.0,
+            realDimensions: {
+                width: 10.0,
+                length: 15.0,
+                height: 3.0,
+                groundHeight: 0.0
+            },
+            modelBounds: null
         };
         let map, modelPreview = { 
             renderer: null, 
@@ -283,7 +413,8 @@
         
         const pages = { 
             upload: document.getElementById('upload-page'), 
-            map: document.getElementById('map-page'), 
+            map: document.getElementById('map-page'),
+            scale: document.getElementById('scale-page'),
             ar: document.getElementById('ar-page') 
         };
         const messageBox = document.getElementById('message-box');
@@ -303,9 +434,10 @@
             
             if (pageName === 'map') {
                 setTimeout(initMapAndPreview, 100);
+            } else if (pageName === 'scale') {
+                loadScaleSettings();
             } else if (pageName === 'ar') {
                 // No iniciamos AR automáticamente, esperamos a que el usuario conceda permisos
-                // Esto evita que el loader se muestre antes de tiempo
             } else {
                 if (map) { 
                     map.remove(); 
@@ -395,13 +527,19 @@
                         showMessage('Error al solicitar permisos: ' + error.message, 5000);
                     }
                     
-                    navigateTo('map');
+                    navigateTo('scale');
                 }
             };
         }
 
         async function initializeAR() {
             const arScene = document.getElementById('ar-scene');
+            
+            // Forzar la inicialización de la escena
+            arScene.setAttribute('embedded', '');
+            arScene.play();
+            
+            arLoadingText.textContent = 'Iniciando cámara AR...';
             
             // Escuchar evento de carga de AR.js
             window.addEventListener('arjs-video-loaded', () => {
@@ -413,7 +551,12 @@
             window.addEventListener('gps-camera-update-position', (event) => {
                 console.log('GPS actualizado:', event.detail);
                 arLoader.style.display = 'none';
-                showMessage(`GPS activado. Precisión: ${event.detail.position.accuracy.toFixed(2)}m`, 3000);
+                
+                const pos = event.detail.position;
+                document.getElementById('gps-status').textContent = 'Activo';
+                document.getElementById('gps-accuracy').textContent = pos.accuracy.toFixed(1);
+                
+                showMessage(`GPS activado. Precisión: ${pos.accuracy.toFixed(2)}m. Cargando modelo...`, 3000);
                 
                 // Cargar el modelo 3D
                 loadARModel();
@@ -423,6 +566,7 @@
             window.addEventListener('gps-error', (event) => {
                 console.error('Error de GPS:', event.detail);
                 arLoader.style.display = 'none';
+                document.getElementById('gps-status').textContent = 'Error';
                 showMessage('Error de GPS: ' + event.detail.message, 5000);
             });
             
@@ -430,8 +574,9 @@
             setTimeout(() => {
                 if (arLoader.style.display !== 'none') {
                     arLoader.style.display = 'none';
+                    document.getElementById('gps-status').textContent = 'Timeout';
                     showMessage('Tiempo de espera agotado. Verifica tu conexión GPS.', 5000);
-                    navigateTo('map');
+                    navigateTo('scale');
                 }
             }, 30000);
         }
@@ -446,16 +591,36 @@
             }
             
             try {
-                // Calcular normalización si es necesario
+                // Calcular normalización y escala real
                 if(appState.normalizationFactor === 1) {
                     const loader = new GLTFLoader();
                     const gltf = await loader.loadAsync(appState.modelURL);
                     const box = new THREE.Box3().setFromObject(gltf.scene);
                     const size = new THREE.Vector3();
                     box.getSize(size);
+                    
+                    // Guardar las dimensiones del modelo original
+                    appState.modelBounds = {
+                        width: size.x,
+                        length: size.z,
+                        height: size.y
+                    };
+                    
+                    // Calcular factor de normalización
                     const maxSize = Math.max(size.x, size.y, size.z);
                     appState.normalizationFactor = maxSize > 0 ? 1.0 / maxSize : 1.0;
-                    appState.arModelScale = appState.normalizationFactor * 20; // Escala más grande para AR
+                    
+                    // Calcular escala para dimensiones reales
+                    const targetWidth = appState.realDimensions.width;
+                    const targetLength = appState.realDimensions.length;
+                    const targetHeight = appState.realDimensions.height;
+                    
+                    // Usar el promedio de las escalas calculadas
+                    const scaleX = targetWidth / size.x;
+                    const scaleY = targetHeight / size.y;
+                    const scaleZ = targetLength / size.z;
+                    
+                    appState.arModelScale = (scaleX + scaleY + scaleZ) / 3;
                 }
                 
                 // Crear entidad del modelo
@@ -466,6 +631,7 @@
                 modelEntity.setAttribute('gps-entity-place', `latitude: ${appState.coords.latitude}; longitude: ${appState.coords.longitude};`);
                 modelEntity.setAttribute('geo-ar-zoomer', '');
                 modelEntity.setAttribute('rotation', '0 0 0');
+                modelEntity.setAttribute('position', `0 ${appState.realDimensions.groundHeight} 0`);
                 
                 // Añadir a la escena
                 arScene.appendChild(modelEntity);
@@ -473,7 +639,10 @@
                 // Escuchar evento de carga del modelo
                 modelEntity.addEventListener('model-loaded', () => {
                     console.log('Modelo 3D cargado en AR');
-                    showMessage('Modelo 3D cargado. Pellizca para escalar.', 3000);
+                    showMessage('Modelo 3D cargado a escala real. Pellizca para ajustar tamaño.', 4000);
+                    
+                    // Actualizar información de escala
+                    document.getElementById('current-scale').textContent = appState.arModelScale.toFixed(1);
                 });
                 
                 // Escuchar errores de carga del modelo
@@ -486,6 +655,24 @@
                 console.error("Error al cargar modelo en AR:", error);
                 showMessage("Error al cargar el modelo 3D en AR.");
             }
+        }
+
+        function loadScaleSettings() {
+            // Cargar las configuraciones de escala guardadas
+            document.getElementById('real-width-input').value = appState.realDimensions.width;
+            document.getElementById('real-length-input').value = appState.realDimensions.length;
+            document.getElementById('real-height-input').value = appState.realDimensions.height;
+            document.getElementById('ground-height-input').value = appState.realDimensions.groundHeight;
+        }
+
+        function saveScaleSettings() {
+            // Guardar las configuraciones de escala
+            appState.realDimensions.width = parseFloat(document.getElementById('real-width-input').value) || 10.0;
+            appState.realDimensions.length = parseFloat(document.getElementById('real-length-input').value) || 15.0;
+            appState.realDimensions.height = parseFloat(document.getElementById('real-height-input').value) || 3.0;
+            appState.realDimensions.groundHeight = parseFloat(document.getElementById('ground-height-input').value) || 0.0;
+            
+            showMessage('Configuración de escala guardada', 2000);
         }
 
         async function clearCacheAndReload() {
@@ -618,7 +805,7 @@
             // Añadir marcador en la ubicación
             L.marker([appState.coords.latitude, appState.coords.longitude])
                 .addTo(map)
-                .bindPopup('Ubicación del modelo 3D')
+                .bindPopup(`Ubicación del modelo 3D<br>Ancho: ${appState.realDimensions.width}m<br>Largo: ${appState.realDimensions.length}m`)
                 .openPopup();
 
             map.on('moveend', () => {
@@ -722,7 +909,22 @@
                 }
              }
              
-             navigateTo('map');
+             navigateTo('scale');
+        }
+        
+        function resetARPosition() {
+            const model = document.querySelector('#arch-model');
+            if (model) {
+                model.setAttribute('scale', `${appState.arModelScale} ${appState.arModelScale} ${appState.arModelScale}`);
+                model.setAttribute('rotation', '0 0 0');
+                model.setAttribute('position', `0 ${appState.realDimensions.groundHeight} 0`);
+                
+                // Actualizar slider
+                document.getElementById('ar-scale-slider').value = appState.arModelScale;
+                document.getElementById('current-scale').textContent = appState.arModelScale.toFixed(1);
+                
+                showMessage('Posición del modelo reseteada', 2000);
+            }
         }
         
         function jumpToCoords() {
@@ -752,8 +954,14 @@
         document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
         document.getElementById('use-location-btn').addEventListener('click', useCurrentLocation);
         document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
-        document.getElementById('goto-ar-from-map-btn').addEventListener('click', requestPermissionsAndStartAR);
-        document.getElementById('back-to-map-btn').addEventListener('click', stopAR);
+        document.getElementById('goto-scale-btn').addEventListener('click', () => navigateTo('scale'));
+        document.getElementById('back-to-map-from-scale-btn').addEventListener('click', () => navigateTo('map'));
+        document.getElementById('goto-ar-from-scale-btn').addEventListener('click', () => {
+            saveScaleSettings();
+            requestPermissionsAndStartAR();
+        });
+        document.getElementById('back-to-scale-btn').addEventListener('click', stopAR);
+        document.getElementById('reset-position-btn').addEventListener('click', resetARPosition);
         document.getElementById('map-scale-slider').addEventListener('input', (e) => { 
             appState.mapScale = parseFloat(e.target.value); 
         });
@@ -761,6 +969,16 @@
             if(map) map.setZoom(parseFloat(e.target.value)); 
         });
         document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
+        
+        // Event listener para el slider de escala AR
+        document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
+            const scale = parseFloat(e.target.value);
+            const model = document.querySelector('#arch-model');
+            if (model) {
+                model.setAttribute('scale', `${scale} ${scale} ${scale}`);
+                document.getElementById('current-scale').textContent = scale.toFixed(1);
+            }
+        });
 
         const mapContainer = document.getElementById('map-container');
         let longPressTimeout = null;
@@ -848,3 +1066,4 @@
     </script>
 </body>
 </html>
+
