@@ -158,14 +158,6 @@
         a-scene {
             position: absolute !important; top: 0 !important; left: 0 !important;
             width: 100% !important; height: 100% !important; z-index: 1 !important;
-            /* 
-             * =================================================================================
-             * CORRECCIÓN: Forzar transparencia total en la escena A-Frame
-             * =================================================================================
-             * Esto asegura que no haya un color de fondo sólido que tape el video de la cámara.
-             * El canvas de A-Frame debe ser completamente transparente.
-             * =================================================================================
-             */
             background: none !important;
         }
         .arjs-loader {
@@ -477,7 +469,7 @@
         <div id="ar-scene-container"></div>
         <div class="ar-info-panel">
             <div><strong>GPS:</strong> <span id="gps-status">Buscando...</span></div>
-            <div><strong>Precisión:</strong> <span id="gps-accuracy">--</span>m</div>
+            <div><strong>Precisión:</strong> <span id="gps-accuracy" style="font-weight: bold;">--</span>m</div>
             <div><strong>Escala:</strong> <span id="current-scale">1.0</span>x</div>
         </div>
         <div class="ar-scale-control">
@@ -516,14 +508,14 @@
          * es OBLIGATORIO incrementar el número de versión en la constante 'APP_VERSION'
          * que se encuentra más abajo.
          *
-         * Ejemplo: Si la versión actual es '4.8', la siguiente versión debe ser '4.9'.
+         * Ejemplo: Si la versión actual es '4.9', la siguiente versión debe ser '5.0'.
          *
          * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '4.9';
-        const CACHE_NAME = 'geo-ar-cache-v29';
+        const APP_VERSION = '5.0';
+        const CACHE_NAME = 'geo-ar-cache-v30';
         let appState = {
             modelURL: null,
             coords: null,
@@ -675,7 +667,7 @@
                         navigator.geolocation.getCurrentPosition(resolve, reject, { 
                             enableHighAccuracy: true,
                             timeout: 10000,
-                            maximumAge: 60000
+                            maximumAge: 0 // Forzar datos frescos para la prueba inicial
                         });
                     });
                     showDebugInfo('Permiso de GPS concedido');
@@ -800,6 +792,16 @@
                 navigator.geolocation.clearWatch(gpsWatchId);
             }
             
+            /*
+             * =================================================================================
+             * MEJORA: Optimización de la precisión del GPS
+             * =================================================================================
+             * Usamos 'watchPosition' con la configuración más precisa posible.
+             * NOTA: La precisión del GPS de un móvil está limitada por el hardware.
+             * Un margen de 3-5 metros es considerado excelente y estándar.
+             * No es posible alcanzar una precisión de centímetros sin hardware especializado.
+             * =================================================================================
+             */
             gpsWatchId = navigator.geolocation.watchPosition(
                 (position) => {
                     console.log('Posición GPS actualizada:', position);
@@ -837,7 +839,7 @@
                 { 
                     enableHighAccuracy: true, 
                     timeout: 10000, 
-                    maximumAge: 60000 
+                    maximumAge: 0 // CHANGED: No usar datos en caché para máxima precisión
                 }
             );
         }
@@ -850,11 +852,21 @@
             document.getElementById('gps-status').textContent = 'Activo';
             document.getElementById('gps-accuracy').textContent = pos.accuracy.toFixed(1);
             
+            // Indicador visual de precisión
+            const accuracyElement = document.getElementById('gps-accuracy');
+            if (pos.accuracy < 5) {
+                accuracyElement.style.color = '#4CAF50'; // Verde: Buena
+            } else if (pos.accuracy < 10) {
+                accuracyElement.style.color = '#FFC107'; // Amarillo: Regular
+            } else {
+                accuracyElement.style.color = '#F44336'; // Rojo: Mala
+            }
+            
             if (arLoadingScreen.classList.contains('active')) {
                 arLoadingScreen.classList.remove('active');
             }
             
-            showMessage(`GPS activado. Precisión: ${pos.accuracy.toFixed(2)}m.`, 3000);
+            showMessage(`GPS activado. Precisión: ${pos.accuracy.toFixed(2)}m. Para mejor precisión, asegúrate de tener vista clara del cielo.`, 4000);
             
             if (modelLoaded) {
                 adjustModelScale();
@@ -873,6 +885,29 @@
             showDebugInfo('Modelo 3D cargado');
             modelLoaded = true;
             
+            /*
+             * =================================================================================
+             * CORRECCIÓN CLAVE: Forzar transparencia en el modelo 3D
+             * =================================================================================
+             * El problema del fondo blanco está en los materiales del modelo.
+             * Recorremos todos los meshes del modelo y ajustamos sus materiales para que
+             * usen 'alphaTest', que descarta los píxeles con transparencia baja,
+             * eliminando eficazmente el fondo blanco y dejando solo el objeto visible.
+             * =================================================================================
+             */
+            if (arModel && arModel.object3D) {
+                arModel.object3D.traverse((node) => {
+                    if (node.isMesh && node.material) {
+                        // Habilitar la transparencia en el material
+                        node.material.transparent = true;
+                        // Usar alphaTest para recortar los píxeles casi transparentes (fondo blanco)
+                        node.material.alphaTest = 0.1; // Un valor bajo para ser agresivo
+                        // Forzar la actualización del material
+                        node.material.needsUpdate = true;
+                    }
+                });
+            }
+
             if (gpsInitialized) {
                 adjustModelScale();
             }
@@ -1055,7 +1090,7 @@
                     console.error('Error al obtener ubicación:', error);
                     showMessage("No se pudo obtener la ubicación. Revisa los permisos.");
                 },
-                { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
             );
         }
 
@@ -1103,7 +1138,6 @@
 
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
-            // Marcar la ubicación inicial y hacerla arrastrable
             const initialMarker = L.marker([appState.coords.latitude, appState.coords.longitude], {
                 draggable: true,
                 autoPan: true
@@ -1111,7 +1145,6 @@
             .bindPopup('Ubicación Inicial (Arrástrame)')
             .openPopup();
 
-            // Evento para cuando se suelta el marcador
             initialMarker.on('dragend', function(event) {
                 const newPosition = event.target.getLatLng();
                 appState.coords = { latitude: newPosition.lat, longitude: newPosition.lng };
@@ -1121,7 +1154,6 @@
                 showMessage('Ubicación inicial actualizada.', 3000);
             });
                 
-            // Marcar la ubicación objetivo para AR si existe
             if (appState.arTargetCoords) {
                 L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
                     .addTo(map)
