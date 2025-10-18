@@ -869,20 +869,23 @@
 
         /*
          * =================================================================================
-         * REGLA DE VERSIÓN - NO BORRAR
+         * SISTEMA DE VERSIONES - REGLA OBLIGATORIA
          * =================================================================================
-         * Cada vez que se realice CUALQUIER cambio, corrección o mejora en este código,
-         * es OBLIGATORIO incrementar el número de versión en la constante 'APP_VERSION'
-         * que se encuentra más abajo.
+         * La versión inicial de este código es 0.01.
          *
-         * Ejemplo: Si la versión actual es '5.1', la siguiente versión debe ser '5.2'.
+         * REGLA: Cada vez que se realice CUALQUIER cambio, corrección o mejora en este código,
+         * es OBLIGATORIO incrementar el número de versión en 0.01.
+         *
+         * Ejemplo: Si la versión actual es '0.01', la siguiente versión debe ser '0.02'.
+         * Si la versión es '0.99', la siguiente debe ser '1.00'.
          *
          * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
+         * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
          * =================================================================================
          */
-        const APP_VERSION = '6.0'; // Incrementado por correcciones críticas de cámara
-        const CACHE_NAME = 'geo-ar-cache-v40';
+        const APP_VERSION = '0.01'; // VERSIÓN INICIAL
+        const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
             coords: null,
@@ -890,7 +893,7 @@
             currentGPSLocation: null,
             realDimensions: { width: 10.0, length: 15.0, height: 3.0, groundHeight: 0.0 },
             initialARScale: 1.0,
-            arDistance: 20.0, // Nueva propiedad para la distancia de visualización
+            arDistance: 20.0,
             modelBounds: null,
             mapScale: 50,
             explorationMode: false,
@@ -1122,15 +1125,6 @@
             modelLocationIndicator.style.display = 'flex';
             distancePanel.style.display = 'flex';
             
-            /*
-             * =================================================================================
-             * CORRECCIÓN CRÍTICA: Configuración de AR.js basada en la aplicación con marcadores
-             * =================================================================================
-             * Se ha modificado la configuración de AR.js para asegurar que el video de la cámara
-             * se muestre correctamente, eliminando parámetros conflictivos y ajustando
-             * la configuración para que sea compatible con la visualización del video.
-             * =================================================================================
-             */
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
@@ -1182,20 +1176,10 @@
                     showDebugInfo('Renderer configurado para transparencia');
                 }
                 
-                /*
-                 * =================================================================================
-                 * CORRECCIÓN CRÍTICA: Forzar visualización del video basada en la aplicación con marcadores
-                 * =================================================================================
-                 * Basado en el análisis de la aplicación con marcadores que funciona correctamente,
-                 * implementamos una solución para asegurar que el video de la cámara sea visible.
-                 * =================================================================================
-                 */
                 setTimeout(() => {
-                    // Forzar que todos los videos sean visibles con la configuración correcta
                     const videos = document.querySelectorAll('video');
                     if (videos.length > 0) {
                         videos.forEach(video => {
-                            // Configuración basada en la aplicación con marcadores
                             video.style.position = 'fixed';
                             video.style.top = '50%';
                             video.style.left = '50%';
@@ -1210,19 +1194,16 @@
                             video.style.opacity = '1';
                             video.style.visibility = 'visible';
                             
-                            // Atributos críticos para iOS y móviles
                             video.setAttribute('autoplay', 'true');
                             video.setAttribute('playsinline', 'true');
                             video.setAttribute('webkit-playsinline', 'true');
                             video.setAttribute('muted', 'true');
                             
-                            // Forzar reproducción del video
                             forceVideoPlay(video);
                         });
                         showDebugInfo('Video de cámara configurado correctamente');
                     }
                     
-                    // Asegurar que el canvas esté sobre el video
                     const canvases = document.querySelectorAll('canvas');
                     if (canvases.length > 0) {
                         canvases.forEach(canvas => {
@@ -1239,7 +1220,6 @@
                         showDebugInfo('Canvas configurado correctamente');
                     }
                     
-                    // Forzar que el contenedor de la escena AR sea visible
                     const arSceneContainer = document.getElementById('ar-scene-container');
                     if (arSceneContainer) {
                         arSceneContainer.style.position = 'fixed';
@@ -1253,7 +1233,6 @@
                         arSceneContainer.style.background = 'transparent';
                     }
                     
-                    // Mostrar botón de inicio para iOS si es necesario
                     if (appState.isIOS && !appState.videoStarted) {
                         iosStartButton.classList.add('show');
                         showDebugInfo('Mostrando botón de inicio para iOS');
@@ -1289,7 +1268,6 @@
         function forceVideoPlay(video) {
             if (!video) return;
             
-            // Intentar reproducir el video directamente
             const playPromise = video.play();
             
             if (playPromise !== undefined) {
@@ -1298,7 +1276,6 @@
                     appState.videoStarted = true;
                     showDebugInfo('Video iniciado correctamente');
                     
-                    // Ocultar botón de iOS si está visible
                     if (appState.isIOS && iosStartButton.classList.contains('show')) {
                         iosStartButton.classList.remove('show');
                     }
@@ -1306,14 +1283,12 @@
                     console.error('Error al reproducir video:', error);
                     showDebugInfo(`Error al reproducir video: ${error.message}`);
                     
-                    // Si el video no puede reproducirse automáticamente, mostrar botón de inicio
                     if (appState.isIOS && !iosStartButton.classList.contains('show')) {
                         iosStartButton.classList.add('show');
                         showDebugInfo('Mostrando botón de inicio para iOS (requiere interacción del usuario)');
                     }
                 });
             } else {
-                // Para navegadores más antiguos que no devuelven una promesa
                 appState.videoStarted = true;
                 showDebugInfo('Video iniciado (método legacy)');
             }
@@ -1327,16 +1302,13 @@
                 });
             }
             
-            // Ocultar botón de inicio
             iosStartButton.classList.remove('show');
             
             showMessage('Cámara AR iniciada', 2000);
         }
 
-        // Event listener para el botón de inicio de iOS
         iosStartButton.addEventListener('click', startVideoWithUserInteraction);
         
-        // Event listener global para interacción del usuario
         document.addEventListener('touchstart', function() {
             if (!appState.videoStarted && pages.ar.classList.contains('active')) {
                 startVideoWithUserInteraction();
@@ -1349,27 +1321,15 @@
             }
         }, { once: true });
 
-        /*
-         * =================================================================================
-         * FUNCIÓN NUEVA: Actualizar Indicadores de Ubicación en Tiempo Real
-         * =================================================================================
-         * Esta función se encarga de actualizar la interfaz de usuario con la ubicación
-         * actual del usuario y la ubicación del modelo, además de la distancia entre ellos.
-         * Se llama cada vez que el GPS del dispositivo se actualiza.
-         * =================================================================================
-         */
         function updateLocationIndicators() {
             if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
             
-            // Actualizar indicador de ubicación actual
             const currentLocText = `TÚ: ${appState.currentGPSLocation.latitude.toFixed(6)}, ${appState.currentGPSLocation.longitude.toFixed(6)}`;
             currentLocationIndicator.querySelector('span').textContent = currentLocText;
             
-            // Actualizar indicador de ubicación del modelo
             const modelLocText = `MODELO: ${appState.arTargetCoords.latitude.toFixed(6)}, ${appState.arTargetCoords.longitude.toFixed(6)}`;
             modelLocationIndicator.querySelector('span').textContent = modelLocText;
             
-            // Calcular y mostrar distancia
             const distance = calculateDistance(
                 appState.currentGPSLocation.latitude,
                 appState.currentGPSLocation.longitude,
@@ -1405,7 +1365,6 @@
                     document.getElementById('gps-status').textContent = 'Activo';
                     document.getElementById('gps-accuracy').textContent = position.coords.accuracy.toFixed(1);
                     
-                    // LLAMADA A LA NUEVA FUNCIÓN PARA ACTUALIZAR LA UI
                     updateLocationIndicators();
                     
                     gpsInitialized = true;
@@ -1592,29 +1551,22 @@
         function setupModelInteraction() {
             if (!arModel || !arModel.object3D) return;
             
-            // Habilitar la interacción con el modelo
             arModel.setAttribute('class', 'intersectable');
             
-            // Configurar eventos de interacción
             arScene.addEventListener('click', (event) => {
                 if (!appState.explorationMode) return;
                 
-                // Obtener la posición del clic
                 mouse.x = (event.detail.clientX / window.innerWidth) * 2 - 1;
                 mouse.y = -(event.detail.clientY / window.innerHeight) * 2 + 1;
                 
-                // Actualizar el raycaster
                 raycaster.setFromCamera(mouse, arCamera.components.camera.camera);
                 
-                // Comprobar intersecciones con el modelo
                 const intersects = raycaster.intersectObject(arModel.object3D, true);
                 
                 if (intersects.length > 0) {
-                    // Si hay intersección, mostrar información del punto de intersección
                     const intersection = intersects[0];
                     showDebugInfo(`Intersección en: ${intersection.point.x.toFixed(2)}, ${intersection.point.y.toFixed(2)}, ${intersection.point.z.toFixed(2)}`);
                     
-                    // Cambiar el color del material para indicar la intersección
                     if (intersection.object.material) {
                         intersection.object.material.color.set(0xff0000);
                         setTimeout(() => {
@@ -1658,7 +1610,6 @@
                 
                 document.getElementById('current-scale').textContent = appState.initialARScale.toFixed(1);
                 
-                // Actualizar la posición del modelo después de escalarlo
                 updateModelPosition();
             }, undefined, (error) => {
                 console.error('Error al cargar el modelo para ajustar escala:', error);
@@ -1680,7 +1631,6 @@
                 arModel = null;
             }
             
-            // Ocultar indicadores de ubicación
             currentLocationIndicator.style.display = 'none';
             modelLocationIndicator.style.display = 'none';
             connectionLine.style.display = 'none';
@@ -1727,7 +1677,7 @@
                 document.getElementById('upload-section').classList.add('hidden');
                 document.getElementById('load-data-btn').classList.add('hidden');
                 document.getElementById('status-section').classList.remove('hidden');
-                document.getElementById('goto-map-btn').disabled = false;
+                document.getElementById('goto-map-btn').disabled = false; // <-- CORRECCIÓN AQUÍ
                 showMessage('Datos cargados desde el caché.');
                 return true;
             } catch (error) {
@@ -1741,8 +1691,17 @@
             const lat = parseFloat(document.getElementById('latitude-input').value);
             const lon = parseFloat(document.getElementById('longitude-input').value);
 
-            if (!modelFile || isNaN(lat) || isNaN(lon)) {
-                showMessage('Por favor, modelo y coordenadas son requeridos.');
+            // **CORRECCIÓN: Validación más robusta y mensajes de error claros**
+            if (!modelFile) {
+                showMessage('Error: Debes seleccionar un archivo de modelo 3D (.glb).', 5000);
+                return;
+            }
+            if (!modelFile.name.toLowerCase().endsWith('.glb')) {
+                showMessage('Error: El formato del archivo debe ser .glb', 5000);
+                return;
+            }
+            if (isNaN(lat) || isNaN(lon)) {
+                showMessage('Error: Debes introducir valores válidos para latitud y longitud.', 5000);
                 return;
             }
 
@@ -1755,10 +1714,14 @@
                     cache.put('cached-model.glb', new Response(modelFile)),
                     cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(appState.coords)], {type : 'application/json'})))
                 ]);
-                await loadDataFromCache();
+                
+                // Llama a loadDataFromCache para actualizar la UI y habilitar el botón
+                await loadDataFromCache(); 
+                showMessage('¡Datos guardados y cargados exitosamente!', 3000);
+
             } catch (error) {
                 console.error('Error al guardar en caché:', error);
-                showMessage('Error al guardar datos. Inténtalo de nuevo.');
+                showMessage('Error al guardar datos. Inténtalo de nuevo.', 5000);
             }
         }
 
@@ -1856,7 +1819,6 @@
 
             L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
 
-            // Marcador de ubicación inicial (azul)
             const initialMarker = L.marker([appState.coords.latitude, appState.coords.longitude], {
                 draggable: true,
                 autoPan: true
@@ -1873,7 +1835,6 @@
                 showMessage('Ubicación inicial actualizada.', 3000);
             });
             
-            // Marcador de ubicación del modelo (naranja)
             if (appState.arTargetCoords) {
                 modelLocationMarker = L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
                     .addTo(map)
@@ -1888,7 +1849,6 @@
                     }));
             }
             
-            // Marcador de ubicación actual GPS (verde)
             if (appState.currentGPSLocation) {
                 if (currentLocationMarker) {
                     map.removeLayer(currentLocationMarker);
@@ -2091,8 +2051,8 @@
             document.getElementById('distance-value').textContent = distanceValue.toFixed(0) + 'm';
         });
 
-        document.getElementById('ar-scale-slider').addEventListener('input',) => {
-            const scaleValue = (e parseFloat(e.target.value);
+        document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
+            const scaleValue = parseFloat(e.target.value);
             document.getElementById('current-scale').textContent = scaleValue.toFixed(1);
             
             if (arModel && arModel.object3D) {
@@ -2110,7 +2070,6 @@
             }
         });
         
-        // Event listener para el modo de exploración
         toggleExplorationBtn.addEventListener('click', () => {
             appState.explorationMode = !appState.explorationMode;
             
@@ -2119,7 +2078,6 @@
                 toggleExplorationBtn.textContent = 'Desactivar Exploración';
                 showMessage('Modo de exploración activado. Ahora puedes interactuar con el modelo.', 3000);
                 
-                // Hacer el modelo más grande para facilitar la interacción
                 if (arModel && arModel.object3D) {
                     const currentScale = arModel.getAttribute('scale');
                     const scaleValues = currentScale.split(' ').map(parseFloat);
@@ -2130,7 +2088,6 @@
                 toggleExplorationBtn.textContent = 'Activar Exploración';
                 showMessage('Modo de exploración desactivado.', 3000);
                 
-                // Restaurar la escala original del modelo
                 if (arModel && arModel.object3D) {
                     const currentScale = arModel.getAttribute('scale');
                     const scaleValues = currentScale.split(' ').map(parseFloat);
@@ -2224,17 +2181,25 @@
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
             
-            // Detectar si es iOS
             appState.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (appState.isIOS) {
                 showDebugInfo('Dispositivo iOS detectado');
             }
             
-            loadDataFromCache();
+            // **CORRECCIÓN: Comprobar la caché al inicio y habilitar el botón si es necesario**
+            loadDataFromCache().then(successfullyLoaded => {
+                if (successfullyLoaded) {
+                    // loadDataFromCache ya se encargó de habilitar el botón
+                    console.log("Aplicación iniciada con datos desde la caché.");
+                } else {
+                    // Asegurarse de que el botón esté deshabilitado si no hay datos
+                    document.getElementById('goto-map-btn').disabled = true;
+                    console.log("Aplicación iniciada sin datos en caché.");
+                }
+            });
         }
 
         initializeApp();
     </script>
 </body>
 </html>
-
