@@ -351,7 +351,21 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        const APP_VERSION = '4.5';
+        /*
+         * =================================================================================
+         * REGLA DE VERSIÓN - NO BORRAR
+         * =================================================================================
+         * Cada vez que se realice CUALQUIER cambio, corrección o mejora en este código,
+         * es OBLIGATORIO incrementar el número de versión en la constante 'APP_VERSION'
+         * que se encuentra más abajo.
+         *
+         * Ejemplo: Si la versión actual es '4.6', la siguiente versión debe ser '4.7'.
+         *
+         * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
+         * que los usuarios siempre tengan la versión más actualizada y sin errores.
+         * =================================================================================
+         */
+        const APP_VERSION = '4.6';
         const CACHE_NAME = 'geo-ar-cache-v26';
         let appState = {
             modelURL: null,
