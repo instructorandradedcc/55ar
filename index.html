@@ -324,6 +324,42 @@
             background: transparent !important;
             background-color: rgba(0, 0, 0, 0) !important;
         }
+        
+        /*
+         * =================================================================================
+         * CORRECCIÓN: Asegurar que el video de la cámara esté siempre visible
+         * =================================================================================
+         * Estilos adicionales para asegurar que el video de la cámara se muestre
+         * correctamente como fondo de la escena AR.
+         * =================================================================================
+         */
+        #ar-scene-container {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important;
+        }
+        
+        #ar-scene-container video, 
+        #ar-scene-container canvas {
+            position: absolute !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            object-fit: cover !important;
+        }
+        
+        #ar-scene-container canvas {
+            z-index: 2 !important;
+        }
+        
+        #ar-scene-container video {
+            z-index: 1 !important;
+            transform: scale(-1, 1) !important;
+        }
     </style>
 </head>
 <body>
@@ -420,9 +456,15 @@
                         <input type="range" id="initial-ar-scale-slider" min="0.1" max="5" step="0.1" value="1" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
                         <span id="initial-scale-value" class="text-sm text-gray-600">1.0x</span>
                     </div>
+                    <!-- Nuevo control para la distancia de visualización -->
+                    <div class="scale-input-group">
+                        <label class="scale-label">Distancia de Visualización (m):</label>
+                        <input type="range" id="ar-distance-slider" min="5" max="100" step="5" value="20" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                        <span id="distance-value" class="text-sm text-gray-600">20m</span>
+                    </div>
                     <div class="mt-6 p-4 bg-blue-50 rounded-lg">
                         <p class="text-sm text-blue-800">
-                            <strong>Nota:</strong> "Escala Visual Inicial" ajusta el tamaño base del modelo en AR. Las dimensiones reales definen la escala física.
+                            <strong>Nota:</strong> "Distancia de Visualización" ajusta a qué distancia aparecerá el modelo 3D en la vista AR.
                         </p>
                     </div>
                 </div>
@@ -484,6 +526,7 @@
             <div><strong>GPS:</strong> <span id="gps-status">Buscando...</span></div>
             <div><strong>Precisión:</strong> <span id="gps-accuracy" style="font-weight: bold;">--</span>m</div>
             <div><strong>Escala:</strong> <span id="current-scale">1.0</span>x</div>
+            <div><strong>Distancia:</strong> <span id="current-distance">20</span>m</div>
         </div>
         <div class="ar-scale-control">
             <label for="ar-scale-slider" class="text-sm">Escala</label>
@@ -521,20 +564,21 @@
          * es OBLIGATORIO incrementar el número de versión en la constante 'APP_VERSION'
          * que se encuentra más abajo.
          *
-         * Ejemplo: Si la versión actual es '5.0', la siguiente versión debe ser '5.1'.
+         * Ejemplo: Si la versión actual es '5.1', la siguiente versión debe ser '5.2'.
          *
          * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '5.1';
-        const CACHE_NAME = 'geo-ar-cache-v31';
+        const APP_VERSION = '5.2';
+        const CACHE_NAME = 'geo-ar-cache-v32';
         let appState = {
             modelURL: null,
             coords: null,
             arTargetCoords: null,
             realDimensions: { width: 10.0, length: 15.0, height: 3.0, groundHeight: 0.0 },
             initialARScale: 1.0,
+            arDistance: 20.0, // Nueva propiedad para la distancia de visualización
             modelBounds: null,
             mapScale: 50
         };
@@ -1313,6 +1357,9 @@
             
             document.getElementById('initial-ar-scale-slider').value = appState.initialARScale;
             document.getElementById('initial-scale-value').textContent = appState.initialARScale.toFixed(1) + 'x';
+            
+            document.getElementById('ar-distance-slider').value = appState.arDistance;
+            document.getElementById('distance-value').textContent = appState.arDistance.toFixed(0) + 'm';
         }
 
         function saveScaleSettings() {
@@ -1322,6 +1369,7 @@
             appState.realDimensions.groundHeight = parseFloat(document.getElementById('ground-height-input').value) || 0.0;
             
             appState.initialARScale = parseFloat(document.getElementById('initial-ar-scale-slider').value);
+            appState.arDistance = parseFloat(document.getElementById('ar-distance-slider').value);
 
             showMessage('Configuración de escala guardada', 2000);
         }
@@ -1353,6 +1401,11 @@
         document.getElementById('initial-ar-scale-slider').addEventListener('input', (e) => {
             const scaleValue = parseFloat(e.target.value);
             document.getElementById('initial-scale-value').textContent = scaleValue.toFixed(1) + 'x';
+        });
+        
+        document.getElementById('ar-distance-slider').addEventListener('input', (e) => {
+            const distanceValue = parseFloat(e.target.value);
+            document.getElementById('distance-value').textContent = distanceValue.toFixed(0) + 'm';
         });
 
         document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
