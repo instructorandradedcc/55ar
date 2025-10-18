@@ -294,18 +294,20 @@
          * =================================================================================
          * CORRECCIÓN CRÍTICA: Estrategia de capas para video y canvas
          * =================================================================================
-         * Usamos z-index: 0 para el video y z-index: 1 para el canvas para una
-         * compatibilidad máxima. El video debe cubrir toda la pantalla.
+         * Problema principal: El video no se muestra porque el canvas lo cubre o no se inicializa correctamente
+         * Solución: Asegurar que el video esté en la capa inferior y el canvas en la superior con transparencia
          * =================================================================================
          */
+        
+        /* Video de cámara - capa de fondo */
         video {
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
-            width: 100vw !important; /* Usar vw/vh para mayor robustez */
+            width: 100vw !important;
             height: 100vh !important;
             object-fit: cover !important;
-            z-index: 0 !important; /* Capa de fondo */
+            z-index: 0 !important; /* Capa de fondo - MÁS IMPORTANTE */
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -314,8 +316,11 @@
             playsinline: true !important;
             webkit-playsinline: true !important;
             muted: true !important;
+            /* Prevenir que sea cubierto */
+            pointer-events: none !important;
         }
         
+        /* Clase específica de AR.js para el video */
         .arjs-video {
             position: fixed !important;
             top: 0 !important;
@@ -323,7 +328,7 @@
             width: 100vw !important;
             height: 100vh !important;
             object-fit: cover !important;
-            z-index: 0 !important;
+            z-index: 0 !important; /* Mantener en capa de fondo */
             display: block !important;
             opacity: 1 !important;
             visibility: visible !important;
@@ -331,20 +336,25 @@
             playsinline: true !important;
             webkit-playsinline: true !important;
             muted: true !important;
+            pointer-events: none !important;
         }
         
+        /* Canvas de A-Frame - capa de contenido AR */
         .a-canvas {
-            z-index: 1 !important; /* Capa de contenido AR */
+            z-index: 1 !important; /* Capa de contenido AR - ENCIMA del video */
             position: fixed !important;
             top: 0 !important;
             left: 0 !important;
             width: 100% !important;
             height: 100% !important;
+            /* Asegurar transparencia completa */
+            background: transparent !important;
+            background-color: transparent !important;
         }
         
         /*
          * =================================================================================
-         * CORRECCIÓN CRÍTICA: Forzar transparencia completa en el canvas de A-Frame
+         * CORRECCIÓN CRÍTICA: Forzar transparencia completa en todos los elementos
          * =================================================================================
          */
         #ar-scene {
@@ -360,6 +370,17 @@
         canvas {
             background: transparent !important;
             background-color: rgba(0, 0, 0, 0) !important;
+        }
+        
+        /* Contenedor de la escena AR */
+        #ar-scene-container {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            z-index: 1 !important;
+            background: transparent !important;
         }
         
         /* Estilos para los inputs de escala */
@@ -836,7 +857,7 @@
          * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
          * =================================================================================
          */
-        const APP_VERSION = '0.03'; // INCREMENTADO POR CORRECCIONES DE RENDERIZADO Y ORIENTACIÓN
+        const APP_VERSION = '0.04'; // INCREMENTADO POR CORRECCIÓN CRÍTICA DE VIDEO/CÁMARA
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
@@ -1082,6 +1103,17 @@
             }
         };
 
+        /*
+         * =================================================================================
+         * CORRECCIÓN CRÍTICA: Mejora en la inicialización de la escena AR
+         * =================================================================================
+         * Problema principal: El video no se muestra porque el canvas lo cubre o no se inicializa correctamente
+         * Solución: 
+         * 1. Configurar correctamente el renderer para transparencia
+         * 2. Asegurar que el video se muestre detrás del canvas
+         * 3. Mejorar la secuencia de inicialización
+         * =================================================================================
+         */
         function initializeARScene() {
             const arSceneContainer = document.getElementById('ar-scene-container');
             arSceneContainer.innerHTML = '';
@@ -1096,22 +1128,31 @@
             modelLocationIndicator.style.display = 'flex';
             distancePanel.style.display = 'flex';
             
+            /*
+             * =================================================================================
+             * CORRECCIÓN CRÍTICA: Configuración mejorada de la escena AR
+             * =================================================================================
+             * 1. Añadir configuración explícita para el renderer
+             * 2. Asegurar transparencia completa
+             * 3. Configurar correctamente el video de fondo
+             * =================================================================================
+             */
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
                     embedded
                     vr-mode-ui="enabled: false"
-                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true;"
+                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true; preserveDrawingBuffer: true;"
                     background="color: transparent"
                     style="background: transparent;"
-                    arjs="sourceType: webcam; debugUIEnabled: false;">
+                    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
                     
                     <a-camera 
                         id="ar-camera"
                         gps-camera="minDistance: 1; alert: true;" 
                         rotation-reader 
                         gps-new-position
-                        camera="active: true">
+                        camera="active: true; fov: 80; near: 0.1; far: 10000;">
                     </a-camera>
 
                     <a-entity
@@ -1137,28 +1178,43 @@
                 console.log('Escena AR cargada correctamente');
                 showDebugInfo('Escena AR cargada');
                 
+                /*
+                 * =================================================================================
+                 * CORRECCIÓN CRÍTICA: Configuración del renderer para transparencia
+                 * =================================================================================
+                 * Este es el punto clave donde aseguramos que el canvas sea transparente
+                 * y el video de la cámara sea visible
+                 * =================================================================================
+                 */
                 if (arScene.renderer) {
-                    arScene.renderer.setClearColor(0x000000, 0);
+                    // Configurar el renderer para máxima transparencia
+                    arScene.renderer.setClearColor(0x000000, 0); // Color negro con 0% de opacidad
                     arScene.renderer.setPixelRatio(window.devicePixelRatio);
                     arScene.renderer.setSize(window.innerWidth, window.innerHeight);
+                    arScene.renderer.setTransparent(true); // Forzar transparencia
+                    arScene.renderer.sortObjects = false; // Mejorar renderizado de objetos transparentes
+                    
                     const canvas = arScene.renderer.domElement;
                     canvas.style.backgroundColor = 'transparent';
                     canvas.style.background = 'transparent';
-                    showDebugInfo('Renderer configurado para transparencia');
+                    canvas.style.opacity = '1';
+                    canvas.style.visibility = 'visible';
+                    
+                    showDebugInfo('Renderer configurado para transparencia completa');
                 }
                 
+                /*
+                 * =================================================================================
+                 * CORRECCIÓN CRÍTICA: Forzar visibilidad del video inmediatamente
+                 * =================================================================================
+                 * Esperar un poco y luego forzar la visibilidad del video
+                 * =================================================================================
+                 */
                 setTimeout(() => {
                     forceVideoVisibility();
-                    /*
-                     * =================================================================================
-                     * CORRECCIÓN CRÍTICA: Añadir listener para el cambio de orientación
-                     * =================================================================================
-                     * Este es el evento clave que faltaba para solucionar los problemas de
-                     * deformación y desaparición del modelo.
-                     * =================================================================================
-                     */
+                    setupVideoMonitoring();
                     window.addEventListener('resize', onARWindowResize);
-                }, 2000);
+                }, 1000);
                 
                 window.addEventListener('gps-camera-update-position', onGPSUpdate);
                 window.addEventListener('gps-camera-error', onGPSError);
@@ -1186,7 +1242,43 @@
 
         /*
          * =================================================================================
-         * FUNCIÓN NUEVA: Manejador de cambio de tamaño y orientación
+         * FUNCIÓN NUEVA: Monitoreo del video
+         * =================================================================================
+         * Esta función monitorea el estado del video y asegura que siempre esté visible
+         * =================================================================================
+         */
+        function setupVideoMonitoring() {
+            // Monitorear el video cada 2 segundos para asegurar que esté visible
+            const videoMonitor = setInterval(() => {
+                const videos = document.querySelectorAll('video');
+                if (videos.length > 0) {
+                    videos.forEach(video => {
+                        if (video.style.display === 'none' || video.style.opacity === '0' || video.style.visibility === 'hidden') {
+                            showDebugInfo('Video no visible, forzando visibilidad');
+                            forceVideoVisibility();
+                        }
+                        
+                        // Verificar si el video está reproduciéndose
+                        if (video.paused || video.ended) {
+                            showDebugInfo('Video no reproduciéndose, intentando reiniciar');
+                            forceVideoPlay(video);
+                        }
+                    });
+                } else {
+                    showDebugInfo('No se encontró video, reintentando...');
+                    forceVideoVisibility();
+                }
+                
+                // Si ya estamos fuera de la página AR, detener el monitoreo
+                if (!pages.ar.classList.contains('active')) {
+                    clearInterval(videoMonitor);
+                }
+            }, 2000);
+        }
+
+        /*
+         * =================================================================================
+         * CORRECCIÓN CRÍTICA: Manejador de cambio de tamaño y orientación
          * =================================================================================
          * Esta función es la solución central para los problemas de renderizado.
          * Se asegura de que el renderer, la cámara y las capas de video/canvas
@@ -1224,38 +1316,59 @@
             }, 100); // Pequeño retardo para asegurar que el DOM se actualice
         }
 
+        /*
+         * =================================================================================
+         * CORRECCIÓN CRÍTICA: Mejora en la función de forzar visibilidad del video
+         * =================================================================================
+         * Problema: El video no se muestra o está cubierto por el canvas
+         * Solución: Asegurar que el video esté siempre visible y en la capa correcta
+         * =================================================================================
+         */
         function forceVideoVisibility() {
             const videos = document.querySelectorAll('video');
             if (videos.length > 0) {
-                videos.forEach(video => {
+                videos.forEach((video, index) => {
+                    // Configurar el video para que esté siempre visible
                     video.style.position = 'fixed';
                     video.style.top = '0';
                     video.style.left = '0';
                     video.style.width = '100vw';
                     video.style.height = '100vh';
                     video.style.objectFit = 'cover';
-                    video.style.zIndex = '0';
+                    video.style.zIndex = '0'; // MANTENER en capa de fondo
                     video.style.display = 'block';
                     video.style.opacity = '1';
                     video.style.visibility = 'visible';
+                    video.style.pointerEvents = 'none';
                     
+                    // Atributos críticos para reproducción automática
                     video.setAttribute('autoplay', 'true');
                     video.setAttribute('playsinline', 'true');
                     video.setAttribute('webkit-playsinline', 'true');
                     video.setAttribute('muted', 'true');
+                    video.setAttribute('loop', 'true');
                     
+                    // Forzar reproducción
                     forceVideoPlay(video);
+                    
+                    showDebugInfo(`Video ${index} forzado a ser visible`);
                 });
-                showDebugInfo('Video de cámara forzado a ser visible');
             } else {
-                showDebugInfo('No se encontró el elemento video, reintentando en 2s...');
-                setTimeout(forceVideoVisibility, 2000);
+                showDebugInfo('No se encontró el elemento video, reintentando en 1s...');
+                setTimeout(forceVideoVisibility, 1000);
             }
             
+            /*
+             * =================================================================================
+             * CORRECCIÓN CRÍTICA: Asegurar que el canvas sea transparente
+             * =================================================================================
+             * El canvas debe estar encima del video pero ser completamente transparente
+             * =================================================================================
+             */
             const canvases = document.querySelectorAll('canvas');
             if (canvases.length > 0) {
-                canvases.forEach(canvas => {
-                    canvas.style.zIndex = '1';
+                canvases.forEach((canvas, index) => {
+                    canvas.style.zIndex = '1'; // ENCIMA del video
                     canvas.style.position = 'fixed';
                     canvas.style.top = '0';
                     canvas.style.left = '0';
@@ -1264,13 +1377,30 @@
                     canvas.style.pointerEvents = 'none';
                     canvas.style.backgroundColor = 'transparent';
                     canvas.style.background = 'transparent';
+                    canvas.style.opacity = '1';
+                    canvas.style.visibility = 'visible';
+                    
+                    showDebugInfo(`Canvas ${index} configurado para transparencia`);
                 });
-                showDebugInfo('Canvas configurado para transparencia');
             }
         }
 
+        /*
+         * =================================================================================
+         * CORRECCIÓN CRÍTICA: Mejora en la función de forzar reproducción del video
+         * =================================================================================
+         * Problema: El video no se reproduce automáticamente en algunos dispositivos
+         * Solución: Múltiples intentos y diferentes métodos para iniciar la reproducción
+         * =================================================================================
+         */
         function forceVideoPlay(video) {
             if (!video) return;
+            
+            // Si el video ya está reproduciéndose, no hacer nada
+            if (!video.paused && !video.ended) {
+                showDebugInfo('Video ya está reproduciéndose');
+                return;
+            }
             
             const playPromise = video.play();
             
@@ -1287,12 +1417,24 @@
                     console.error('Error al reproducir video:', error);
                     showDebugInfo(`Error al reproducir video: ${error.message}`);
                     
-                    if (appState.isIOS && !iosStartButton.classList.contains('show')) {
-                        iosStartButton.classList.add('show');
-                        showDebugInfo('Mostrando botón de inicio para iOS (requiere interacción del usuario)');
-                    }
+                    // Reintentar con diferentes métodos
+                    setTimeout(() => {
+                        video.muted = true;
+                        video.play().catch(e => {
+                            console.error('Segundo intento fallido:', e);
+                            showDebugInfo('Segundo intento de reproducción fallido');
+                            
+                            if (appState.isIOS && !iosStartButton.classList.contains('show')) {
+                                iosStartButton.classList.add('show');
+                                showDebugInfo('Mostrando botón de inicio para iOS (requiere interacción del usuario)');
+                            }
+                        });
+                    }, 1000);
                 });
             } else {
+                // Método legacy para navegadores antiguos
+                video.muted = true;
+                video.play();
                 appState.videoStarted = true;
                 showDebugInfo('Video iniciado (método legacy)');
             }
@@ -1615,8 +1757,7 @@
                 gpsWatchId = null;
             }
             
-            // **CORRECCIÓN CRÍTICA: Eliminar el listener de resize al detener AR**
-            // Esto evita que la función se ejecute cuando la página AR ya no está activa.
+            // Eliminar el listener de resize al detener AR
             window.removeEventListener('resize', onARWindowResize);
 
             if (arScene) {
