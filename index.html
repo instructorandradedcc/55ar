@@ -208,6 +208,86 @@
                 left: 10px !important;
             }
         }
+        
+        /* Estilos para la página de carga interactiva */
+        .ar-loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #1a2a6c, #2a5298);
+            color: white;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10002;
+        }
+        .ar-loading-screen.active {
+            display: flex;
+        }
+        .loading-content {
+            text-align: center;
+            max-width: 80%;
+        }
+        .loading-title {
+            font-size: 1.8rem;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        .loading-progress {
+            width: 80%;
+            height: 10px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            margin: 20px auto;
+            overflow: hidden;
+        }
+        .loading-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #4CAF50;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        .loading-steps {
+            margin-top: 30px;
+            text-align: left;
+        }
+        .loading-step {
+            margin: 10px 0;
+            display: flex;
+            align-items: center;
+        }
+        .step-icon {
+            margin-right: 10px;
+            font-size: 1.2rem;
+        }
+        .step-icon.completed {
+            color: #4CAF50;
+        }
+        .step-icon.active {
+            color: #FFC107;
+            animation: pulse 1.5s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        .ar-debug-info {
+            position: fixed;
+            bottom: 10px;
+            right: 10px;
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 5px;
+            border-radius: 5px;
+            font-size: 10px;
+            z-index: 10003;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -314,6 +394,43 @@
 
     <!-- PÁGINA 4: Vista de Realidad Aumentada -->
     <div id="ar-page" class="page">
+        <!-- Pantalla de carga interactiva para AR -->
+        <div id="ar-loading-screen" class="ar-loading-screen">
+            <div class="loading-content">
+                <div class="loading-title">Iniciando Realidad Aumentada</div>
+                <div class="loading-progress">
+                    <div id="loading-progress-bar" class="loading-progress-bar"></div>
+                </div>
+                <div id="loading-status-text">Preparando componentes...</div>
+                <div class="loading-steps">
+                    <div class="loading-step" id="step-libraries">
+                        <span class="step-icon">⏳</span>
+                        <span>Cargando bibliotecas AR</span>
+                    </div>
+                    <div class="loading-step" id="step-permissions">
+                        <span class="step-icon">⏳</span>
+                        <span>Solicitando permisos</span>
+                    </div>
+                    <div class="loading-step" id="step-camera">
+                        <span class="step-icon">⏳</span>
+                        <span>Inicializando cámara</span>
+                    </div>
+                    <div class="loading-step" id="step-gps">
+                        <span class="step-icon">⏳</span>
+                        <span>Obteniendo ubicación GPS</span>
+                    </div>
+                    <div class="loading-step" id="step-model">
+                        <span class="step-icon">⏳</span>
+                        <span>Cargando modelo 3D</span>
+                    </div>
+                    <div class="loading-step" id="step-complete">
+                        <span class="step-icon">⏳</span>
+                        <span>¡Listo para explorar!</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="arjs-loader">
             <div>
                 <div class="loader"></div>
@@ -334,6 +451,9 @@
             <button id="back-to-scale-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
             <button id="reset-position-btn" class="control-button bg-blue-500 hover:bg-blue-600">Resetear</button>
         </div>
+        
+        <!-- Información de depuración -->
+        <div id="ar-debug-info" class="ar-debug-info"></div>
     </div>
 
     <!-- Modal para solicitar permisos -->
@@ -365,8 +485,8 @@
          * que los usuarios siempre tengan la versión más actualizada y sin errores.
          * =================================================================================
          */
-        const APP_VERSION = '4.6';
-        const CACHE_NAME = 'geo-ar-cache-v26';
+        const APP_VERSION = '4.7';
+        const CACHE_NAME = 'geo-ar-cache-v27';
         let appState = {
             modelURL: null,
             coords: null,
@@ -387,6 +507,14 @@
             maxSize: 1
         };
 
+        // Variables para el control de la escena AR
+        let arScene = null;
+        let arCamera = null;
+        let arModel = null;
+        let gpsWatchId = null;
+        let modelLoaded = false;
+        let gpsInitialized = false;
+
         const pages = {
             upload: document.getElementById('upload-page'),
             map: document.getElementById('map-page'),
@@ -397,6 +525,50 @@
         const arLoader = document.querySelector('.arjs-loader');
         const permissionModal = document.getElementById('permission-modal');
         const arLoadingText = document.getElementById('ar-loading-text');
+        const arLoadingScreen = document.getElementById('ar-loading-screen');
+        const loadingProgressBar = document.getElementById('loading-progress-bar');
+        const loadingStatusText = document.getElementById('loading-status-text');
+        const arDebugInfo = document.getElementById('ar-debug-info');
+
+        // Función para actualizar la pantalla de carga
+        function updateLoadingScreen(step, progress, status) {
+            // Actualizar la barra de progreso
+            loadingProgressBar.style.width = `${progress}%`;
+            
+            // Actualizar el texto de estado
+            loadingStatusText.textContent = status;
+            
+            // Actualizar los pasos
+            const steps = ['step-libraries', 'step-permissions', 'step-camera', 'step-gps', 'step-model', 'step-complete'];
+            const currentStepIndex = steps.indexOf(step);
+            
+            steps.forEach((stepId, index) => {
+                const stepElement = document.getElementById(stepId);
+                const iconElement = stepElement.querySelector('.step-icon');
+                
+                if (index < currentStepIndex) {
+                    // Paso completado
+                    iconElement.textContent = '✅';
+                    iconElement.className = 'step-icon completed';
+                } else if (index === currentStepIndex) {
+                    // Paso actual
+                    iconElement.textContent = '⏳';
+                    iconElement.className = 'step-icon active';
+                } else {
+                    // Paso pendiente
+                    iconElement.textContent = '⏳';
+                    iconElement.className = 'step-icon';
+                }
+            });
+        }
+
+        // Función para mostrar información de depuración
+        function showDebugInfo(info) {
+            if (arDebugInfo) {
+                arDebugInfo.textContent = info;
+                arDebugInfo.style.display = 'block';
+            }
+        }
 
         function showMessage(msg, duration = 3000) {
             messageBox.textContent = msg;
@@ -440,13 +612,19 @@
 
         document.getElementById('grant-permissions-btn').onclick = async () => {
             permissionModal.style.display = 'none';
-            arLoader.style.display = 'flex';
-            arLoadingText.textContent = 'Cargando bibliotecas AR...';
-
+            arLoadingScreen.classList.add('active');
+            
             try {
+                // Paso 1: Cargar bibliotecas AR
+                updateLoadingScreen('step-libraries', 10, 'Cargando bibliotecas AR...');
+                showDebugInfo('Iniciando carga de bibliotecas AR');
                 await loadARLibraries();
-                arLoadingText.textContent = 'Solicitando permisos de cámara y GPS...';
-
+                showDebugInfo('Bibliotecas AR cargadas correctamente');
+                
+                // Paso 2: Solicitar permisos
+                updateLoadingScreen('step-permissions', 25, 'Solicitando permisos de cámara y GPS...');
+                showDebugInfo('Solicitando permisos de cámara y GPS');
+                
                 // Solicitar permisos de cámara
                 try {
                     const stream = await navigator.mediaDevices.getUserMedia({ 
@@ -458,8 +636,10 @@
                     });
                     // Detener el stream ya que AR.js lo gestionará
                     stream.getTracks().forEach(track => track.stop());
+                    showDebugInfo('Permiso de cámara concedido');
                 } catch (cameraError) {
                     console.error('Error al acceder a la cámara:', cameraError);
+                    showDebugInfo(`Error de cámara: ${cameraError.message}`);
                     throw new Error('No se pudo acceder a la cámara. Asegúrate de haber concedido los permisos.');
                 }
 
@@ -472,22 +652,46 @@
                             maximumAge: 60000
                         });
                     });
+                    showDebugInfo('Permiso de GPS concedido');
                 } catch (gpsError) {
                     console.error('Error al acceder al GPS:', gpsError);
+                    showDebugInfo(`Error de GPS: ${gpsError.message}`);
                     throw new Error('No se pudo acceder al GPS. Asegúrate de haber concedido los permisos.');
                 }
-
-                arLoadingText.textContent = 'Permisos concedidos. Iniciando AR...';
+                
+                // Paso 3: Inicializar cámara
+                updateLoadingScreen('step-camera', 40, 'Inicializando cámara AR...');
+                showDebugInfo('Inicializando cámara AR');
+                
+                // Paso 4: Inicializar GPS
+                updateLoadingScreen('step-gps', 60, 'Obteniendo ubicación GPS...');
+                showDebugInfo('Obteniendo ubicación GPS');
+                
+                // Paso 5: Cargar modelo
+                updateLoadingScreen('step-model', 80, 'Cargando modelo 3D...');
+                showDebugInfo('Cargando modelo 3D');
                 
                 // Pequeña pausa para asegurar que los permisos se hayan establecido correctamente
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 
+                // Inicializar la escena AR
                 initializeARScene();
+                
+                // Paso 6: Completado
+                updateLoadingScreen('step-complete', 100, '¡Listo para explorar!');
+                showDebugInfo('Escena AR inicializada correctamente');
+                
+                // Ocultar la pantalla de carga después de un momento
+                setTimeout(() => {
+                    arLoadingScreen.classList.remove('active');
+                }, 1500);
 
             } catch (error) {
-                console.error('Error al solicitar permisos:', error);
-                arLoader.style.display = 'none';
-                let userMessage = 'Error al solicitar permisos.';
+                console.error('Error al iniciar AR:', error);
+                showDebugInfo(`Error al iniciar AR: ${error.message}`);
+                arLoadingScreen.classList.remove('active');
+                
+                let userMessage = 'Error al iniciar la experiencia AR.';
                 
                 if (error.name === "NotFoundError" || error.name === "DevicesNotFoundError") {
                     userMessage = "No se encontró una cámara trasera. Asegúrate de estar en un dispositivo móvil.";
@@ -508,15 +712,22 @@
             // Limpiar cualquier escena anterior
             arSceneContainer.innerHTML = '';
             
+            // Crear la escena AR con configuración mejorada
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
                     embedded
                     vr-mode-ui="enabled: false"
-                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high;"
-                    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; detectionMode: mono_and_matrix; matrixCodeType: 3x3;">
+                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true;"
+                    arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best; detectionMode: mono_and_matrix; matrixCodeType: 3x3; sourceWidth: 1280; sourceHeight: 720; displayWidth: 1280; displayHeight: 720;">
                     
-                    <a-camera gps-camera="minDistance: 1; alert: true; simulateLatitude: ${appState.coords.latitude}; simulateLongitude: ${appState.coords.longitude};" rotation-reader gps-new-position></a-camera>
+                    <a-camera 
+                        id="ar-camera"
+                        gps-camera="minDistance: 1; alert: true; simulateLatitude: ${appState.coords.latitude}; simulateLongitude: ${appState.coords.longitude};" 
+                        rotation-reader 
+                        gps-new-position
+                        camera="active: true">
+                    </a-camera>
 
                     <a-entity
                         id="arch-model"
@@ -524,7 +735,8 @@
                         gps-entity-place="latitude: ${appState.coords.latitude}; longitude: ${appState.coords.longitude};"
                         position="0 ${appState.realDimensions.groundHeight} 0"
                         scale="1 1 1"
-                        animation-mixer>
+                        animation-mixer
+                        visible="false">
                     </a-entity>
                     
                     <a-light type="ambient" color="#BBB" intensity="1.5"></a-light>
@@ -532,56 +744,154 @@
                 </a-scene>
             `;
 
-            const sceneEl = document.querySelector('#ar-scene');
+            // Obtener referencias a los elementos de la escena
+            arScene = document.querySelector('#ar-scene');
+            arCamera = document.querySelector('#ar-camera');
+            arModel = document.querySelector('#arch-model');
             
             // Escuchar eventos de carga de la escena
-            sceneEl.addEventListener('loaded', () => {
+            arScene.addEventListener('loaded', () => {
                 console.log('Escena AR cargada correctamente');
+                showDebugInfo('Escena AR cargada');
                 
                 // Escuchar eventos de GPS después de que la escena haya cargado
-                window.addEventListener('gps-camera-update-position', (event) => {
-                    console.log('Posición GPS actualizada:', event.detail);
-                    arLoader.style.display = 'none';
-                    const pos = event.detail.position;
-                    document.getElementById('gps-status').textContent = 'Activo';
-                    document.getElementById('gps-accuracy').textContent = pos.accuracy.toFixed(1);
-                    showMessage(`GPS activado. Precisión: ${pos.accuracy.toFixed(2)}m.`, 3000);
-                    
-                    // Ajustar escala después de obtener la primera actualización del GPS
-                    adjustModelScale();
-                });
+                window.addEventListener('gps-camera-update-position', onGPSUpdate);
                 
                 // Escuchar errores de GPS
-                window.addEventListener('gps-camera-error', (event) => {
-                    console.error('Error de GPS:', event.detail);
-                    arLoader.style.display = 'none';
-                    showMessage('Error de GPS: ' + event.detail.message, 5000);
-                });
+                window.addEventListener('gps-camera-error', onGPSError);
+                
+                // Escuchar cuando el modelo se carga
+                arModel.addEventListener('model-loaded', onModelLoaded);
+                arModel.addEventListener('model-error', onModelError);
+                
+                // Iniciar el seguimiento de GPS
+                startGPSWatch();
             });
             
             // Escuchar errores de carga de la escena
-            sceneEl.addEventListener('error', (event) => {
+            arScene.addEventListener('error', (event) => {
                 console.error('Error al cargar la escena AR:', event.detail);
-                arLoader.style.display = 'none';
+                showDebugInfo(`Error de escena: ${event.detail}`);
                 showMessage('Error al cargar la escena AR. Verifica la consola para más detalles.', 5000);
             });
             
             // Forzar la carga de la escena si no se carga después de un tiempo
             setTimeout(() => {
-                if (arLoader.style.display !== 'none') {
+                if (arLoadingScreen.classList.contains('active')) {
                     console.warn('La escena AR tardó demasiado en cargar, forzando visualización');
-                    arLoader.style.display = 'none';
+                    showDebugInfo('Forzando visualización de la escena AR');
+                    arLoadingScreen.classList.remove('active');
                     showMessage('La escena AR está cargando, puede tardar unos segundos...', 3000);
                 }
             }, 10000);
         }
 
+        function startGPSWatch() {
+            if (gpsWatchId) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+            }
+            
+            gpsWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    console.log('Posición GPS actualizada:', position);
+                    showDebugInfo(`GPS: ${position.coords.latitude}, ${position.coords.longitude} (Precisión: ${position.coords.accuracy}m)`);
+                    
+                    // Actualizar la información de GPS en la interfaz
+                    document.getElementById('gps-status').textContent = 'Activo';
+                    document.getElementById('gps-accuracy').textContent = position.coords.accuracy.toFixed(1);
+                    
+                    // Marcar que el GPS está inicializado
+                    gpsInitialized = true;
+                    
+                    // Si el modelo ya está cargado, ajustar su escala
+                    if (modelLoaded) {
+                        adjustModelScale();
+                    }
+                },
+                (error) => {
+                    console.error('Error al obtener la posición GPS:', error);
+                    showDebugInfo(`Error de GPS: ${error.message}`);
+                    document.getElementById('gps-status').textContent = 'Error';
+                    
+                    let errorMessage = 'Error de GPS desconocido';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'Permiso de GPS denegado';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'Información de GPS no disponible';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'Tiempo de espera agotado para obtener GPS';
+                            break;
+                    }
+                    
+                    showMessage(`Error de GPS: ${errorMessage}`, 5000);
+                },
+                { 
+                    enableHighAccuracy: true, 
+                    timeout: 10000, 
+                    maximumAge: 60000 
+                }
+            );
+        }
+
+        function onGPSUpdate(event) {
+            console.log('Evento de actualización GPS:', event.detail);
+            showDebugInfo('Evento de actualización GPS recibido');
+            
+            const pos = event.detail.position;
+            document.getElementById('gps-status').textContent = 'Activo';
+            document.getElementById('gps-accuracy').textContent = pos.accuracy.toFixed(1);
+            
+            // Ocultar la pantalla de carga si aún está visible
+            if (arLoadingScreen.classList.contains('active')) {
+                arLoadingScreen.classList.remove('active');
+            }
+            
+            // Mostrar mensaje al usuario
+            showMessage(`GPS activado. Precisión: ${pos.accuracy.toFixed(2)}m.`, 3000);
+            
+            // Ajustar escala después de obtener la primera actualización del GPS
+            if (modelLoaded) {
+                adjustModelScale();
+            }
+        }
+
+        function onGPSError(event) {
+            console.error('Error de GPS:', event.detail);
+            showDebugInfo(`Error de GPS: ${event.detail.message}`);
+            document.getElementById('gps-status').textContent = 'Error';
+            showMessage('Error de GPS: ' + event.detail.message, 5000);
+        }
+
+        function onModelLoaded() {
+            console.log('Modelo 3D cargado correctamente');
+            showDebugInfo('Modelo 3D cargado');
+            modelLoaded = true;
+            
+            // Si el GPS ya está inicializado, ajustar la escala del modelo
+            if (gpsInitialized) {
+                adjustModelScale();
+            }
+        }
+
+        function onModelError(event) {
+            console.error('Error al cargar el modelo 3D:', event.detail);
+            showDebugInfo(`Error al cargar modelo: ${event.detail}`);
+            showMessage('Error al cargar el modelo 3D. Verifica que el archivo sea válido.', 5000);
+        }
+
         function adjustModelScale() {
-            const modelEntity = document.querySelector('#arch-model');
-            if (!modelEntity || !modelEntity.object3D) {
+            if (!arModel || !arModel.object3D) {
+                console.log('El modelo aún no está listo para ajustar la escala');
+                showDebugInfo('Modelo no listo para ajustar escala');
                 setTimeout(adjustModelScale, 500); // Reintentar si el object3D no está listo
                 return;
             }
+            
+            console.log('Ajustando escala del modelo...');
+            showDebugInfo('Ajustando escala del modelo');
             
             const loader = new GLTFLoader();
             loader.load(appState.modelURL, (gltf) => {
@@ -593,26 +903,48 @@
                 const scaleY = appState.realDimensions.height / size.y;
                 const scaleZ = appState.realDimensions.length / size.z;
                 
-                modelEntity.setAttribute('scale', `${scaleX} ${scaleY} ${scaleZ}`);
+                arModel.setAttribute('scale', `${scaleX} ${scaleY} ${scaleZ}`);
                 
                 // Asegurarse de que el modelo sea visible
-                modelEntity.setAttribute('visible', 'true');
+                arModel.setAttribute('visible', 'true');
                 
                 console.log('Modelo escalado a:', scaleX, scaleY, scaleZ);
+                showDebugInfo(`Modelo escalado: ${scaleX.toFixed(2)}, ${scaleY.toFixed(2)}, ${scaleZ.toFixed(2)}`);
+                
+                // Actualizar la información de escala en la interfaz
+                document.getElementById('current-scale').textContent = '1.0';
             }, undefined, (error) => {
                 console.error('Error al cargar el modelo para ajustar escala:', error);
+                showDebugInfo(`Error al ajustar escala: ${error.message}`);
             });
         }
 
         function stopAR() {
-            const arScene = document.getElementById('ar-scene');
+            // Detener el seguimiento de GPS
+            if (gpsWatchId) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+                gpsWatchId = null;
+            }
+            
+            // Pausar y eliminar la escena AR
             if (arScene) {
                 arScene.pause();
                 arScene.parentNode.removeChild(arScene);
+                arScene = null;
+                arCamera = null;
+                arModel = null;
             }
-            // Esto es importante: AR.js puede no liberar la cámara por completo.
-            // Una recarga es la forma más segura de asegurar que la cámara se detiene.
-            // Sin embargo, para una mejor UX, intentamos simplemente navegar.
+            
+            // Resetear variables de estado
+            modelLoaded = false;
+            gpsInitialized = false;
+            
+            // Ocultar información de depuración
+            if (arDebugInfo) {
+                arDebugInfo.style.display = 'none';
+            }
+            
+            // Navegar de vuelta a la página de escala
             navigateTo('scale');
         }
 
@@ -929,6 +1261,26 @@
             if (map) map.setZoom(parseFloat(e.target.value));
         });
         document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
+
+        // Control de escala en la vista AR
+        document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
+            const scaleValue = parseFloat(e.target.value);
+            document.getElementById('current-scale').textContent = scaleValue.toFixed(1);
+            
+            if (arModel && arModel.object3D) {
+                const currentScale = arModel.getAttribute('scale');
+                const baseScale = currentScale.split(' ').map(parseFloat);
+                arModel.setAttribute('scale', `${baseScale[0] * scaleValue} ${baseScale[1] * scaleValue} ${baseScale[2] * scaleValue}`);
+            }
+        });
+
+        // Botón de reseteo de posición
+        document.getElementById('reset-position-btn').addEventListener('click', () => {
+            if (arCamera && arCamera.components['gps-camera']) {
+                arCamera.components['gps-camera'].resetPosition();
+                showMessage('Posición reiniciada', 2000);
+            }
+        });
 
         const mapContainer = document.getElementById('map-container');
         let longPressTimeout = null;
