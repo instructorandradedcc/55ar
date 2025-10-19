@@ -563,20 +563,6 @@
         .ios-start-button.show {
             display: block;
         }
-        
-        /* Nuevos estilos para guías de distancia */
-        .distance-guide {
-            color: red;
-            font-size: 0.5rem;
-        }
-        
-        /* Estilos para input de escala numérico */
-        #scale-input {
-            width: 60px;
-            padding: 5px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-        }
     </style>
 </head>
 <body>
@@ -808,13 +794,10 @@
         <div class="ar-scale-control">
             <label for="ar-scale-slider" class="text-sm">Escala</label>
             <input id="ar-scale-slider" type="range" min="0.1" max="5" step="0.1" value="1" class="ar-scale-slider">
-            <input type="number" id="scale-input" min="0.1" step="0.1" value="1.0" class="scale-input mt-2">
         </div>
         <div id="ar-controls">
             <button id="back-to-scale-btn" class="control-button bg-gray-500 hover:bg-gray-600">Volver</button>
             <button id="reset-position-btn" class="control-button bg-blue-500 hover:bg-blue-600">Resetear</button>
-            <button id="toggle-surface-mode-btn" class="control-button bg-yellow-500 hover:bg-yellow-600">Modo Superficie</button>
-            <button id="toggle-guides-btn" class="control-button bg-red-500 hover:bg-red-600">Mostrar Guías</button>
         </div>
         
         <!-- Información de depuración -->
@@ -836,7 +819,24 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        const APP_VERSION = '0.06'; // Incrementado por nuevas features: plane detection, escala numérica, guías de distancia
+        /*
+         * =================================================================================
+         * SISTEMA DE VERSIONES - REGLA OBLIGATORIA
+         * =================================================================================
+         * La versión inicial de este código es 0.01.
+         *
+         * REGLA: Cada vez que se realice CUALQUIER cambio, corrección o mejora en este código,
+         * es OBLIGATORIO incrementar el número de versión en 0.01.
+         *
+         * Ejemplo: Si la versión actual es '0.01', la siguiente versión debe ser '0.02'.
+         * Si la versión es '0.99', la siguiente debe ser '1.00'.
+         *
+         * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
+         * que los usuarios siempre tengan la versión más actualizada y sin errores.
+         * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
+         * =================================================================================
+         */
+        const APP_VERSION = '0.04'; // Incrementado por correcciones en configuración de cámara y GPS
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
@@ -850,9 +850,7 @@
             mapScale: 50,
             explorationMode: false,
             videoStarted: false,
-            isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent),
-            surfaceMode: false, // Nuevo: modo para plane detection
-            showGuides: false // Nuevo: toggle para guías de distancia
+            isIOS: /iPad|iPhone|iPod/.test(navigator.userAgent)
         };
         let map, modelPreview = {
             renderer: null,
@@ -881,7 +879,6 @@
         let raycaster = new THREE.Raycaster();
         let mouse = new THREE.Vector2();
         let isIntersecting = false;
-        let guideEntities = []; // Nuevo: array para guías de distancia
 
         const pages = {
             upload: document.getElementById('upload-page'),
@@ -1104,20 +1101,29 @@
             modelLocationIndicator.style.display = 'flex';
             distancePanel.style.display = 'flex';
             
-            // **CONFIGURACIÓN BASE DE AR.JS CON SOPORTE PARA WEBXR PLANE DETECTION**
+            /*
+             * =================================================================================
+             * CORRECCIÓN: Ajustes para resolver pantalla azul/negra y GPS no detectado
+             * =================================================================================
+             * - Revertir a gps-camera y gps-entity-place para compatibilidad estable.
+             * - Agregar parámetros de resolución para evitar estiramiento o negro.
+             * - Forzar high accuracy en GPS y agregar debug.
+             * - Remover background en escena y forzar transparent.
+             * =================================================================================
+             */
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
                     embedded
                     vr-mode-ui="enabled: false"
                     renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true;"
-                    webxr="requiredFeatures: hit-test, local-floor; optionalFeatures: dom-overlay"
+                    style="background: transparent;"
                     arjs="sourceType: webcam; videoTexture: true; sourceWidth: 640; sourceHeight: 480; displayWidth: 640; displayHeight: 480; debugUIEnabled: false;">
                     
                     <a-camera 
                         id="ar-camera"
                         gps-camera="gpsMinDistance: 5; gpsTimeInterval: 1000;" 
-                        rotation-reader 
+                        rotation-reader
                         camera="active: true; near: 0.1; far: 10000;">
                     </a-camera>
 
@@ -1128,7 +1134,7 @@
                         position="0 ${appState.realDimensions.groundHeight} 0"
                         scale="1 1 1"
                         animation-mixer
-                        visible="true">
+                        visible="false">
                     </a-entity>
                     
                     <a-light type="ambient" color="#BBB" intensity="1.5"></a-light>
@@ -1165,12 +1171,6 @@
                 arModel.addEventListener('model-error', onModelError);
                 
                 startGPSWatch();
-                
-                // Nuevo: Inicializar plane detection con WebXR
-                initPlaneDetection();
-                
-                // Nuevo: Inicializar gestures para escala
-                initScaleGestures();
             });
             
             arScene.addEventListener('error', (event) => {
@@ -1189,211 +1189,988 @@
             }, 10000);
         }
 
-        // **NUEVA FUNCIÓN: Inicializar plane detection con WebXR**
-        function initPlaneDetection() {
-            if ('XRSystem' in navigator) {
-                navigator.xr.isSessionSupported('immersive-ar').then((supported) => {
-                    if (supported) {
-                        showMessage('Modo Superficie disponible. Actívalo para anclar el modelo.', 3000);
-                    } else {
-                        showMessage('Modo Superficie no soportado en este dispositivo.', 3000);
+        function forceVideoVisibility() {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+                videos.forEach(video => {
+                    video.style.position = 'fixed';
+                    video.style.top = '0';
+                    video.style.left = '0';
+                    video.style.width = '100%';
+                    video.style.height = '100%';
+                    video.style.objectFit = 'cover';
+                    video.style.zIndex = '-1';
+                    video.style.display = 'block';
+                    video.style.opacity = '1';
+                    video.style.visibility = 'visible';
+                    video.style.backgroundColor = 'transparent';  // Cambiado para evitar colores de fondo
+                    
+                    video.setAttribute('autoplay', 'true');
+                    video.setAttribute('playsinline', 'true');
+                    video.setAttribute('webkit-playsinline', 'true');
+                    video.setAttribute('muted', 'true');
+                    
+                    forceVideoPlay(video);
+                });
+                showDebugInfo('Video de cámara forzado a ser visible');
+            } else {
+                showDebugInfo('No se encontró el elemento video, reintentando...');
+                setTimeout(forceVideoVisibility, 1000);
+            }
+            
+            const canvases = document.querySelectorAll('canvas');
+            if (canvases.length > 0) {
+                canvases.forEach(canvas => {
+                    canvas.style.zIndex = '1';
+                    canvas.style.position = 'fixed';
+                    canvas.style.top = '0';
+                    canvas.style.left = '0';
+                    canvas.style.width = '100%';
+                    canvas.style.height = '100%';
+                    canvas.style.pointerEvents = 'none';
+                    canvas.style.backgroundColor = 'transparent';
+                    canvas.style.background = 'transparent';
+                });
+                showDebugInfo('Canvas configurado para transparencia');
+            }
+        }
+
+        function forceVideoPlay(video) {
+            if (!video) return;
+            
+            const playPromise = video.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('Video reproduciéndose correctamente');
+                    appState.videoStarted = true;
+                    showDebugInfo('Video iniciado correctamente');
+                    
+                    if (appState.isIOS && iosStartButton.classList.contains('show')) {
+                        iosStartButton.classList.remove('show');
+                    }
+                }).catch(error => {
+                    console.error('Error al reproducir video:', error);
+                    showDebugInfo(`Error al reproducir video: ${error.message}`);
+                    
+                    if (appState.isIOS && !iosStartButton.classList.contains('show')) {
+                        iosStartButton.classList.add('show');
+                        showDebugInfo('Mostrando botón de inicio para iOS');
                     }
                 });
             } else {
-                showMessage('WebXR no disponible. Usa GPS estándar.', 3000);
+                appState.videoStarted = true;
+                showDebugInfo('Video iniciado (método legacy)');
             }
-
-            // Toggle para modo superficie
-            document.getElementById('toggle-surface-mode-btn').addEventListener('click', () => {
-                appState.surfaceMode = !appState.surfaceMode;
-                const btn = document.getElementById('toggle-surface-mode-btn');
-                btn.textContent = appState.surfaceMode ? 'Desactivar Superficie' : 'Modo Superficie';
-                
-                if (appState.surfaceMode) {
-                    enterSurfaceMode();
-                } else {
-                    // Revertir a posición GPS
-                    arModel.setAttribute('position', `0 ${appState.realDimensions.groundHeight} 0`);
-                    showMessage('Modo Superficie desactivado. Volviendo a GPS.', 2000);
-                }
-            });
         }
 
-        // **NUEVA FUNCIÓN: Entrar en modo superficie (hit-test)**
-        async function enterSurfaceMode() {
-            try {
-                const session = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['hit-test']
+        function startVideoWithUserInteraction() {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+                videos.forEach(video => {
+                    forceVideoPlay(video);
                 });
-                
-                arScene.systems.webxr.session = session;
-                
-                // Listener para hit-test
-                session.addEventListener('select', (event) => {
-                    const frame = event.frame;
-                    const referenceSpace = await session.requestReferenceSpace('viewer');
-                    const hitTestSource = await frame.session.requestHitTestSource({ space: referenceSpace });
-                    
-                    frame.getHitTestResults(hitTestSource).then((results) => {
-                        if (results.length > 0) {
-                            const hit = results[0];
-                            const hitPose = hit.getPose(referenceSpace);
-                            if (hitPose) {
-                                // Anclar modelo a la superficie detectada
-                                arModel.object3D.position.setFromMatrixPosition(hitPose.transform.matrix);
-                                showMessage('Modelo anclado a superficie detectada.', 3000);
-                            }
-                        } else {
-                            showMessage('No se detectó superficie. Intenta de nuevo.', 3000);
-                        }
-                    });
-                });
-                
-                showMessage('Modo Superficie activado. Toca la pantalla para anclar.', 3000);
-            } catch (error) {
-                console.error('Error en modo superficie:', error);
-                showMessage('Error al activar modo superficie.', 3000);
-                appState.surfaceMode = false;
             }
+            
+            iosStartButton.classList.remove('show');
+            
+            showMessage('Cámara AR iniciada', 2000);
         }
 
-        // **NUEVA FUNCIÓN: Inicializar gestures para escala (pinch to scale)**
-        function initScaleGestures() {
-            let initialDistance = 0;
-            let currentScale = appState.initialARScale;
-
-            arScene.addEventListener('touchstart', (e) => {
-                if (e.touches.length === 2) {
-                    initialDistance = getTouchDistance(e.touches[0], e.touches[1]);
-                }
-            });
-
-            arScene.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2) {
-                    const newDistance = getTouchDistance(e.touches[0], e.touches[1]);
-                    const scaleFactor = newDistance / initialDistance;
-                    currentScale *= scaleFactor;
-                    updateModelScale(currentScale);
-                    initialDistance = newDistance;
-                }
-            });
-
-            function getTouchDistance(t1, t2) {
-                const dx = t1.pageX - t2.pageX;
-                const dy = t1.pageY - t2.pageY;
-                return Math.sqrt(dx * dx + dy * dy);
-            }
-        }
-
-        // **FUNCIÓN ACTUALIZADA: Ajustar escala con input numérico**
-        document.getElementById('scale-input').addEventListener('input', (e) => {
-            const scaleValue = parseFloat(e.target.value);
-            if (!isNaN(scaleValue)) {
-                appState.initialARScale = scaleValue;
-                updateModelScale(scaleValue);
-            }
-        });
-
-        function updateModelScale(scaleValue) {
-            if (arModel && arModel.object3D) {
-                arModel.setAttribute('scale', `${scaleValue} ${scaleValue} ${scaleValue}`);
-                document.getElementById('current-scale').textContent = scaleValue.toFixed(1);
-                showMessage('Escala actualizada a ' + scaleValue.toFixed(1) + 'x', 2000);
-            }
-        }
-
-        // **NUEVA FUNCIÓN: Toggle guías de distancia**
-        document.getElementById('toggle-guides-btn').addEventListener('click', () => {
-            appState.showGuides = !appState.showGuides;
-            const btn = document.getElementById('toggle-guides-btn');
-            btn.textContent = appState.showGuides ? 'Ocultar Guías' : 'Mostrar Guías';
-            
-            if (appState.showGuides) {
-                showDistanceGuides();
-            } else {
-                hideDistanceGuides();
-            }
-        });
-
-        function showDistanceGuides() {
-            if (!arModel) return;
-            
-            // Limpiar guías anteriores
-            hideDistanceGuides();
-            
-            // Crear líneas para ancho, largo, alto
-            const bounds = appState.modelBounds;
-            if (!bounds) return;
-            
-            // Línea para ancho (x)
-            const widthLine = document.createElement('a-line');
-            widthLine.setAttribute('color', 'red');
-            widthLine.setAttribute('start', `- ${bounds.width / 2} 0 0`);
-            widthLine.setAttribute('end', `${bounds.width / 2} 0 0`);
-            arModel.appendChild(widthLine);
-            guideEntities.push(widthLine);
-            
-            const widthText = document.createElement('a-text');
-            widthText.setAttribute('value', `${appState.realDimensions.width}m`);
-            widthText.setAttribute('color', 'red');
-            widthText.setAttribute('position', `${bounds.width / 2 + 0.5} 0 0`);
-            widthText.setAttribute('align', 'center');
-            arModel.appendChild(widthText);
-            guideEntities.push(widthText);
-            
-            // Línea para largo (z)
-            const lengthLine = document.createElement('a-line');
-            lengthLine.setAttribute('color', 'red');
-            lengthLine.setAttribute('start', `0 0 -${bounds.length / 2}`);
-            lengthLine.setAttribute('end', `0 0 ${bounds.length / 2}`);
-            arModel.appendChild(lengthLine);
-            guideEntities.push(lengthLine);
-            
-            const lengthText = document.createElement('a-text');
-            lengthText.setAttribute('value', `${appState.realDimensions.length}m`);
-            lengthText.setAttribute('color', 'red');
-            lengthText.setAttribute('position', `0 0 ${bounds.length / 2 + 0.5}`);
-            lengthText.setAttribute('align', 'center');
-            arModel.appendChild(lengthText);
-            guideEntities.push(lengthText);
-            
-            // Línea para alto (y)
-            const heightLine = document.createElement('a-line');
-            heightLine.setAttribute('color', 'red');
-            heightLine.setAttribute('start', `0 -${bounds.height / 2} 0`);
-            heightLine.setAttribute('end', `0 ${bounds.height / 2} 0`);
-            arModel.appendChild(heightLine);
-            guideEntities.push(heightLine);
-            
-            const heightText = document.createElement('a-text');
-            heightText.setAttribute('value', `${appState.realDimensions.height}m`);
-            heightText.setAttribute('color', 'red');
-            heightText.setAttribute('position', `0 ${bounds.height / 2 + 0.5} 0`);
-            heightText.setAttribute('align', 'center');
-            arModel.appendChild(heightText);
-            guideEntities.push(heightText);
-            
-            showMessage('Guías de distancia activadas.', 2000);
-        }
-
-        function hideDistanceGuides() {
-            guideEntities.forEach(entity => {
-                if (entity.parentNode) entity.parentNode.removeChild(entity);
-            });
-            guideEntities = [];
-            showMessage('Guías de distancia ocultas.', 2000);
-        }
-
-        // Resto del código (forceVideoVisibility, startGPSWatch, etc.) permanece igual...
+        iosStartButton.addEventListener('click', startVideoWithUserInteraction);
         
-        function forceVideoVisibility() {
-            // Código existente...
+        document.addEventListener('touchstart', function() {
+            if (!appState.videoStarted && pages.ar.classList.contains('active')) {
+                startVideoWithUserInteraction();
+            }
+        }, { once: true });
+        
+        document.addEventListener('click', function() {
+            if (!appState.videoStarted && pages.ar.classList.contains('active')) {
+                startVideoWithUserInteraction();
+            }
+        }, { once: true });
+
+        function updateLocationIndicators() {
+            if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
+            
+            const currentLocText = `TÚ: ${appState.currentGPSLocation.latitude.toFixed(6)}, ${appState.currentGPSLocation.longitude.toFixed(6)}`;
+            currentLocationIndicator.querySelector('span').textContent = currentLocText;
+            
+            const modelLocText = `MODELO: ${appState.arTargetCoords.latitude.toFixed(6)}, ${appState.arTargetCoords.longitude.toFixed(6)}`;
+            modelLocationIndicator.querySelector('span').textContent = modelLocText;
+            
+            const distance = calculateDistance(
+                appState.currentGPSLocation.latitude,
+                appState.currentGPSLocation.longitude,
+                appState.arTargetCoords.latitude,
+                appState.arTargetCoords.longitude
+            );
+            
+            arDistanceValue.textContent = `${distance.toFixed(1)}m`;
+            document.getElementById('model-distance').textContent = `${distance.toFixed(2)}m`;
+            document.getElementById('current-distance').textContent = distance.toFixed(0);
         }
 
-        // ... (otras funciones sin cambios)
+        function startGPSWatch() {
+            if (gpsWatchId) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+            }
+            
+            const MIN_DISTANCE_UPDATE = 2; // Mínimo 2 metros de cambio para actualizar
+            
+            gpsWatchId = navigator.geolocation.watchPosition(
+                (position) => {
+                    const newLocation = {
+                        latitude: position.coords.latitude,
+                        longitude: position.coords.longitude,
+                        accuracy: position.coords.accuracy
+                    };
+
+                    // Si no hay ubicación previa, la establecemos
+                    if (!appState.currentGPSLocation) {
+                        appState.currentGPSLocation = newLocation;
+                    } else {
+                        // Calculamos la distancia desde la última ubicación conocida
+                        const distanceMoved = calculateDistance(
+                            appState.currentGPSLocation.latitude,
+                            appState.currentGPSLocation.longitude,
+                            newLocation.latitude,
+                            newLocation.longitude
+                        );
+
+                        // Solo actualizamos si el movimiento es significativo
+                        if (distanceMoved > MIN_DISTANCE_UPDATE) {
+                            appState.currentGPSLocation = newLocation;
+                            showDebugInfo(`GPS actualizado (movió ${distanceMoved.toFixed(2)}m)`);
+                        } else {
+                            // Si el movimiento es pequeño, actualizamos solo la precisión para el panel
+                            appState.currentGPSLocation.accuracy = newLocation.accuracy;
+                        }
+                    }
+                    
+                    console.log('Posición GPS recibida:', newLocation);
+                    showDebugInfo(`GPS: ${newLocation.latitude}, ${newLocation.longitude} (Precisión: ${newLocation.accuracy.toFixed(1)}m)`);
+                    
+                    gpsIndicator.classList.add('active');
+                    gpsIndicator.classList.remove('error');
+                    gpsIndicatorText.textContent = `GPS: Activo (${newLocation.accuracy.toFixed(1)}m)`;
+                    
+                    document.getElementById('gps-status').textContent = 'Activo';
+                    document.getElementById('gps-accuracy').textContent = newLocation.accuracy.toFixed(1);
+                    
+                    updateLocationIndicators();
+                    
+                    gpsInitialized = true;
+                    
+                    if (modelLoaded) {
+                        adjustModelScale();
+                    }
+                },
+                (error) => {
+                    console.error('Error al obtener la posición GPS:', error);
+                    showDebugInfo(`Error de GPS: ${error.message}`);
+                    
+                    gpsIndicator.classList.add('error');
+                    gpsIndicator.classList.remove('active');
+                    gpsIndicatorText.textContent = 'GPS: Error';
+                    
+                    document.getElementById('gps-status').textContent = 'Error';
+                    
+                    let errorMessage = 'Error de GPS desconocido';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage = 'Permiso de GPS denegado';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage = 'Información de GPS no disponible';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage = 'Tiempo de espera agotado para obtener GPS';
+                            break;
+                    }
+                    
+                    showMessage(`Error de GPS: ${errorMessage}`, 5000);
+                },
+                { 
+                    enableHighAccuracy: true, 
+                    timeout: 5000,  // Reducido para respuestas más rápidas
+                    maximumAge: 0
+                }
+            );
+        }
+
+        // **CORRECCIÓN: Esta función ya no es necesaria y puede causar conflictos**
+        // AR.js con gps-entity-place maneja el posicionamiento del modelo.
+        // La comentamos para evitar interferencias.
+        /*
+        function updateModelPosition() {
+            // ... código anterior ...
+        }
+        */
+
+        function calculateBearing(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const y = Math.sin(Δλ) * Math.cos(φ2);
+            const x = Math.cos(φ1)*Math.sin(φ2) -
+                    Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+
+            const θ = Math.atan2(y, x);
+            const bearing = (θ*180/Math.PI + 360) % 360;
+
+            return bearing;
+        }
+
+        function updateConnectionLine() {
+            if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
+            
+            connectionLine.style.display = 'block';
+            
+            const currentLoc = currentLocationIndicator.getBoundingClientRect();
+            const modelLoc = modelLocationIndicator.getBoundingClientRect();
+            
+            const deltaX = modelLoc.left - currentLoc.left;
+            const deltaY = modelLoc.top - currentLoc.top;
+            const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+            const angle = Math.atan2(deltaY, deltaX) * 180 / Math.PI;
+            
+            connectionLine.style.width = distance + 'px';
+            connectionLine.style.left = currentLoc.right + 'px';
+            connectionLine.style.top = (currentLoc.top + currentLoc.height / 2) + 'px';
+            connectionLine.style.transform = `rotate(${angle}deg)`;
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371e3; // Radio de la Tierra en metros
+            const φ1 = lat1 * Math.PI/180;
+            const φ2 = lat2 * Math.PI/180;
+            const Δφ = (lat2-lat1) * Math.PI/180;
+            const Δλ = (lon2-lon1) * Math.PI/180;
+
+            const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+                    Math.cos(φ1) * Math.cos(φ2) *
+                    Math.sin(Δλ/2) * Math.sin(Δλ/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+            return R * c; // Distancia en metros
+        }
+
+        function onGPSUpdate(event) {
+            console.log('Evento de actualización GPS:', event.detail);
+            showDebugInfo('Evento de actualización GPS recibido');
+            
+            const pos = event.detail.position;
+            document.getElementById('gps-status').textContent = 'Activo';
+            document.getElementById('gps-accuracy').textContent = pos.accuracy.toFixed(1);
+            
+            const accuracyElement = document.getElementById('gps-accuracy');
+            if (pos.accuracy < 5) {
+                accuracyElement.style.color = '#4CAF50';
+            } else if (pos.accuracy < 10) {
+                accuracyElement.style.color = '#FFC107';
+            } else {
+                accuracyElement.style.color = '#F44336';
+            }
+            
+            if (arLoadingScreen.classList.contains('active')) {
+                arLoadingScreen.classList.remove('active');
+            }
+            
+            showMessage(`GPS activado. Precisión: ${pos.accuracy.toFixed(2)}m. Para mejor precisión, asegúrate de tener vista clara del cielo.`, 4000);
+            
+            if (modelLoaded) {
+                adjustModelScale();
+            }
+        }
+
+        function onGPSError(event) {
+            console.error('Error de GPS:', event.detail);
+            showDebugInfo(`Error de GPS: ${event.detail.message}`);
+            document.getElementById('gps-status').textContent = 'Error';
+            showMessage('Error de GPS: ' + event.detail.message, 5000);
+        }
+
+        function onModelLoaded() {
+            console.log('Modelo 3D cargado correctamente');
+            showDebugInfo('Modelo 3D cargado');
+            modelLoaded = true;
+            
+            if (arModel && arModel.object3D) {
+                arModel.object3D.traverse((node) => {
+                    if (node.isMesh && node.material) {
+                        node.material.transparent = true;
+                        node.material.alphaTest = 0.1;
+                        node.material.needsUpdate = true;
+                    }
+                });
+            }
+
+            if (gpsInitialized) {
+                adjustModelScale();
+            }
+            
+            setupModelInteraction();
+        }
+
+        function onModelError(event) {
+            console.error('Error al cargar el modelo 3D:', event.detail);
+            showDebugInfo(`Error al cargar modelo: ${event.detail}`);
+            showMessage('Error al cargar el modelo 3D. Verifica que el archivo sea válido.', 5000);
+        }
+
+        function setupModelInteraction() {
+            if (!arModel || !arModel.object3D) return;
+            
+            arModel.setAttribute('class', 'intersectable');
+            
+            arScene.addEventListener('click', (event) => {
+                if (!appState.explorationMode) return;
+                
+                mouse.x = (event.detail.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(event.detail.clientY / window.innerHeight) * 2 + 1;
+                
+                raycaster.setFromCamera(mouse, arCamera.components.camera.camera);
+                
+                const intersects = raycaster.intersectObject(arModel.object3D, true);
+                
+                if (intersects.length > 0) {
+                    const intersection = intersects[0];
+                    showDebugInfo(`Intersección en: ${intersection.point.x.toFixed(2)}, ${intersection.point.y.toFixed(2)}, ${intersection.point.z.toFixed(2)}`);
+                    
+                    if (intersection.object.material) {
+                        intersection.object.material.color.set(0xff0000);
+                        setTimeout(() => {
+                            intersection.object.material.color.set(0xffffff);
+                        }, 500);
+                    }
+                }
+            });
+        }
+
+        function adjustModelScale() {
+            if (!arModel || !arModel.object3D) {
+                console.log('El modelo aún no está listo para ajustar la escala');
+                showDebugInfo('Modelo no listo para ajustar escala');
+                setTimeout(adjustModelScale, 500);
+                return;
+            }
+            
+            console.log('Ajustando escala del modelo...');
+            showDebugInfo('Ajustando escala del modelo');
+            
+            const loader = new GLTFLoader();
+            loader.load(appState.modelURL, (gltf) => {
+                const box = new THREE.Box3().setFromObject(gltf.scene);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+
+                const baseScaleX = appState.realDimensions.width / size.x;
+                const baseScaleY = appState.realDimensions.height / size.y;
+                const baseScaleZ = appState.realDimensions.length / size.z;
+                
+                const finalScaleX = baseScaleX * appState.initialARScale;
+                const finalScaleY = baseScaleY * appState.initialARScale;
+                const finalScaleZ = baseScaleZ * appState.initialARScale;
+                
+                arModel.setAttribute('scale', `${finalScaleX} ${finalScaleY} ${finalScaleZ}`);
+                arModel.setAttribute('visible', 'true');
+                
+                console.log('Modelo escalado a:', finalScaleX, finalScaleY, finalScaleZ);
+                showDebugInfo(`Modelo escalado: ${finalScaleX.toFixed(2)}, ${finalScaleY.toFixed(2)}, ${finalScaleZ.toFixed(2)}`);
+                
+                document.getElementById('current-scale').textContent = appState.initialARScale.toFixed(1);
+                
+                // **CORRECCIÓN: Ya no llamamos a updateModelPosition aquí**
+                // AR.js se encarga de posicionar el modelo.
+            }, undefined, (error) => {
+                console.error('Error al cargar el modelo para ajustar escala:', error);
+                showDebugInfo(`Error al ajustar escala: ${error.message}`);
+            });
+        }
+
+        function stopAR() {
+            if (gpsWatchId) {
+                navigator.geolocation.clearWatch(gpsWatchId);
+                gpsWatchId = null;
+            }
+            
+            if (arScene) {
+                arScene.pause();
+                arScene.parentNode.removeChild(arScene);
+                arScene = null;
+                arCamera = null;
+                arModel = null;
+            }
+            
+            currentLocationIndicator.style.display = 'none';
+            modelLocationIndicator.style.display = 'none';
+            connectionLine.style.display = 'none';
+            distancePanel.style.display = 'none';
+            explorationMode.classList.remove('active');
+            iosStartButton.classList.remove('show');
+            
+            modelLoaded = false;
+            gpsInitialized = false;
+            appState.videoStarted = false;
+            
+            if (arDebugInfo) {
+                arDebugInfo.style.display = 'none';
+            }
+            
+            navigateTo('scale');
+        }
+
+        // Funciones para manejo de caché
+        async function clearCacheAndReload() {
+            await caches.delete(CACHE_NAME);
+            showMessage('Caché limpiado.');
+            setTimeout(() => window.location.reload(), 1000);
+        }
+
+        async function loadDataFromCache() {
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                const [modelRes, coordsRes, arTargetRes] = await Promise.all([
+                    cache.match('cached-model.glb'),
+                    cache.match('cached-coords.json'),
+                    cache.match('cached-ar-target-coords.json')
+                ]);
+
+                if (!modelRes || !coordsRes) throw new Error("Datos no encontrados en caché.");
+
+                appState.coords = await coordsRes.json();
+                appState.modelURL = URL.createObjectURL(await modelRes.blob());
+                
+                if (arTargetRes) {
+                    appState.arTargetCoords = await arTargetRes.json();
+                }
+
+                document.getElementById('upload-section').classList.add('hidden');
+                document.getElementById('load-data-btn').classList.add('hidden');
+                document.getElementById('status-section').classList.remove('hidden');
+                document.getElementById('goto-map-btn').disabled = false;
+                showMessage('Datos cargados desde el caché.');
+                return true;
+            } catch (error) {
+                console.error('Error al cargar desde caché:', error);
+                return false;
+            }
+        }
+
+        async function saveDataToCache() {
+            const modelFile = document.getElementById('model-upload').files[0];
+            const lat = parseFloat(document.getElementById('latitude-input').value);
+            const lon = parseFloat(document.getElementById('longitude-input').value);
+
+            if (!modelFile) {
+                showMessage('Error: Debes seleccionar un archivo de modelo 3D (.glb).', 5000);
+                return;
+            }
+            if (!modelFile.name.toLowerCase().endsWith('.glb')) {
+                showMessage('Error: El formato del archivo debe ser .glb', 5000);
+                return;
+            }
+            if (isNaN(lat) || isNaN(lon)) {
+                showMessage('Error: Debes introducir valores válidos para latitud y longitud.', 5000);
+                return;
+            }
+
+            showMessage('Guardando datos en caché...');
+            appState.coords = { latitude: lat, longitude: lon };
+
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                await Promise.all([
+                    cache.put('cached-model.glb', new Response(modelFile)),
+                    cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(appState.coords)], {type : 'application/json'})))
+                ]);
+                
+                await loadDataFromCache(); 
+                showMessage('¡Datos guardados y cargados exitosamente!', 3000);
+
+            } catch (error) {
+                console.error('Error al guardar en caché:', error);
+                showMessage('Error al guardar datos. Inténtalo de nuevo.', 5000);
+            }
+        }
+
+        async function updateCoordsInCache(coords) {
+            appState.coords = coords;
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                await cache.put('cached-coords.json', new Response(new Blob([JSON.stringify(appState.coords)], {type : 'application/json'})));
+            } catch (error) {
+                console.error('Failed to update coordinates in cache:', error);
+            }
+        }
+        
+        async function applyCoordsToAR() {
+            if (!map) {
+                showMessage('El mapa no está inicializado.', 2000);
+                return;
+            }
+            
+            const center = map.getCenter();
+            appState.arTargetCoords = { latitude: center.lat, longitude: center.lng };
+            
+            try {
+                const cache = await caches.open(CACHE_NAME);
+                await cache.put('cached-ar-target-coords.json', new Response(new Blob([JSON.stringify(appState.arTargetCoords)], {type : 'application/json'})));
+                showMessage(`Coordenadas aplicadas: ${center.lat.toFixed(6)}, ${center.lng.toFixed(6)}`, 3000);
+            } catch (error) {
+                console.error('Failed to save AR target coordinates in cache:', error);
+                showMessage('Error al guardar coordenadas para AR.', 3000);
+            }
+        }
+
+        function useCurrentLocation() {
+            if (!navigator.geolocation) {
+                showMessage("Geolocalización no es soportada.");
+                return;
+            }
+
+            showMessage("Obteniendo ubicación...");
+            navigator.geolocation.getCurrentPosition(
+                position => {
+                    document.getElementById('latitude-input').value = position.coords.latitude.toFixed(6);
+                    document.getElementById('longitude-input').value = position.coords.longitude.toFixed(6);
+                    showMessage("Ubicación obtenida.");
+                },
+                error => {
+                    console.error('Error al obtener ubicación:', error);
+                    showMessage("No se pudo obtener la ubicación. Revisa los permisos.");
+                },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+            );
+        }
+
+        function initMapAndPreview() {
+            if (!appState.coords) {
+                navigateTo('upload');
+                return;
+            }
+
+            if (map) {
+                map.remove();
+                map = null;
+            }
+
+            const mapContainer = document.getElementById('map-canvas');
+            map = L.map(mapContainer, {
+                zoomControl: false,
+                preferCanvas: true
+            }).setView([appState.coords.latitude, appState.coords.longitude], 18);
+
+            const osmTiles = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+                maxZoom: 19
+            });
+
+            const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: 'Imagery &copy;2025 Google'
+            });
+
+            const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', {
+                maxZoom: 20,
+                subdomains: ['mt0', 'mt1', 'mt2', 'mt3'],
+                attribution: 'Imagery &copy;2025 Google, Map data &copy;2025 Google'
+            });
+
+            googleSat.addTo(map);
+
+            const baseMaps = {
+                "OpenStreetMap": osmTiles,
+                "Google Satélite": googleSat,
+                "Google Híbrido": googleHybrid
+            };
+
+            L.control.layers(baseMaps, null, { position: 'topright' }).addTo(map);
+
+            const initialMarker = L.marker([appState.coords.latitude, appState.coords.longitude], {
+                draggable: true,
+                autoPan: true
+            }).addTo(map)
+            .bindPopup('Ubicación Inicial (Arrástrame)')
+            .openPopup();
+
+            initialMarker.on('dragend', function(event) {
+                const newPosition = event.target.getLatLng();
+                appState.coords = { latitude: newPosition.lat, longitude: newPosition.lng };
+                updateCoordsInCache(appState.coords);
+                document.getElementById('jumpto-lat').value = newPosition.lat.toFixed(6);
+                document.getElementById('jumpto-lon').value = newPosition.lng.toFixed(6);
+                showMessage('Ubicación inicial actualizada.', 3000);
+            });
+            
+            if (appState.arTargetCoords) {
+                modelLocationMarker = L.marker([appState.arTargetCoords.latitude, appState.arTargetCoords.longitude])
+                    .addTo(map)
+                    .bindPopup('Ubicación del Modelo 3D')
+                    .setIcon(L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', 
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', 
+                        iconSize: [25, 41], 
+                        iconAnchor: [12, 41], 
+                        popupAnchor: [1, -34], 
+                        shadowSize: [41, 41]
+                    }));
+            }
+            
+            if (appState.currentGPSLocation) {
+                if (currentLocationMarker) {
+                    map.removeLayer(currentLocationMarker);
+                }
+                
+                currentLocationMarker = L.marker([appState.currentGPSLocation.latitude, appState.currentGPSLocation.longitude])
+                    .addTo(map)
+                    .bindPopup('Tu ubicación actual (GPS)')
+                    .setIcon(L.icon({
+                        iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', 
+                        shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', 
+                        iconSize: [25, 41], 
+                        iconAnchor: [12, 41], 
+                        popupAnchor: [1, -34], 
+                        shadowSize: [41, 41]
+                    }));
+            }
+
+            map.on('moveend', () => {
+                const newCoords = map.getCenter();
+                updateCoordsInCache({ latitude: newCoords.lat, longitude: newCoords.lng });
+                document.getElementById('jumpto-lat').value = newCoords.lat.toFixed(6);
+                document.getElementById('jumpto-lon').value = newCoords.lng.toFixed(6);
+            });
+
+            document.getElementById('jumpto-lat').value = appState.coords.latitude.toFixed(6);
+            document.getElementById('jumpto-lon').value = appState.coords.longitude.toFixed(6);
+
+            initModelPreview();
+            setTimeout(() => {
+                showMessage("1 dedo: inclinar. 2 dedos: girar.", 5000);
+            }, 500);
+        }
+
+        async function initModelPreview() {
+            const canvas = document.getElementById('model-preview-canvas');
+            const container = document.getElementById('map-container');
+
+            if (!container) return;
+
+            canvas.style.display = 'block';
+            canvas.style.zIndex = '401';
+            
+            modelPreview.renderer = new THREE.WebGLRenderer({
+                canvas,
+                alpha: true,
+                antialias: true,
+                logarithmicDepthBuffer: true
+            });
+
+            modelPreview.renderer.setSize(container.clientWidth, container.clientHeight);
+            modelPreview.renderer.setPixelRatio(window.devicePixelRatio);
+            modelPreview.renderer.setClearColor(0x000000, 0);
+            
+            modelPreview.scene = new THREE.Scene();
+            modelPreview.camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            modelPreview.camera.position.set(0, 40, 30);
+            modelPreview.camera.lookAt(0, 0, 0);
+
+            modelPreview.scene.add(new THREE.AmbientLight(0xffffff, 1.8));
+
+            const dirLight = new THREE.DirectionalLight(0xffffff, 2.5);
+            dirLight.position.set(5, 10, 7.5);
+            modelPreview.scene.add(dirLight);
+
+            if (modelPreview.model) {
+                modelPreview.scene.remove(modelPreview.model);
+            }
+
+            try {
+                const loader = new GLTFLoader();
+                const gltf = await loader.loadAsync(appState.modelURL);
+                modelPreview.model = gltf.scene;
+
+                modelPreview.model.traverse((node) => {
+                    if (node.isMesh && node.material) {
+                        node.material.transparent = false;
+                        node.material.depthWrite = true;
+                        node.material.needsUpdate = true;
+                    }
+                });
+
+                const box = new THREE.Box3().setFromObject(modelPreview.model);
+                const size = new THREE.Vector3();
+                box.getSize(size);
+                modelPreview.maxSize = Math.max(size.x, size.y, size.z) || 1;
+
+                appState.modelBounds = {
+                    width: size.x,
+                    length: size.z,
+                    height: size.y
+                };
+
+                modelPreview.model.position.sub(box.getCenter(new THREE.Vector3()));
+                modelPreview.scene.add(modelPreview.model);
+                
+                animateModelPreview();
+            } catch (error) {
+                console.error("Error cargando modelo para vista previa:", error);
+                showMessage("Error al cargar el modelo 3D para vista previa.");
+            }
+        }
+
+        function animateModelPreview() {
+            modelPreview.animationFrameId = requestAnimationFrame(animateModelPreview);
+
+            if (modelPreview.model) {
+                const scale = (appState.mapScale * 0.5) / modelPreview.maxSize;
+                modelPreview.model.scale.set(scale, scale, scale);
+            }
+
+            if (modelPreview.renderer && modelPreview.scene && modelPreview.camera) {
+                modelPreview.renderer.clearDepth();
+                modelPreview.renderer.render(modelPreview.scene, modelPreview.camera);
+            }
+        }
+
+        function jumpToCoords() {
+            const lat = parseFloat(document.getElementById('jumpto-lat').value);
+            const lon = parseFloat(document.getElementById('jumpto-lon').value);
+            if (isNaN(lat) || isNaN(lon) || !map) return;
+            map.setView([lat, lon], map.getZoom());
+        }
+
+        function onWindowResize() {
+            if (pages.map.classList.contains('active') && modelPreview.renderer) {
+                const container = document.getElementById('map-container');
+                if (!container) return;
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+
+                modelPreview.camera.aspect = width / height;
+                modelPreview.camera.updateProjectionMatrix();
+                modelPreview.renderer.setSize(width, height);
+            }
+
+            if (pages.map.classList.contains('active') && map) {
+                setTimeout(() => {
+                    map.invalidateSize();
+                }, 100);
+            }
+        }
+
+        function loadScaleSettings() {
+            document.getElementById('real-width-input').value = appState.realDimensions.width;
+            document.getElementById('real-length-input').value = appState.realDimensions.length;
+            document.getElementById('real-height-input').value = appState.realDimensions.height;
+            document.getElementById('ground-height-input').value = appState.realDimensions.groundHeight;
+            
+            document.getElementById('initial-ar-scale-slider').value = appState.initialARScale;
+            document.getElementById('initial-scale-value').textContent = appState.initialARScale.toFixed(1) + 'x';
+            
+            document.getElementById('ar-distance-slider').value = appState.arDistance;
+            document.getElementById('distance-value').textContent = appState.arDistance.toFixed(0) + 'm';
+        }
+
+        function saveScaleSettings() {
+            appState.realDimensions.width = parseFloat(document.getElementById('real-width-input').value) || 10.0;
+            appState.realDimensions.length = parseFloat(document.getElementById('real-length-input').value) || 15.0;
+            appState.realDimensions.height = parseFloat(document.getElementById('real-height-input').value) || 3.0;
+            appState.realDimensions.groundHeight = parseFloat(document.getElementById('ground-height-input').value) || 0.0;
+            
+            appState.initialARScale = parseFloat(document.getElementById('initial-ar-scale-slider').value);
+            appState.arDistance = parseFloat(document.getElementById('ar-distance-slider').value);
+
+            showMessage('Configuración de escala guardada', 2000);
+        }
+
+        // --- Event Listeners ---
+        window.addEventListener('resize', onWindowResize, false);
+        document.getElementById('load-data-btn').addEventListener('click', saveDataToCache);
+        document.getElementById('clear-cache-btn').addEventListener('click', clearCacheAndReload);
+        document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
+        document.getElementById('use-location-btn').addEventListener('click', useCurrentLocation);
+        document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
+        document.getElementById('goto-scale-btn').addEventListener('click', () => navigateTo('scale'));
+        document.getElementById('back-to-map-from-scale-btn').addEventListener('click', () => navigateTo('map'));
+        document.getElementById('goto-ar-from-scale-btn').addEventListener('click', () => {
+            saveScaleSettings();
+            startARFlow();
+        });
+        document.getElementById('back-to-scale-btn').addEventListener('click', stopAR);
+        document.getElementById('map-scale-slider').addEventListener('input', (e) => {
+            appState.mapScale = parseFloat(e.target.value);
+        });
+        document.getElementById('map-zoom-slider').addEventListener('input', (e) => {
+            if (map) map.setZoom(parseFloat(e.target.value));
+        });
+        document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
+        
+        document.getElementById('apply-coords-btn').addEventListener('click', applyCoordsToAR);
+        
+        document.getElementById('initial-ar-scale-slider').addEventListener('input', (e) => {
+            const scaleValue = parseFloat(e.target.value);
+            document.getElementById('initial-scale-value').textContent = scaleValue.toFixed(1) + 'x';
+        });
+        
+        document.getElementById('ar-distance-slider').addEventListener('input', (e) => {
+            const distanceValue = parseFloat(e.target.value);
+            document.getElementById('distance-value').textContent = distanceValue.toFixed(0) + 'm';
+        });
+
+        document.getElementById('ar-scale-slider').addEventListener('input', (e) => {
+            const scaleValue = parseFloat(e.target.value);
+            document.getElementById('current-scale').textContent = scaleValue.toFixed(1);
+            
+            if (arModel && arModel.object3D) {
+                const currentScale = arModel.getAttribute('scale');
+                const baseScale = currentScale.split(' ').map(parseFloat);
+                const dynamicScale = scaleValue / appState.initialARScale;
+                arModel.setAttribute('scale', `${baseScale[0] * dynamicScale} ${baseScale[1] * dynamicScale} ${baseScale[2] * dynamicScale}`);
+            }
+        });
+
+        document.getElementById('reset-position-btn').addEventListener('click', () => {
+            if (arCamera && arCamera.components['gps-camera']) {
+                arCamera.components['gps-camera'].resetPosition();
+                showMessage('Posición reiniciada', 2000);
+            }
+        });
+        
+        toggleExplorationBtn.addEventListener('click', () => {
+            appState.explorationMode = !appState.explorationMode;
+            
+            if (appState.explorationMode) {
+                explorationMode.classList.add('active');
+                toggleExplorationBtn.textContent = 'Desactivar Exploración';
+                showMessage('Modo de exploración activado. Ahora puedes interactuar con el modelo.', 3000);
+                
+                if (arModel && arModel.object3D) {
+                    const currentScale = arModel.getAttribute('scale');
+                    const scaleValues = currentScale.split(' ').map(parseFloat);
+                    arModel.setAttribute('scale', `${scaleValues[0] * 2} ${scaleValues[1] * 2} ${scaleValues[2] * 2}`);
+                }
+            } else {
+                explorationMode.classList.remove('active');
+                toggleExplorationBtn.textContent = 'Activar Exploración';
+                showMessage('Modo de exploración desactivado.', 3000);
+                
+                if (arModel && arModel.object3D) {
+                    const currentScale = arModel.getAttribute('scale');
+                    const scaleValues = currentScale.split(' ').map(parseFloat);
+                    arModel.setAttribute('scale', `${scaleValues[0] / 2} ${scaleValues[1] / 2} ${scaleValues[2] / 2}`);
+                }
+            }
+        });
+
+        const mapContainer = document.getElementById('map-container');
+        let longPressTimeout = null;
+
+        const getAngle = (t1, t2) => Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX);
+
+        mapContainer.addEventListener('contextmenu', e => e.preventDefault());
+        mapContainer.addEventListener('mousedown', (e) => {
+            if (e.button === 2) {
+                modelPreview.isRotating = true;
+                if (map) map.dragging.disable();
+                modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        window.addEventListener('mousemove', (e) => {
+            if (modelPreview.isRotating && e.buttons === 2 && modelPreview.model) {
+                const deltaX = e.clientX - modelPreview.previousMousePosition.x;
+                const deltaY = e.clientY - modelPreview.previousMousePosition.y;
+                modelPreview.model.rotation.y += deltaX * 0.01;
+                modelPreview.model.rotation.x += deltaY * 0.01;
+                modelPreview.previousMousePosition = { x: e.clientX, y: e.clientY };
+            }
+        });
+        window.addEventListener('mouseup', (e) => {
+            if (e.button === 2 && modelPreview.isRotating) {
+                modelPreview.isRotating = false;
+                if (map) map.dragging.enable();
+            }
+        });
+
+        mapContainer.addEventListener('touchstart', (e) => {
+            clearTimeout(longPressTimeout);
+            if (e.touches.length === 1) {
+                modelPreview.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+                longPressTimeout = setTimeout(() => {
+                    modelPreview.isRotating = true;
+                    if (map) map.dragging.disable();
+                    showMessage('Modo Inclinación Activado', 2000);
+                }, 1000);
+            } else if (e.touches.length === 2) {
+                modelPreview.isTwoFingerRotating = true;
+                if (map) map.dragging.disable();
+                modelPreview.previousTouchAngle = getAngle(e.touches[0], e.touches[1]);
+            }
+        }, { passive: false });
+
+        mapContainer.addEventListener('touchmove', (e) => {
+            if (modelPreview.isRotating && e.touches.length === 1) {
+                e.preventDefault();
+                const deltaX = e.touches[0].clientX - modelPreview.previousMousePosition.x;
+                const deltaY = e.touches[0].clientY - modelPreview.previousMousePosition.y;
+                if (modelPreview.model) {
+                    modelPreview.model.rotation.y += deltaX * 0.02;
+                    modelPreview.model.rotation.x += deltaY * 0.02;
+                }
+                modelPreview.previousMousePosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            } else if (modelPreview.isTwoFingerRotating && e.touches.length === 2) {
+                e.preventDefault();
+                const currentAngle = getAngle(e.touches[0], e.touches[1]);
+                const deltaAngle = currentAngle - modelPreview.previousTouchAngle;
+                if (modelPreview.model) {
+                    modelPreview.model.rotation.z += deltaAngle;
+                }
+                modelPreview.previousTouchAngle = currentAngle;
+            }
+        });
+
+        mapContainer.addEventListener('touchend', (e) => {
+            clearTimeout(longPressTimeout);
+            if (modelPreview.isRotating || modelPreview.isTwoFingerRotating) {
+                modelPreview.isRotating = false;
+                modelPreview.isTwoFingerRotating = false;
+                if (map) map.dragging.enable();
+            }
+        });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            window.addEventListener('model-error', (event) => {
+                console.error('Error al cargar el modelo:', event.detail);
+                showMessage('Error al cargar el modelo 3D. Verifica que el archivo sea válido.', 5000);
+            });
+        });
+
+        function initializeApp() {
+            document.getElementById('version-display').textContent = `v${APP_VERSION}`;
+            
+            appState.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            if (appState.isIOS) {
+                showDebugInfo('Dispositivo iOS detectado');
+            }
+            
+            loadDataFromCache().then(successfullyLoaded => {
+                if (successfullyLoaded) {
+                    console.log("Aplicación iniciada con datos desde la caché.");
+                } else {
+                    document.getElementById('goto-map-btn').disabled = true;
+                    console.log("Aplicación iniciada sin datos en caché.");
+                }
+            });
+        }
 
         initializeApp();
     </script>
 </body>
 </html>
+
 
