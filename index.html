@@ -18,7 +18,7 @@
             
             return new Promise((resolve) => {
                 const aframeScript = document.createElement('script');
-                aframeScript.src = 'https://aframe.io/releases/1.3.0/aframe.min.js';
+                aframeScript.src = 'https://aframe.io/releases/1.3.0/aframe.min.js';  // Revertido a 1.3.0 para compatibilidad con AR.js
                 document.head.appendChild(aframeScript);
                 
                 aframeScript.onload = () => {
@@ -563,52 +563,6 @@
         .ios-start-button.show {
             display: block;
         }
-        
-        /* ESTILOS CRÍTICOS PARA LA CÁMARA AR */
-        #arjs-video {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100vw !important;
-            height: 100vh !important;
-            object-fit: cover !important;
-            z-index: -1 !important;
-            display: block !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            background: black !important;
-        }
-        
-        .a-canvas {
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 1 !important;
-            background: transparent !important;
-            pointer-events: auto !important;
-        }
-        
-        #ar-scene {
-            background: transparent !important;
-            position: fixed !important;
-            top: 0 !important;
-            left: 0 !important;
-            width: 100% !important;
-            height: 100% !important;
-            z-index: 0 !important;
-        }
-        
-        /* Asegurar que ningún elemento oculte el video */
-        #ar-page {
-            background: transparent !important;
-            overflow: hidden !important;
-        }
-        
-        #ar-page * {
-            box-sizing: border-box !important;
-        }
     </style>
 </head>
 <body>
@@ -622,7 +576,7 @@
                         <label for="model-upload" class="block mb-2 text-sm font-medium text-gray-700">1. Subir Modelo 3D (.glb)</label>
                         <input type="file" id="model-upload" accept=".glb" class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none">
                     </div>
-                    <div class="grid grid-cols-2 gap:4">
+                    <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label for="latitude-input" class="block mb-2 text-sm font-medium text-gray-700">2. Latitud</label>
                             <input type="number" id="latitude-input" placeholder="Ej: 4.0950" step="any" class="w-full p-2 border rounded">
@@ -865,7 +819,24 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        const APP_VERSION = '0.05'; // Incrementado por correcciones en AR.js y cámara
+        /*
+         * =================================================================================
+         * SISTEMA DE VERSIONES - REGLA OBLIGATORIA
+         * =================================================================================
+         * La versión inicial de este código es 0.01.
+         *
+         * REGLA: Cada vez que se realice CUALQUIER cambio, corrección o mejora en este código,
+         * es OBLIGATORIO incrementar el número de versión en 0.01.
+         *
+         * Ejemplo: Si la versión actual es '0.01', la siguiente versión debe ser '0.02'.
+         * Si la versión es '0.99', la siguiente debe ser '1.00'.
+         *
+         * Esto es crucial para el seguimiento de cambios, la depuración y para asegurar
+         * que los usuarios siempre tengan la versión más actualizada y sin errores.
+         * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
+         * =================================================================================
+         */
+        const APP_VERSION = '0.04'; // Incrementado por correcciones en configuración de cámara y GPS
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
@@ -1130,27 +1101,32 @@
             modelLocationIndicator.style.display = 'flex';
             distancePanel.style.display = 'flex';
             
-            // **CONFIGURACIÓN CORREGIDA DE AR.JS**
+            /*
+             * =================================================================================
+             * CORRECCIÓN: Ajustes para resolver pantalla azul/negra y GPS no detectado
+             * =================================================================================
+             * - Revertir a gps-camera y gps-entity-place para compatibilidad estable.
+             * - Agregar parámetros de resolución para evitar estiramiento o negro.
+             * - Forzar high accuracy en GPS y agregar debug.
+             * - Remover background en escena y forzar transparent.
+             * =================================================================================
+             */
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
                     embedded
                     vr-mode-ui="enabled: false"
-                    renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true; colorManagement: true;"
-                    arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-                    style="position: fixed; top: 0; left: 0; width: 100%; height: 100%;">
+                    renderer="logarithmicDepthBuffer: true; antialias: true; precision: high; alpha: true;"
+                    style="background: transparent;"
+                    arjs="sourceType: webcam; videoTexture: true; sourceWidth: 640; sourceHeight: 480; displayWidth: 640; displayHeight: 480; debugUIEnabled: false;">
                     
-                    <!-- Cámara AR.js CORREGIDA -->
                     <a-camera 
                         id="ar-camera"
-                        gps-camera="minDistance: 1; maxDistance: 1000; simulateLatitude: 0; simulateLongitude: 0; simulateAltitude: 0;"
-                        rotation-reader 
-                        camera="fov: 80; near: 0.01; far: 10000;"
-                        wasd-controls="enabled: false"
-                        look-controls="enabled: true">
+                        gps-camera="gpsMinDistance: 5; gpsTimeInterval: 1000;" 
+                        rotation-reader
+                        camera="active: true; near: 0.1; far: 10000;">
                     </a-camera>
 
-                    <!-- Marker para geolocalización -->
                     <a-entity
                         id="arch-model"
                         gltf-model="url(${appState.modelURL})"
@@ -1158,13 +1134,11 @@
                         position="0 ${appState.realDimensions.groundHeight} 0"
                         scale="1 1 1"
                         animation-mixer
-                        visible="true">
+                        visible="false">
                     </a-entity>
                     
-                    <!-- Luces mejoradas -->
-                    <a-light type="ambient" color="#FFFFFF" intensity="0.8"></a-light>
-                    <a-light type="directional" color="#FFFFFF" intensity="0.8" position="5 10 7.5" cast-shadow="true"></a-light>
-                    <a-light type="hemisphere" color="#FFFFFF" ground-color="#000000" intensity="0.6"></a-light>
+                    <a-light type="ambient" color="#BBB" intensity="1.5"></a-light>
+                    <a-light type="directional" color="#FFF" intensity="0.8" position="-0.5 1 1"></a-light>
                 </a-scene>
             `;
 
@@ -1172,238 +1146,150 @@
             arCamera = document.querySelector('#ar-camera');
             arModel = document.querySelector('#arch-model');
             
-            // **MANEJO MEJORADO DE LA CARGA DE LA ESCENA**
             arScene.addEventListener('loaded', () => {
                 console.log('Escena AR cargada correctamente');
-                showDebugInfo('Escena AR cargada - Iniciando cámara');
+                showDebugInfo('Escena AR cargada');
                 
-                // Forzar la configuración del renderer para transparencia
                 if (arScene.renderer) {
-                    arScene.renderer.setClearColor(0x000000, 0);
-                    arScene.renderer.autoClear = false;
+                    arScene.renderer.setClearColor(0x000000, 0); // Transparente
                     arScene.renderer.setPixelRatio(window.devicePixelRatio);
+                    arScene.renderer.setSize(window.innerWidth, window.innerHeight);
+                    const canvas = arScene.renderer.domElement;
+                    canvas.style.backgroundColor = 'transparent';
+                    canvas.style.background = 'transparent';
                     showDebugInfo('Renderer configurado para transparencia');
                 }
                 
-                // Inicializar el video de la cámara de forma más agresiva
-                initializeCameraVideo();
+                // Forzar la visualización del video con retardo
+                setTimeout(() => {
+                    forceVideoVisibility();
+                }, 1000);
                 
-                // Configurar eventos
                 window.addEventListener('gps-camera-update-position', onGPSUpdate);
                 window.addEventListener('gps-camera-error', onGPSError);
-                
-                // Cargar el modelo
-                loadModelForAR();
+                arModel.addEventListener('model-loaded', onModelLoaded);
+                arModel.addEventListener('model-error', onModelError);
                 
                 startGPSWatch();
             });
             
-            // Manejar errores de carga
             arScene.addEventListener('error', (event) => {
                 console.error('Error al cargar la escena AR:', event.detail);
                 showDebugInfo(`Error de escena: ${event.detail}`);
                 showMessage('Error al cargar la escena AR. Verifica la consola para más detalles.', 5000);
             });
             
-            // Timeout de seguridad
             setTimeout(() => {
                 if (arLoadingScreen.classList.contains('active')) {
                     console.warn('La escena AR tardó demasiado en cargar, forzando visualización');
                     showDebugInfo('Forzando visualización de la escena AR');
                     arLoadingScreen.classList.remove('active');
-                    initializeCameraVideo(); // Forzar inicialización de cámara
+                    showMessage('La escena AR está cargando, puede tardar unos segundos...', 3000);
                 }
             }, 10000);
         }
 
-        // **NUEVA FUNCIÓN PARA INICIALIZAR EL VIDEO DE LA CÁMARA**
-        function initializeCameraVideo() {
-            console.log('Inicializando video de cámara...');
-            
-            // Estrategia 1: Buscar el video creado por AR.js
-            let videoElement = document.querySelector('video');
-            
-            if (!videoElement) {
-                // Estrategia 2: Crear nuestro propio video si AR.js no lo creó
-                console.log('No se encontró video de AR.js, creando uno manualmente...');
-                videoElement = document.createElement('video');
-                videoElement.id = 'arjs-video';
-                videoElement.setAttribute('autoplay', 'true');
-                videoElement.setAttribute('playsinline', 'true');
-                videoElement.setAttribute('webkit-playsinline', 'true');
-                videoElement.setAttribute('muted', 'true');
-                videoElement.style.cssText = `
-                    position: fixed !important;
-                    top: 0 !important;
-                    left: 0 !important;
-                    width: 100% !important;
-                    height: 100% !important;
-                    object-fit: cover !important;
-                    z-index: -1 !important;
-                    display: block !important;
-                    opacity: 1 !important;
-                    visibility: visible !important;
-                    background: black !important;
-                `;
-                document.getElementById('ar-page').appendChild(videoElement);
-                
-                // Inicializar stream de cámara manualmente
-                initializeCameraStream(videoElement);
-            } else {
-                // AR.js ya creó un video, aplicar estilos
-                console.log('Video de AR.js encontrado, aplicando estilos...');
-                applyVideoStyles(videoElement);
-                forceVideoPlay(videoElement);
-            }
-            
-            // Estrategia 3: Buscar periódicamente por el video
-            const videoCheckInterval = setInterval(() => {
-                const videos = document.querySelectorAll('video');
-                if (videos.length > 0) {
-                    videos.forEach(video => {
-                        if (video !== videoElement) {
-                            applyVideoStyles(video);
-                            forceVideoPlay(video);
-                        }
-                    });
-                }
-            }, 1000);
-            
-            // Limpiar intervalo después de 10 segundos
-            setTimeout(() => clearInterval(videoCheckInterval), 10000);
-        }
-
-        // **FUNCIÓN PARA APLICAR ESTILOS AL VIDEO**
-        function applyVideoStyles(videoElement) {
-            videoElement.style.cssText = `
-                position: fixed !important;
-                top: 0 !important;
-                left: 0 !important;
-                width: 100% !important;
-                height: 100% !important;
-                object-fit: cover !important;
-                z-index: -1 !important;
-                display: block !important;
-                opacity: 1 !important;
-                visibility: visible !important;
-                background: black !important;
-                transform: none !important; /* Corrige espejado en algunos dispositivos */
-            `;
-            
-            videoElement.setAttribute('autoplay', 'true');
-            videoElement.setAttribute('playsinline', 'true');
-            videoElement.setAttribute('webkit-playsinline', 'true');
-            videoElement.setAttribute('muted', 'true');
-        }
-
-        // **FUNCIÓN PARA INICIALIZAR STREAM DE CÁMARA MANUALMENTE**
-        async function initializeCameraStream(videoElement) {
-            try {
-                showDebugInfo('Solicitando acceso a la cámara...');
-                
-                const stream = await navigator.mediaDevices.getUserMedia({
-                    video: {
-                        facingMode: 'environment',
-                        width: { ideal: 1280 },
-                        height: { ideal: 720 }
-                    },
-                    audio: false
-                });
-                
-                videoElement.srcObject = stream;
-                showDebugInfo('Stream de cámara obtenido correctamente');
-                
-                forceVideoPlay(videoElement);
-                
-            } catch (error) {
-                console.error('Error al acceder a la cámara:', error);
-                showDebugInfo(`Error de cámara: ${error.message}`);
-                showMessage(`Error de cámara: ${error.message}`, 5000);
-            }
-        }
-
-        // **FUNCIÓN MEJORADA PARA FORZAR REPRODUCCIÓN DE VIDEO**
-        function forceVideoPlay(videoElement) {
-            if (!videoElement) return;
-            
-            const playVideo = () => {
-                const playPromise = videoElement.play();
-                
-                if (playPromise !== undefined) {
-                    playPromise.then(() => {
-                        console.log('Video reproduciéndose correctamente');
-                        appState.videoStarted = true;
-                        showDebugInfo('Video de cámara activo');
-                        
-                        // Ocultar pantalla de carga si está visible
-                        if (arLoadingScreen.classList.contains('active')) {
-                            arLoadingScreen.classList.remove('active');
-                        }
-                        
-                        // Ocultar botón de iOS si es necesario
-                        if (appState.isIOS && iosStartButton.classList.contains('show')) {
-                            iosStartButton.classList.remove('show');
-                        }
-                        
-                        showMessage('Cámara AR activada', 2000);
-                        
-                    }).catch(error => {
-                        console.error('Error al reproducir video:', error);
-                        showDebugInfo(`Error reproducción: ${error.message}`);
-                        
-                        // Mostrar botón de inicio para iOS
-                        if (appState.isIOS && !iosStartButton.classList.contains('show')) {
-                            iosStartButton.classList.add('show');
-                            showDebugInfo('Mostrando botón de inicio para iOS');
-                        }
-                    });
-                }
-            };
-            
-            // Si el video ya tiene metadata, reproducir inmediatamente
-            if (videoElement.readyState >= 1) {
-                playVideo();
-            } else {
-                // Esperar a que el video esté listo
-                videoElement.addEventListener('loadedmetadata', playVideo, { once: true });
-            }
-        }
-
-        // **FUNCIÓN SEPARADA PARA CARGAR EL MODELO EN AR**
-        function loadModelForAR() {
-            if (!arModel) {
-                console.error('Elemento del modelo no encontrado en la escena AR');
-                return;
-            }
-            
-            arModel.addEventListener('model-loaded', () => {
-                console.log('Modelo 3D cargado en AR');
-                showDebugInfo('Modelo 3D cargado en AR');
-                modelLoaded = true;
-                
-                // Ajustar escala y materiales
-                if (arModel.object3D) {
-                    arModel.object3D.traverse((node) => {
-                        if (node.isMesh && node.material) {
-                            node.material.transparent = true;
-                            node.material.alphaTest = 0.1;
-                            node.material.depthWrite = true;
-                            node.material.needsUpdate = true;
-                        }
-                    });
+        function forceVideoVisibility() {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+                videos.forEach(video => {
+                    video.style.position = 'fixed';
+                    video.style.top = '0';
+                    video.style.left = '0';
+                    video.style.width = '100%';
+                    video.style.height = '100%';
+                    video.style.objectFit = 'cover';
+                    video.style.zIndex = '-1';
+                    video.style.display = 'block';
+                    video.style.opacity = '1';
+                    video.style.visibility = 'visible';
+                    video.style.backgroundColor = 'transparent';  // Cambiado para evitar colores de fondo
                     
-                    adjustModelScale();
-                }
-                
-                setupModelInteraction();
-            });
+                    video.setAttribute('autoplay', 'true');
+                    video.setAttribute('playsinline', 'true');
+                    video.setAttribute('webkit-playsinline', 'true');
+                    video.setAttribute('muted', 'true');
+                    
+                    forceVideoPlay(video);
+                });
+                showDebugInfo('Video de cámara forzado a ser visible');
+            } else {
+                showDebugInfo('No se encontró el elemento video, reintentando...');
+                setTimeout(forceVideoVisibility, 1000);
+            }
             
-            arModel.addEventListener('model-error', (event) => {
-                console.error('Error al cargar el modelo 3D en AR:', event.detail);
-                showDebugInfo(`Error modelo AR: ${event.detail}`);
-                showMessage('Error al cargar el modelo 3D en AR', 5000);
-            });
+            const canvases = document.querySelectorAll('canvas');
+            if (canvases.length > 0) {
+                canvases.forEach(canvas => {
+                    canvas.style.zIndex = '1';
+                    canvas.style.position = 'fixed';
+                    canvas.style.top = '0';
+                    canvas.style.left = '0';
+                    canvas.style.width = '100%';
+                    canvas.style.height = '100%';
+                    canvas.style.pointerEvents = 'none';
+                    canvas.style.backgroundColor = 'transparent';
+                    canvas.style.background = 'transparent';
+                });
+                showDebugInfo('Canvas configurado para transparencia');
+            }
         }
+
+        function forceVideoPlay(video) {
+            if (!video) return;
+            
+            const playPromise = video.play();
+            
+            if (playPromise !== undefined) {
+                playPromise.then(() => {
+                    console.log('Video reproduciéndose correctamente');
+                    appState.videoStarted = true;
+                    showDebugInfo('Video iniciado correctamente');
+                    
+                    if (appState.isIOS && iosStartButton.classList.contains('show')) {
+                        iosStartButton.classList.remove('show');
+                    }
+                }).catch(error => {
+                    console.error('Error al reproducir video:', error);
+                    showDebugInfo(`Error al reproducir video: ${error.message}`);
+                    
+                    if (appState.isIOS && !iosStartButton.classList.contains('show')) {
+                        iosStartButton.classList.add('show');
+                        showDebugInfo('Mostrando botón de inicio para iOS');
+                    }
+                });
+            } else {
+                appState.videoStarted = true;
+                showDebugInfo('Video iniciado (método legacy)');
+            }
+        }
+
+        function startVideoWithUserInteraction() {
+            const videos = document.querySelectorAll('video');
+            if (videos.length > 0) {
+                videos.forEach(video => {
+                    forceVideoPlay(video);
+                });
+            }
+            
+            iosStartButton.classList.remove('show');
+            
+            showMessage('Cámara AR iniciada', 2000);
+        }
+
+        iosStartButton.addEventListener('click', startVideoWithUserInteraction);
+        
+        document.addEventListener('touchstart', function() {
+            if (!appState.videoStarted && pages.ar.classList.contains('active')) {
+                startVideoWithUserInteraction();
+            }
+        }, { once: true });
+        
+        document.addEventListener('click', function() {
+            if (!appState.videoStarted && pages.ar.classList.contains('active')) {
+                startVideoWithUserInteraction();
+            }
+        }, { once: true });
 
         function updateLocationIndicators() {
             if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
@@ -1508,7 +1394,7 @@
                 },
                 { 
                     enableHighAccuracy: true, 
-                    timeout: 10000, 
+                    timeout: 5000,  // Reducido para respuestas más rápidas
                     maximumAge: 0
                 }
             );
@@ -2286,3 +2172,4 @@
     </script>
 </body>
 </html>
+
