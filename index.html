@@ -739,7 +739,7 @@
                 </div>
                 
                 <div id="status-section" class="mt-6 text-center hidden">
-                    <p id="status-text" class="text-lg font-semibold text-green-600">Modelo y ubicación cargados desde caché.</p>
+                    <p id="status-text" class="text-lg font-semibold text-green-600">Modelo y ubicación cargados.</p>
                 </div>
 
                 <div class="mt-6 flex flex-col sm:flex-row justify-center items-center gap-4">
@@ -756,7 +756,7 @@
                 <div class="mt-6 text-center">
                     <button id="clear-cache-btn" class="link-button danger text-sm">
                         <i class="fas fa-trash-can"></i>
-                        <span>Limpiar Caché y Recargar</span>
+                        <span>Limpiar Datos y Recargar</span>
                     </button>
                 </div>
             </div>
@@ -948,7 +948,7 @@
         import * as THREE from 'three';
         import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
-        const APP_VERSION = '0.08'; // GPS fix, height control, surface mode, guides, scale gestures
+        const APP_VERSION = '0.09'; // Button functionality restored
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace(/\./g, '')}`;
         let appState = {
             modelURL: null,
@@ -1060,7 +1060,6 @@
             arLoadingScreen.classList.add('active');
             
             try {
-                // ... (loading and permission logic remains the same)
                 updateLoadingScreen('step-libraries', 10, 'Cargando bibliotecas AR...');
                 await loadARLibraries();
                 updateLoadingScreen('step-permissions', 25, 'Verificando permisos...');
@@ -1094,7 +1093,6 @@
             document.getElementById('model-lat').textContent = targetCoords.latitude.toFixed(6);
             document.getElementById('model-lon').textContent = targetCoords.longitude.toFixed(6);
 
-            // CORRECCIÓN: Se elimina 'gps-entity-place' para usar posicionamiento manual y estable.
             arSceneContainer.innerHTML = `
                 <a-scene
                     id="ar-scene"
@@ -1128,7 +1126,6 @@
             });
         }
         
-        // CORRECCIÓN CRÍTICA: Lógica de posicionamiento manual
         function onGPSUpdate(event) {
             appState.currentGPSLocation = event.detail.position;
             const { latitude, longitude, accuracy } = appState.currentGPSLocation;
@@ -1152,15 +1149,11 @@
             
             document.getElementById('model-distance').textContent = `${distance.toFixed(1)}m`;
             
-            // This is a simplified projection. For accurate placement, a more complex
-            // transformation involving device orientation (compass heading) is needed.
-            // AR.js's gps-entity-place handles this, but we are overriding for stability.
-            // This logic will place the model IN FRONT of the user at the correct distance.
             const cameraPos = arCamera.object3D.position;
             arModel.setAttribute('position', {
                 x: cameraPos.x,
-                y: cameraPos.y + appState.modelHeight, // Use adjusted height
-                z: cameraPos.z - distance // Place 'distance' meters in front
+                y: cameraPos.y + appState.modelHeight,
+                z: cameraPos.z - distance
             });
         }
 
@@ -1171,9 +1164,8 @@
             const size = bbox.getSize(new THREE.Vector3());
             appState.modelBounds = { width: size.x, height: size.y, length: size.z };
             
-            // Apply initial scale based on real dimensions
             updateModelScale(appState.initialARScale);
-            updateModelPosition(); // Set initial position
+            updateModelPosition();
         }
 
         function initHeightSlider() {
@@ -1227,6 +1219,8 @@
             scale = Math.max(0.1, Math.min(scale, 10.0));
             
             const { width, height, length } = appState.modelBounds;
+            if(width === 0 || height === 0 || length === 0) return; // Avoid division by zero
+            
             const scaleX = (appState.realDimensions.width / width) * scale;
             const scaleY = (appState.realDimensions.height / height) * scale;
             const scaleZ = (appState.realDimensions.length / length) * scale;
@@ -1264,7 +1258,9 @@
         }
 
         function hideDistanceGuides() {
-            guideEntities.forEach(entity => entity.parentNode.removeChild(entity));
+            guideEntities.forEach(entity => {
+                if(entity.parentNode) entity.parentNode.removeChild(entity)
+            });
             guideEntities = [];
         }
         
@@ -1294,18 +1290,6 @@
             return R * c; // in metres
         }
         
-        async function initializeApp() {
-            document.getElementById('version-display').textContent = `v${APP_VERSION}`;
-            
-            // ... el resto de la inicialización, event listeners, y funciones de mapa/caché ...
-            // Se asume que el resto de la lógica no necesita cambios drásticos y se mantiene
-        }
-        
-        // --- Pegar el resto de las funciones auxiliares y listeners desde el original ---
-        // (saveData, clearCache, getCurrentLocation, initMapAndPreview, etc.)
-        // Se omite por brevedad pero debe estar aquí
-        
-        // Placeholder for the rest of the functions from the original file
         function updateLoadingScreen(step, progress, status) {
             loadingProgressBar.style.width = `${progress}%`;
             loadingStatusText.textContent = status;
@@ -1348,7 +1332,7 @@
         function addEventListeners() {
             document.getElementById('load-data-btn').addEventListener('click', saveData);
             document.getElementById('goto-map-btn').addEventListener('click', () => navigateTo('map'));
-            document.getElementById('clear-cache-btn').addEventListener('click', clearCache);
+            document.getElementById('clear-cache-btn').addEventListener('click', clearData);
             document.getElementById('use-location-btn').addEventListener('click', getCurrentLocation);
             document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
             document.getElementById('apply-coords-btn').addEventListener('click', applyMapCoords);
@@ -1356,29 +1340,64 @@
             document.getElementById('jumpto-btn').addEventListener('click', jumpToCoords);
             document.getElementById('back-to-map-from-scale-btn').addEventListener('click', () => navigateTo('map'));
         }
+        
         async function saveData() {
             const modelFile = document.getElementById('model-upload').files[0];
             const lat = parseFloat(document.getElementById('latitude-input').value);
             const lon = parseFloat(document.getElementById('longitude-input').value);
-            if (!modelFile || isNaN(lat) || isNaN(lon)) {
-                showMessage("Por favor, sube un modelo y especifica latitud y longitud.", 3000);
+            if (!modelFile && !appState.modelURL) {
+                 showMessage("Por favor, selecciona un modelo 3D.", 3000);
                 return;
             }
-            const modelURL = URL.createObjectURL(modelFile);
-            appState.modelURL = modelURL;
+            if (isNaN(lat) || isNaN(lon)) {
+                showMessage("Por favor, especifica latitud y longitud válidas.", 3000);
+                return;
+            }
+            
+            if(modelFile) {
+                 appState.modelURL = URL.createObjectURL(modelFile);
+            }
+           
             appState.coords = { latitude: lat, longitude: lon };
-            // Simple session persistence, no caching of blob URL
+
             document.getElementById('goto-map-btn').disabled = false;
+            document.getElementById('upload-section').classList.add('hidden');
+            document.getElementById('status-section').classList.remove('hidden');
             showMessage("Datos cargados. ¡Listo para ver en el mapa!", 2000);
         }
-        function clearCache() { /* Caching logic removed for simplicity in this example */ window.location.reload(); }
+
+        function clearData() {
+            appState.modelURL = null;
+            appState.coords = null;
+            appState.arTargetCoords = null;
+            
+            document.getElementById('model-upload').value = '';
+            document.getElementById('file-name-display').value = 'Ningún archivo seleccionado';
+            document.getElementById('latitude-input').value = '';
+            document.getElementById('longitude-input').value = '';
+            
+            document.getElementById('upload-section').classList.remove('hidden');
+            document.getElementById('status-section').classList.add('hidden');
+            document.getElementById('goto-map-btn').disabled = true;
+
+            showMessage("Datos limpiados. La página se recargará.", 2000);
+            setTimeout(() => window.location.reload(), 2000);
+        }
+
         function getCurrentLocation() {
+            if (!navigator.geolocation) {
+                showMessage("La geolocalización no es compatible con tu navegador.", 3000);
+                return;
+            }
+            showMessage("Obteniendo ubicación...", 2000);
             navigator.geolocation.getCurrentPosition(position => {
                 document.getElementById('latitude-input').value = position.coords.latitude.toFixed(6);
                 document.getElementById('longitude-input').value = position.coords.longitude.toFixed(6);
-            }, () => showMessage("No se pudo obtener la ubicación.", 3000));
+                showMessage("Ubicación actual obtenida.", 2000);
+            }, () => showMessage("No se pudo obtener la ubicación. Revisa los permisos.", 3000));
         }
         function applyMapCoords() {
+            if(!map) return;
             const center = map.getCenter();
             appState.arTargetCoords = { latitude: center.lat, longitude: center.lng };
             showMessage(`Nuevas coordenadas aplicadas: ${center.lat.toFixed(4)}, ${center.lng.toFixed(4)}`, 3000);
@@ -1389,10 +1408,20 @@
             if (!isNaN(lat) && !isNaN(lon) && map) map.setView([lat, lon], map.getZoom());
         }
         function initMapAndPreview() {
-            if (map) return;
+            if (map || !appState.modelURL || !appState.coords) return;
+            
             const targetCoords = appState.arTargetCoords || appState.coords;
             map = L.map('map-canvas').setView([targetCoords.latitude, targetCoords.longitude], 18);
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                 attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+
+             // Preview logic can be added here if needed
+        }
+        
+        async function initializeApp() {
+            document.getElementById('version-display').textContent = `v${APP_VERSION}`;
+            addEventListeners(); // RESTORED THIS CALL
         }
 
         initializeApp();
