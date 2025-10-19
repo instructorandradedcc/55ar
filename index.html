@@ -53,7 +53,7 @@
             height: 100%;
             overflow: hidden;
             font-family: 'Inter', sans-serif;
-            background-color: transparent !important;
+            background-color: #000 !important;
         }
         .page {
             display: none;
@@ -584,6 +584,28 @@
         .ios-start-button.show {
             display: block;
         }
+        
+        /* Indicador de versión */
+        .version-indicator {
+            position: fixed;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(76, 175, 80, 0.9);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 9998;
+            animation: fadeInOut 5s ease-in-out;
+        }
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+            20% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            80% { opacity: 1; transform: translateX(-50%) translateY(0); }
+            100% { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+        }
     </style>
 </head>
 <body>
@@ -592,6 +614,17 @@
         <div class="flex items-center justify-center h-full bg-gray-100">
             <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg mx-4">
                 <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Configuración de Escena AR<span id="version-display" class="text-sm align-middle font-normal text-gray-400 ml-2"></span></h1>
+                
+                <!-- Botón para copiar código -->
+                <div class="mb-4 text-center">
+                    <button id="copy-code-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2 mx-auto">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        Copiar Código Completo
+                    </button>
+                    <div id="copy-feedback" class="text-green-600 text-sm mt-2 opacity-0 transition-opacity duration-300">¡Código copiado al portapapeles!</div>
+                </div>
                 <div id="upload-section" class="space-y-4">
                     <div>
                         <label for="model-upload" class="block mb-2 text-sm font-medium text-gray-700">1. Subir Modelo 3D (.glb)</label>
@@ -835,6 +868,11 @@
     </div>
 
     <div id="message-box"></div>
+    
+    <!-- Indicador de versión -->
+    <div id="version-indicator" class="version-indicator" style="display: none;">
+        Versión <span id="version-number"></span> actualizada ✓
+    </div>
 
     <script type="module">
         import * as THREE from 'three';
@@ -857,7 +895,7 @@
          * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
          * =================================================================================
          */
-        const APP_VERSION = '0.05'; // INCREMENTADO POR CORRECCIÓN COMPLETA DE GPS, CÁMARA Y MODELO
+        const APP_VERSION = '0.08'; // INCREMENTADO POR BOTÓN DE COPIAR CÓDIGO
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
@@ -925,6 +963,103 @@
         const explorationMode = document.getElementById('exploration-mode');
         const toggleExplorationBtn = document.getElementById('toggle-exploration-btn');
         const iosStartButton = document.getElementById('ios-start-button');
+        const versionIndicator = document.getElementById('version-indicator');
+        const versionNumber = document.getElementById('version-number');
+        const copyCodeBtn = document.getElementById('copy-code-btn');
+        const copyFeedback = document.getElementById('copy-feedback');
+
+        // Función para copiar el código completo
+        async function copyCompleteCode() {
+            try {
+                let htmlContent;
+                
+                try {
+                    // Método 1: Intentar obtener el contenido actual del DOM
+                    htmlContent = document.documentElement.outerHTML;
+                } catch (fetchError) {
+                    try {
+                        // Método 2: Intentar con fetch si el primero falla
+                        const response = await fetch(window.location.href);
+                        htmlContent = await response.text();
+                    } catch (domError) {
+                        // Método 3: Reconstruir el HTML básico si todo falla
+                        htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+    <title>Geolocalizador AR v${APP_VERSION}</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+</head>
+<body>
+    <h1>Error: No se pudo copiar el código completo</h1>
+    <p>Por favor, copia el código manualmente desde el editor</p>
+</body>
+</html>`;
+                    }
+                }
+                
+                // Copiar al portapapeles
+                await navigator.clipboard.writeText(htmlContent);
+                
+                // Mostrar feedback exitoso
+                showCopyFeedback(true);
+                
+            } catch (error) {
+                console.error('Error al copiar el código:', error);
+                showCopyFeedback(false);
+            }
+        }
+
+        // Función para mostrar feedback de copia
+        function showCopyFeedback(success) {
+            if (success) {
+                copyFeedback.textContent = '¡Código copiado al portapapeles!';
+                copyFeedback.classList.remove('text-red-600');
+                copyFeedback.classList.add('text-green-600');
+                
+                copyCodeBtn.innerHTML = `
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    ¡Copiado!
+                `;
+                copyCodeBtn.classList.remove('bg-blue-500', 'hover:bg-blue-600');
+                copyCodeBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            } else {
+                copyFeedback.textContent = 'Error al copiar el código';
+                copyFeedback.classList.remove('text-green-600');
+                copyFeedback.classList.add('text-red-600');
+            }
+            
+            copyFeedback.style.opacity = '1';
+            
+            // Restaurar el botón después de 2 segundos
+            setTimeout(() => {
+                copyFeedback.style.opacity = '0';
+                if (success) {
+                    copyCodeBtn.innerHTML = `
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                        </svg>
+                        Copiar Código Completo
+                    `;
+                    copyCodeBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                    copyCodeBtn.classList.add('bg-blue-500', 'hover:bg-blue-600');
+                }
+            }, 2000);
+        }
+
+        // Agregar event listener al botón
+        copyCodeBtn.addEventListener('click', copyCompleteCode);
+
+        // Mostrar indicador de versión al iniciar
+        function showVersionIndicator() {
+            versionNumber.textContent = APP_VERSION;
+            versionIndicator.style.display = 'block';
+            setTimeout(() => {
+                versionIndicator.style.display = 'none';
+            }, 5000);
+        }
 
         // Función para actualizar la pantalla de carga
         function updateLoadingScreen(step, progress, status) {
@@ -1124,6 +1259,7 @@
             document.getElementById('model-lon').textContent = targetCoords.longitude.toFixed(6);
             document.getElementById('model-height').textContent = appState.realDimensions.groundHeight.toFixed(2) + 'm';
             
+            // Mostrar inmediatamente los indicadores de distancia
             currentLocationIndicator.style.display = 'flex';
             modelLocationIndicator.style.display = 'flex';
             distancePanel.style.display = 'flex';
@@ -1467,6 +1603,13 @@
             }
         }, { once: true });
 
+        /*
+         * =================================================================================
+         * CORRECCIÓN CRÍTICA: Función de actualización de distancia y ubicación
+         * =================================================================================
+         * Esta función ahora se llama continuamente para actualizar la distancia en tiempo real
+         * =================================================================================
+         */
         function updateLocationIndicators() {
             if (!appState.currentGPSLocation || !appState.arTargetCoords) return;
             
@@ -1476,6 +1619,7 @@
             const modelLocText = `MODELO: ${appState.arTargetCoords.latitude.toFixed(6)}, ${appState.arTargetCoords.longitude.toFixed(6)}`;
             modelLocationIndicator.querySelector('span').textContent = modelLocText;
             
+            // Calcular y mostrar distancia
             const distance = calculateDistance(
                 appState.currentGPSLocation.latitude,
                 appState.currentGPSLocation.longitude,
@@ -1483,9 +1627,19 @@
                 appState.arTargetCoords.longitude
             );
             
-            arDistanceValue.textContent = `${distance.toFixed(1)}m`;
+            // Actualizar todos los elementos de distancia
+            const distanceText = `${distance.toFixed(1)}m`;
+            arDistanceValue.textContent = distanceText;
             document.getElementById('model-distance').textContent = `${distance.toFixed(2)}m`;
             document.getElementById('current-distance').textContent = distance.toFixed(0);
+            
+            // Mostrar el panel de distancia si estaba oculto
+            if (distancePanel.style.display === 'none') {
+                distancePanel.style.display = 'flex';
+            }
+            
+            console.log(`Distancia actualizada: ${distance.toFixed(2)}m`);
+            showDebugInfo(`Distancia: ${distance.toFixed(2)}m`);
         }
 
         function startGPSWatch() {
@@ -1531,6 +1685,7 @@
                     document.getElementById('gps-status').textContent = 'Activo';
                     document.getElementById('gps-accuracy').textContent = newLocation.accuracy.toFixed(1);
                     
+                    // Actualizar distancia inmediatamente cuando se actualiza el GPS
                     updateLocationIndicators();
                     
                     gpsInitialized = true;
@@ -1607,7 +1762,7 @@
         }
 
         function calculateDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371e3;
+            const R = 6371e3; // Radio de la Tierra en metros
             const φ1 = lat1 * Math.PI/180;
             const φ2 = lat2 * Math.PI/180;
             const Δφ = (lat2-lat1) * Math.PI/180;
@@ -2315,6 +2470,9 @@
 
         function initializeApp() {
             document.getElementById('version-display').textContent = `v${APP_VERSION}`;
+            
+            // Mostrar indicador de versión actualizada
+            showVersionIndicator();
             
             appState.isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (appState.isIOS) {
