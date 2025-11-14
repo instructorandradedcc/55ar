@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Visor AR Arquitectura por Geolocalización</title>
-    <!-- Favicon -->
-    <link rel="icon" href="https://raw.githubusercontent.com/instructorandradedcc/propuesta-AR/main/favicon3dAR.ico">
+    <!-- Favicon Actualizado -->
+    <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- A-Frame y AR.js se cargarán dinámicamente -->
     <script>
@@ -290,8 +291,7 @@
             display: none;
         }
         
-        /* 
-         * =================================================================================
+        /* * =================================================================================
          * CORRECCIÓN CRÍTICA: Forzar la visualización del video de la cámara AR
          * =================================================================================
          * Estilos agresivos para asegurar que el video de la cámara sea visible
@@ -570,6 +570,13 @@
     <div id="upload-page" class="page active">
         <div class="flex items-center justify-center h-full bg-gray-100">
             <div class="bg-white p-8 rounded-lg shadow-xl w-full max-w-lg mx-4">
+                
+                <!-- Logo Agregado -->
+                <div class="flex items-center justify-center">
+                    <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" alt="Logo" class="h-16 w-auto mb-4">
+                </div>
+                <!-- Fin Logo Agregado -->
+
                 <h1 class="text-2xl font-bold text-center text-gray-800 mb-6">Configuración de Escena AR<span id="version-display" class="text-sm align-middle font-normal text-gray-400 ml-2"></span></h1>
                 <div id="upload-section" class="space-y-4">
                     <div>
@@ -836,7 +843,7 @@
          * NO OLVIDES ACTUALIZAR LA CONSTANTE 'APP_VERSION' A CONTINUACIÓN.
          * =================================================================================
          */
-        const APP_VERSION = '0.04'; // Incrementado por correcciones en configuración de cámara y GPS
+        const APP_VERSION = '0.05'; // Incrementado por correcciones en configuración de cámara y GPS
         const CACHE_NAME = `geo-ar-cache-v${APP_VERSION.replace('.', '')}`;
         let appState = {
             modelURL: null,
