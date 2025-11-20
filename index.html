@@ -67,7 +67,16 @@
         .cal-hud { position: fixed; bottom: 100px; right: 16px; background: rgba(0,0,0,0.8); padding: 10px; border-radius: 16px; z-index: 100; display: none; flex-direction: column; gap: 5px; }
         .cal-hud.active { display: flex; }
         .pad-btn { width: 45px; height: 45px; background: rgba(255,255,255,0.15); color: white; border-radius: 8px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
-        .pad-btn:active { background: #2563eb; } /* Feedback visual al pulsar */
+        .pad-btn:active { background: #2563eb; }
+
+        /* Version Display (MEJORADO) */
+        .version-tag { 
+            position: absolute; bottom: 15px; right: 15px; 
+            font-size: 11px; color: #4b5563; /* Gris más oscuro */
+            font-family: monospace; font-weight: bold;
+            pointer-events: none; 
+            background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px;
+        }
     </style>
 </head>
 <body>
@@ -78,7 +87,7 @@
 
     <!-- VISTA 1: AUTH (Login/Registro) -->
     <div id="view-auth" class="view-section justify-center items-center p-6">
-        <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl">
+        <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl relative">
             <div class="text-center mb-8">
                 <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg shadow-blue-200">🏗️</div>
                 <h1 class="text-2xl font-bold text-gray-900">AR Cloud Pro</h1>
@@ -102,6 +111,9 @@
                  <p class="text-xs text-gray-400">¿Tienes un código de proyecto?</p>
                  <button id="guest-btn" class="text-blue-600 text-sm font-bold mt-1">Entrar como Espectador</button>
             </div>
+            
+            <!-- Etiqueta de Versión -->
+            <div class="version-tag" id="auth-version">v...</div>
         </div>
     </div>
 
@@ -119,10 +131,12 @@
             <!-- Los proyectos se inyectan aquí -->
         </div>
 
-        <div class="p-4 bg-white border-t border-gray-100">
-            <button onclick="app.newProject()" class="btn-primary shadow-xl">
+        <div class="p-4 bg-white border-t border-gray-100 text-center">
+            <button onclick="app.newProject()" class="btn-primary shadow-xl mb-2">
                 <span>+</span> Nuevo Proyecto AR
             </button>
+            <!-- Etiqueta de Versión Dashboard (Color oscuro) -->
+            <span class="text-xs text-gray-500 font-mono font-bold" id="dash-version">v...</span>
         </div>
     </div>
 
@@ -132,7 +146,7 @@
             <button onclick="app.navTo('dashboard')" class="bg-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center font-bold text-gray-600">←</button>
         </div>
 
-        <!-- Paso 1: Archivo (Overlay si no hay modelo) -->
+        <!-- Paso 1: Archivo -->
         <div id="upload-overlay" class="absolute inset-0 bg-white z-[400] flex flex-col items-center justify-center p-8">
             <div class="w-full max-w-md text-center space-y-6">
                 <h2 class="text-xl font-bold">Nuevo Proyecto</h2>
@@ -180,12 +194,10 @@
         </div>
     </div>
 
-    <!-- VISTA 4: VISOR AR (Compartido/Público) -->
+    <!-- VISTA 4: VISOR AR -->
     <div id="view-ar" class="view-section bg-black">
-        <!-- Modo GPS -->
         <div id="ar-gps-container" class="w-full h-full absolute top-0 left-0"></div>
         
-        <!-- Modo Superficie (Overlay) -->
         <div id="ar-surface-container" class="w-full h-full absolute top-0 left-0 hidden bg-gray-900">
             <model-viewer id="viewer" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate touch-action="pan-y" ar-scale="fixed" ar-placement="floor" class="w-full h-full">
                 <button slot="ar-button" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white text-black px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 z-50">
@@ -195,7 +207,6 @@
             <button onclick="app.closeSurface()" class="absolute top-4 left-4 z-50 bg-white w-10 h-10 rounded-full shadow flex items-center justify-center">✕</button>
         </div>
 
-        <!-- Controles AR -->
         <div class="absolute top-4 left-4 flex gap-2 pointer-events-none z-50">
             <div id="gps-badge" class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full border border-white/10">
                 <span class="text-xs font-mono">GPS: <span id="gps-acc">--</span>m</span>
@@ -209,7 +220,6 @@
             <button onclick="app.toggleCal()" class="bg-gray-700/80 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl">🛠️</button>
         </div>
 
-        <!-- Panel Calibración -->
         <div id="cal-hud" class="cal-hud">
             <div class="grid grid-cols-3 gap-1">
                 <div></div> <button class="pad-btn" ontouchstart="app.adj('z', -0.5)" onmousedown="app.adj('z', -0.5)">⬆️</button> <div></div>
@@ -234,7 +244,10 @@
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
         import { getAnalytics } from 'firebase/analytics';
 
-        // --- CONFIGURACIÓN REAL DE TU PROYECTO "AR-CONSTRUCTOR-V2" ---
+        // --- VERSIÓN DE LA APP ---
+        const APP_VERSION = "9.02"; // Versión actualizada
+
+        // --- CONFIGURACIÓN ---
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWwwD72sPod5cOWmq0SYPIp6I",
             authDomain: "ar-constructor-v2.firebaseapp.com",
@@ -245,32 +258,28 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        // --- VARIABLES DE ADMIN ---
-        // ¡ATENCIÓN! Cambia esto por tu email real para tener permisos de superadmin
+        // --- ADMIN ---
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com"; 
 
-        // --- ESTADO ---
         const state = {
             user: null,
             isAdmin: false,
-            currentProject: null, // { id, data }
+            currentProject: null,
             tempFile: null,
             calibration: { x:0, y:0, z:0, r:0 },
             map: null
         };
 
-        // --- INICIO APP ---
         class App {
             constructor() {
+                this.displayVersion();
                 this.initServiceWorker();
                 try {
                     const app = initializeApp(firebaseConfig);
                     this.auth = getAuth(app);
                     this.db = getFirestore(app);
                     this.storage = getStorage(app);
-                    // Analytics opcional, si falla no rompe la app
                     try { getAnalytics(app); } catch(e) {}
-                    
                     this.initAuthListener();
                     this.checkUrlParams();
                 } catch (e) {
@@ -279,56 +288,40 @@
                 }
             }
 
-            // --- SERVICE WORKER PARA CACHÉ AGRESIVA ---
+            displayVersion() {
+                const vText = `v${APP_VERSION}`;
+                const authEl = document.getElementById('auth-version');
+                const dashEl = document.getElementById('dash-version');
+                if(authEl) authEl.textContent = vText;
+                if(dashEl) dashEl.textContent = vText;
+                console.log("AR System Init - Version:", APP_VERSION);
+            }
+
             initServiceWorker() {
                 if ('serviceWorker' in navigator) {
                     const swCode = `
-                        const CACHE_NAME = 'ar-models-cache-v1';
-                        
-                        self.addEventListener('install', (event) => {
-                            self.skipWaiting();
-                        });
-
-                        self.addEventListener('activate', (event) => {
-                            event.waitUntil(clients.claim());
-                        });
-
+                        self.addEventListener('install', (event) => self.skipWaiting());
+                        self.addEventListener('activate', (event) => event.waitUntil(clients.claim()));
                         self.addEventListener('fetch', (event) => {
                             const url = new URL(event.request.url);
-                            
-                            // Solo cacheamos archivos GLB/GLTF de Firebase Storage
                             if (url.pathname.endsWith('.glb') || url.pathname.endsWith('.gltf')) {
                                 event.respondWith(
-                                    caches.open(CACHE_NAME).then(async (cache) => {
-                                        const cachedResponse = await cache.match(event.request);
-                                        if (cachedResponse) {
-                                            console.log('Sirviendo modelo desde caché:', url.pathname);
-                                            return cachedResponse;
-                                        }
-                                        
-                                        try {
-                                            const networkResponse = await fetch(event.request);
-                                            // Guardar copia en caché
-                                            cache.put(event.request, networkResponse.clone());
-                                            return networkResponse;
-                                        } catch (error) {
-                                            console.error('Error fetch modelo:', error);
-                                            throw error;
-                                        }
+                                    caches.open('ar-models-v1').then(async (cache) => {
+                                        const cached = await cache.match(event.request);
+                                        if (cached) return cached;
+                                        const net = await fetch(event.request);
+                                        cache.put(event.request, net.clone());
+                                        return net;
                                     })
                                 );
                             }
                         });
                     `;
-                    
                     const blob = new Blob([swCode], {type: 'text/javascript'});
-                    navigator.serviceWorker.register(URL.createObjectURL(blob))
-                        .then(() => console.log("Service Worker (Modelo Cache) Activo"))
-                        .catch(err => console.warn("SW Falló:", err));
+                    navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(e => console.warn(e));
                 }
             }
 
-            // --- AUTENTICACIÓN ---
             initAuthListener() {
                 onAuthStateChanged(this.auth, (user) => {
                     state.user = user;
@@ -338,21 +331,17 @@
                         this.loadProjects();
                         document.getElementById('user-role-display').textContent = state.isAdmin ? `ADMINISTRADOR (${user.email})` : `CREADOR (${user.email})`;
                     } else {
-                        // Si no hay params de URL, ir al login
                         if (!new URLSearchParams(window.location.search).has('id')) {
                             this.navTo('auth');
                         }
                     }
                 });
 
-                // Listeners Formulario
                 document.getElementById('auth-form').addEventListener('submit', (e) => {
                     e.preventDefault();
                     this.handleLogin();
                 });
                 document.getElementById('register-btn').addEventListener('click', () => this.handleRegister());
-                
-                // Listener Espectador Manual
                 document.getElementById('guest-btn').addEventListener('click', () => {
                     const id = prompt("Ingresa el ID del Proyecto:");
                     if(id) window.location.href = `?id=${id}`;
@@ -362,44 +351,32 @@
             async handleLogin() {
                 const e = document.getElementById('email').value;
                 const p = document.getElementById('password').value;
-                this.loader(true, "Iniciando sesión...");
-                try {
-                    await signInWithEmailAndPassword(this.auth, e, p);
-                } catch (err) {
-                    this.toast("Error: " + err.message, "error");
-                }
+                this.loader(true, "Iniciando...");
+                try { await signInWithEmailAndPassword(this.auth, e, p); } 
+                catch (err) { this.toast("Error: " + err.message, "error"); }
                 this.loader(false);
             }
 
             async handleRegister() {
                 const e = document.getElementById('email').value;
                 const p = document.getElementById('password').value;
-                this.loader(true, "Creando cuenta...");
-                try {
+                this.loader(true, "Registrando...");
+                try { 
                     await createUserWithEmailAndPassword(this.auth, e, p);
-                    this.toast("Cuenta creada!");
-                } catch (err) {
-                    this.toast("Error: " + err.message, "error");
-                }
+                    this.toast("¡Bienvenido!"); 
+                } catch (err) { this.toast("Error: " + err.message, "error"); }
                 this.loader(false);
             }
 
             logout() { signOut(this.auth); }
 
-            // --- DASHBOARD ---
             async loadProjects() {
                 const list = document.getElementById('projects-list');
-                list.innerHTML = '<div class="text-center text-gray-400 mt-10">Cargando proyectos...</div>';
-
+                list.innerHTML = '<div class="text-center text-gray-400 mt-10">Cargando...</div>';
                 try {
                     let q;
-                    if (state.isAdmin) {
-                        // Admin ve todo
-                        q = query(collection(this.db, "projects"));
-                    } else {
-                        // Usuario ve lo suyo
-                        q = query(collection(this.db, "projects"), where("ownerId", "==", state.user.uid));
-                    }
+                    if (state.isAdmin) q = query(collection(this.db, "projects"));
+                    else q = query(collection(this.db, "projects"), where("ownerId", "==", state.user.uid));
 
                     const snapshot = await getDocs(q);
                     list.innerHTML = '';
@@ -421,12 +398,8 @@
                                 <div>
                                     <h3 class="font-bold text-gray-800">${p.name}</h3>
                                     <p class="text-xs text-gray-500 font-mono">ID: ${pid}</p>
-                                    ${state.isAdmin && !isOwner ? `<span class="admin-badge">De: ${p.ownerEmail}</span>` : ''}
                                 </div>
-                                <div class="flex flex-col gap-1">
-                                    <button onclick="app.shareProject('${pid}')" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded font-bold">🔗 Compartir</button>
-                                    ${state.isAdmin ? `<button onclick="app.downloadJSON('${pid}')" class="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">⬇️ JSON</button>` : ''}
-                                </div>
+                                <button onclick="app.shareProject('${pid}')" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded font-bold">🔗 Link</button>
                             </div>
                             <div class="flex gap-2 mt-3">
                                 <button onclick="app.openProject('${pid}', 'view')" class="flex-1 bg-gray-800 text-white py-2 rounded-lg text-xs font-bold">Ver AR</button>
@@ -435,7 +408,6 @@
                         `;
                         list.appendChild(card);
                     });
-
                 } catch (e) {
                     console.error(e);
                     list.innerHTML = '<p class="text-red-500 text-center">Error cargando lista</p>';
@@ -451,7 +423,6 @@
                 this.navTo('editor');
             }
 
-            // --- EDITOR ---
             handleFileSelect(e) {
                 const file = e.target.files[0];
                 if (file) {
@@ -463,38 +434,24 @@
             async uploadAndStart() {
                 const name = document.getElementById('project-name').value;
                 if (!name || !state.tempFile) return this.toast("Falta nombre o archivo", "error");
-
-                this.loader(true, "Subiendo modelo a la nube...");
-
+                this.loader(true, "Subiendo...");
                 try {
-                    // 1. Subir Archivo
                     const storageRef = ref(this.storage, `models/${state.user.uid}/${Date.now()}_${state.tempFile.name}`);
                     const snap = await uploadBytes(storageRef, state.tempFile);
                     const url = await getDownloadURL(snap.ref);
-
-                    // 2. Crear Doc (Borrador)
                     const newDoc = doc(collection(this.db, "projects"));
                     const projData = {
-                        name: name,
-                        modelUrl: url,
-                        ownerId: state.user.uid,
-                        ownerEmail: state.user.email,
-                        coords: { lat: 0, lon: 0 }, // Pendiente
-                        calibration: { x:0, y:0, z:0, r:0 },
+                        name: name, modelUrl: url, ownerId: state.user.uid, ownerEmail: state.user.email,
+                        coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0 },
                         createdAt: new Date().toISOString()
                     };
-                    
                     await setDoc(newDoc, projData);
-                    
                     state.currentProject = { id: newDoc.id, data: projData };
-                    
-                    // 3. Ir al Mapa
                     document.getElementById('upload-overlay').classList.add('hidden');
-                    this.initMap(0, 0); // Default 0,0
-                    
+                    this.initMap(0, 0);
                 } catch (e) {
                     console.error(e);
-                    this.toast("Error al subir. Revisa permisos Storage.", "error");
+                    this.toast("Error al subir.", "error");
                 }
                 this.loader(false);
             }
@@ -502,38 +459,29 @@
             async saveProjectData() {
                 if (!state.currentProject) return;
                 const ll = state.map.getCenter();
-                
                 this.loader(true, "Guardando...");
                 try {
                     await updateDoc(doc(this.db, "projects", state.currentProject.id), {
-                        "coords.lat": ll.lat,
-                        "coords.lon": ll.lng
+                        "coords.lat": ll.lat, "coords.lon": ll.lng
                     });
-                    this.toast("Proyecto Guardado!");
+                    this.toast("¡Guardado!");
                     this.navTo('dashboard');
                     this.loadProjects();
-                } catch (e) {
-                    console.error(e);
-                    this.toast("Error guardando", "error");
-                }
+                } catch (e) { this.toast("Error guardando", "error"); }
                 this.loader(false);
             }
 
-            // --- VISOR PÚBLICO / AR ---
             async checkUrlParams() {
                 const params = new URLSearchParams(window.location.search);
                 const id = params.get('id');
-                if (id) {
-                    this.openProject(id, 'view');
-                }
+                if (id) this.openProject(id, 'view');
             }
 
             async openProject(id, mode) {
-                this.loader(true, "Descargando proyecto...");
+                this.loader(true, "Cargando...");
                 try {
                     const docSnap = await getDoc(doc(this.db, "projects", id));
                     if (!docSnap.exists()) throw new Error("No existe");
-
                     const data = docSnap.data();
                     state.currentProject = { id, data };
                     
@@ -542,21 +490,17 @@
                         this.navTo('editor');
                         this.initMap(data.coords.lat, data.coords.lon);
                     } else {
-                        // MODO AR DIRECTO
                         this.navTo('ar');
                         this.startARSession(data);
                     }
-
                 } catch (e) {
                     this.toast(e.message, "error");
-                    if(!state.user) this.navTo('auth');
-                    else this.navTo('dashboard');
+                    if(!state.user) this.navTo('auth'); else this.navTo('dashboard');
                 }
                 this.loader(false);
             }
 
             startARSession(data) {
-                // Cargar scripts dinámicamente
                 if (!window.AFRAME) {
                     this.loadScript('https://aframe.io/releases/1.3.0/aframe.min.js')
                         .then(() => this.loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'))
@@ -564,8 +508,6 @@
                 } else {
                     this.renderScene(data);
                 }
-
-                // Configurar botón guardar si es admin/dueño
                 const canEdit = state.user && (state.user.uid === data.ownerId || state.isAdmin);
                 document.getElementById('admin-save-btn').classList.toggle('hidden', !canEdit);
             }
@@ -573,16 +515,12 @@
             renderScene(data) {
                 const t = data.coords;
                 const c = data.calibration || {x:0,y:0,z:0,r:0};
-                state.calibration = c; // Sync state
-
+                state.calibration = c;
                 const sceneHTML = `
                     <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
                         <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
                         <a-entity gps-entity-place="latitude: ${t.lat}; longitude: ${t.lon};">
-                            <a-entity id="model-entity" 
-                                position="${c.x} ${c.y} ${c.z}" 
-                                rotation="0 ${c.r} 0" 
-                                scale="1 1 1">
+                            <a-entity id="model-entity" position="${c.x} ${c.y} ${c.z}" rotation="0 ${c.r} 0" scale="1 1 1">
                                 <a-entity gltf-model="${data.modelUrl}"></a-entity>
                             </a-entity>
                         </a-entity>
@@ -591,52 +529,33 @@
                     </a-scene>
                 `;
                 document.getElementById('ar-gps-container').innerHTML = sceneHTML;
-                
-                // GPS Monitor
                 window.addEventListener('gps-camera-update-position', e => {
                     document.getElementById('gps-acc').textContent = e.detail.position.accuracy.toFixed(0);
                 });
             }
 
-            // --- UTILIDADES ADMIN & USER ---
             shareProject(id) {
                 const url = `${window.location.origin}${window.location.pathname}?id=${id}`;
                 navigator.clipboard.writeText(url);
-                this.toast("Enlace copiado al portapapeles!");
+                this.toast("¡Link Copiado!");
             }
 
             async downloadJSON(id) {
                 const docSnap = await getDoc(doc(this.db, "projects", id));
-                const data = docSnap.data();
-                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(docSnap.data(), null, 2));
                 const el = document.createElement('a');
                 el.setAttribute("href", dataStr);
                 el.setAttribute("download", `proyecto_${id}.json`);
-                document.body.appendChild(el);
-                el.click();
-                el.remove();
+                document.body.appendChild(el); el.click(); el.remove();
             }
 
-            // --- MAPA EDITOR ---
             initMap(lat, lon) {
                 const container = document.getElementById('map-canvas');
                 if (state.map) state.map.remove();
-
-                // Default si es nuevo: 0,0 o Bogotá
                 const center = (lat && lon) ? [lat, lon] : [4.6097, -74.0817];
-
-                const satLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 });
-                
-                state.map = L.map(container, { layers: [satLayer], zoomControl: false }).setView(center, 18);
-                
-                const icon = L.icon({
-                    iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png',
-                    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png',
-                    iconSize: [25, 41], iconAnchor: [12, 41]
-                });
-
+                state.map = L.map(container, { layers: [L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19 })], zoomControl: false }).setView(center, 18);
+                const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
                 const marker = L.marker(center, { draggable: true, icon: icon }).addTo(state.map);
-
                 const updateUI = (e) => {
                     const ll = e.target.getLatLng();
                     document.getElementById('editor-lat').textContent = ll.lat.toFixed(6);
@@ -650,7 +569,6 @@
                     if(state.map) {
                         const ll = [pos.coords.latitude, pos.coords.longitude];
                         state.map.setView(ll, 19);
-                        // Mover marcador (recrearlo para simpleza)
                         state.map.eachLayer((layer) => { if(layer instanceof L.Marker) layer.setLatLng(ll); });
                         document.getElementById('editor-lat').textContent = ll[0].toFixed(6);
                         document.getElementById('editor-lon').textContent = ll[1].toFixed(6);
@@ -658,29 +576,24 @@
                 });
             }
 
-            // --- AR UTILS ---
             toggleCal() { document.getElementById('cal-hud').classList.toggle('active'); }
             
             adj(axis, val) {
                 const c = state.calibration;
-                if (axis === 'r') c.r += val;
-                else c[axis] += val;
-                
+                if (axis === 'r') c.r += val; else c[axis] += val;
                 const el = document.getElementById('model-entity');
                 if (el) {
                     el.setAttribute('position', `${c.x} ${c.y} ${c.z}`);
                     el.setAttribute('rotation', `0 ${c.r} 0`);
-                    this.toast(`Ajuste: ${axis.toUpperCase()}`);
+                    this.toast(`${axis.toUpperCase()}: ${val}`);
                 }
             }
 
             async saveCalibration() {
                 if (!state.currentProject) return;
                 try {
-                    await updateDoc(doc(this.db, "projects", state.currentProject.id), {
-                        calibration: state.calibration
-                    });
-                    this.toast("Calibración Guardada en Nube");
+                    await updateDoc(doc(this.db, "projects", state.currentProject.id), { calibration: state.calibration });
+                    this.toast("¡Calibración Guardada!");
                 } catch (e) { this.toast("Error guardando", "error"); }
             }
             
@@ -692,17 +605,10 @@
             closeSurface() { document.getElementById('ar-surface-container').classList.add('hidden'); }
             
             exitAR() {
-                // Recarga limpia para liberar memoria AR
-                if (window.location.search.includes('id')) {
-                    // Si vino por link directo
-                    window.location.reload();
-                } else {
-                    this.navTo('dashboard');
-                    window.location.reload(); 
-                }
+                if (window.location.search.includes('id')) window.location.reload();
+                else { this.navTo('dashboard'); window.location.reload(); }
             }
 
-            // --- CORE ---
             navTo(viewId) {
                 document.querySelectorAll('.view-section').forEach(el => el.classList.remove('active'));
                 document.getElementById('view-' + viewId).classList.add('active');
@@ -730,12 +636,9 @@
             }
         }
 
-        // Listeners estáticos
         document.getElementById('model-input').addEventListener('change', (e) => window.app.handleFileSelect(e));
-
-        // Init
         window.app = new App();
-
     </script>
 </body>
 </html>
+
