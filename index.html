@@ -508,7 +508,18 @@
             window.app = app; // Exponer globalmente
 
             // Pantalla 0: Permisos
-            bind('btn-start-app', 'click', app.checkPermissions);
+            // Pantalla 0: Permisos - Con verificación de elemento
+            const btnStart = document.getElementById('btn-start-app');
+            if(btnStart) {
+                btnStart.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    console.log('🔔 Click en botón de permisos detectado');
+                    app.checkPermissions();
+                });
+                console.log('✅ Evento btn-start-app vinculado correctamente');
+            } else {
+                console.error('❌ CRÍTICO: Botón btn-start-app NO encontrado en el DOM');
+            }
 
             // Pantalla 1: Upload
             bind('btn-select-file', 'click', app.selectFile);
@@ -561,4 +572,5 @@
     </script>
 </body>
 </html>
+
 
