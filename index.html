@@ -1,10 +1,10 @@
-
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <title>AR Constructor Pro v1.5</title>
+    <title>AR Constructor Pro v1.6</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
@@ -44,7 +44,7 @@
         #toast {
             position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px);
             background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px;
-            transition: transform 0.3s; z-index: 10000; font-weight: bold;
+            transition: transform 0.3s; z-index: 10000; font-weight: bold; pointer-events: none;
         }
         #toast.show { transform: translateX(-50%) translateY(0); }
     </style>
@@ -95,7 +95,7 @@
             
             <p id="secure-warning" class="text-red-400 text-[10px] hidden mt-2">⚠️ Error: Sitio no seguro (HTTP). El GPS fallará.</p>
         </div>
-        <p class="text-[10px] text-gray-600 mt-8">v1.5 - Final Fix</p>
+        <p class="text-[10px] text-gray-600 mt-8">v1.6 - Bulletproof</p>
     </div>
 
     <!-- 1. PÁGINA DE CARGA (UPLOAD) -->
@@ -216,70 +216,86 @@
         import * as THREE from 'three';
         
         // --- CONFIGURACIÓN GLOBAL ---
-        const CACHE_NAME = 'geo-ar-v1-5';
+        const CACHE_NAME = 'geo-ar-v1-6-final';
         const st = { url: null, lat: 0, lng: 0, adj: { h: 0, s: 1, r: 0 } };
         let map, mk, arEnt, selectedFile;
 
         // --- UTILIDADES ---
+        // Usamos document.getElementById directamente para evitar cualquier error de selectores
+        const getEl = (id) => document.getElementById(id);
+        
         const toast = (msg) => {
-            const t = document.getElementById('toast');
-            t.textContent = msg;
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 3000);
+            const t = getEl('toast');
+            if(t) {
+                t.textContent = msg;
+                t.classList.add('show');
+                setTimeout(() => t.classList.remove('show'), 3000);
+            }
         };
 
         // --- LÓGICA DE LA APP ---
         const app = {
-            // 1. PERMISOS
+            // 1. PERMISOS (VERIFICACIÓN ROBUSTA)
             checkPermissions: async () => {
-                const btn = document.getElementById('btn-start-app');
-                const txtGps = document.getElementById('txt-gps');
-                const txtCam = document.getElementById('txt-cam');
+                const btn = getEl('btn-start-app');
+                const txtGps = getEl('txt-gps');
+                const txtCam = getEl('txt-cam');
                 
-                // Verificar contexto seguro (HTTPS)
+                // Verificar contexto seguro (HTTPS o localhost)
                 if (!window.isSecureContext) {
-                    document.getElementById('secure-warning').classList.remove('hidden');
+                    if(getEl('secure-warning')) getEl('secure-warning').classList.remove('hidden');
                 }
 
-                btn.innerHTML = "⏳ Solicitando...";
-                btn.disabled = true;
-                btn.classList.add('opacity-50');
+                if(btn) {
+                    btn.innerHTML = "⏳ Solicitando...";
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50');
+                }
 
                 try {
                     // GPS
                     await new Promise((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000 });
                     });
-                    txtGps.textContent = "✅ OK";
-                    txtGps.className = "text-emerald-400 font-bold text-xs";
+                    if(txtGps) {
+                        txtGps.textContent = "✅ OK";
+                        txtGps.className = "text-emerald-400 font-bold text-xs";
+                    }
 
                     // CÁMARA
                     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
                     stream.getTracks().forEach(t => t.stop());
-                    txtCam.textContent = "✅ OK";
-                    txtCam.className = "text-emerald-400 font-bold text-xs";
+                    if(txtCam) {
+                        txtCam.textContent = "✅ OK";
+                        txtCam.className = "text-emerald-400 font-bold text-xs";
+                    }
 
                     // ÉXITO
-                    btn.innerHTML = "¡LISTO!";
-                    btn.classList.replace('bg-blue-600', 'bg-emerald-600');
+                    if(btn) {
+                        btn.innerHTML = "¡LISTO!";
+                        btn.classList.replace('bg-blue-600', 'bg-emerald-600');
+                    }
                     
                     setTimeout(() => {
-                        document.getElementById('permission-screen').style.display = 'none';
-                        document.getElementById('upload-page').style.display = 'flex';
+                        if(getEl('permission-screen')) getEl('permission-screen').style.display = 'none';
+                        if(getEl('upload-page')) getEl('upload-page').style.display = 'flex';
                         app.loadCache();
                     }, 1000);
 
                 } catch (e) {
-                    alert("ERROR DE PERMISOS: \n" + e.message + "\n\nPor favor, activa el GPS y permite la cámara en tu navegador.");
-                    btn.innerHTML = "REINTENTAR";
-                    btn.disabled = false;
-                    btn.classList.remove('opacity-50');
+                    alert("ERROR DE PERMISOS: \n" + e.message + "\n\n1. Verifica que el sitio tenga candado (HTTPS).\n2. Activa el GPS del celular.\n3. Permite la cámara en la configuración del navegador.");
+                    if(btn) {
+                        btn.innerHTML = "REINTENTAR";
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-50');
+                    }
                 }
             },
 
             // 2. ARCHIVOS
             selectFile: () => {
-                document.getElementById('real-file-input').click();
+                const input = getEl('real-file-input');
+                if(input) input.click();
             },
 
             handleFile: (e) => {
@@ -288,45 +304,66 @@
                     selectedFile = file;
                     st.url = URL.createObjectURL(file);
                     
-                    const lbl = document.getElementById('file-name-display');
-                    lbl.textContent = "✅ " + file.name;
-                    lbl.className = "text-sm font-bold text-emerald-600 truncate";
-                    document.getElementById('btn-select-file').classList.add('border-emerald-500', 'bg-emerald-50');
+                    const lbl = getEl('file-name-display');
+                    const btn = getEl('btn-select-file');
+                    
+                    if(lbl) {
+                        lbl.textContent = "✅ " + file.name;
+                        lbl.className = "text-sm font-bold text-emerald-600 truncate";
+                    }
+                    if(btn) btn.classList.add('border-emerald-500', 'bg-emerald-50');
+                    
                     toast("Archivo cargado");
                 }
             },
 
             // 3. GPS
             getGPS: () => {
-                const btn = document.getElementById('btn-get-gps');
-                btn.textContent = "⏳...";
+                const btn = getEl('btn-get-gps');
+                if(btn) {
+                    btn.textContent = "⏳...";
+                    btn.disabled = true;
+                }
                 
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                        document.getElementById('in-lat').value = pos.coords.latitude.toFixed(6);
-                        document.getElementById('in-lng').value = pos.coords.longitude.toFixed(6);
-                        btn.textContent = "✅ Detectado";
-                        setTimeout(() => btn.textContent = "📍 Detectar mi ubicación", 2000);
+                        if(getEl('in-lat')) getEl('in-lat').value = pos.coords.latitude.toFixed(6);
+                        if(getEl('in-lng')) getEl('in-lng').value = pos.coords.longitude.toFixed(6);
+                        
+                        if(btn) {
+                            btn.textContent = "✅ Detectado";
+                            btn.disabled = false;
+                            setTimeout(() => btn.textContent = "📍 Detectar mi ubicación", 2000);
+                        }
                         toast("Ubicación actualizada");
                     },
                     (err) => {
                         alert("Error GPS: " + err.message);
-                        btn.textContent = "❌ Error";
+                        if(btn) {
+                            btn.textContent = "❌ Error";
+                            btn.disabled = false;
+                        }
                     },
-                    { enableHighAccuracy: true }
+                    { enableHighAccuracy: true, timeout: 10000 }
                 );
             },
 
             // 4. GUARDAR
             saveData: async () => {
-                st.lat = parseFloat(document.getElementById('in-lat').value);
-                st.lng = parseFloat(document.getElementById('in-lng').value);
+                const latInput = getEl('in-lat');
+                const lngInput = getEl('in-lng');
+                
+                if(!latInput || !lngInput) return;
 
-                if (isNaN(st.lat) || isNaN(st.lng)) return alert("Faltan coordenadas");
-                if (!selectedFile && !st.url) return alert("Falta archivo 3D");
+                st.lat = parseFloat(latInput.value);
+                st.lng = parseFloat(lngInput.value);
+                
+                const btn = getEl('btn-save');
 
-                const btn = document.getElementById('btn-save');
-                btn.textContent = "⏳ Guardando...";
+                if (isNaN(st.lat) || isNaN(st.lng)) return alert("Faltan coordenadas válidas (Lat/Lng)");
+                if (!selectedFile && !st.url) return alert("Falta archivo 3D (.glb)");
+
+                if(btn) btn.textContent = "⏳ Guardando...";
                 
                 try {
                     const cache = await caches.open(CACHE_NAME);
@@ -336,14 +373,18 @@
                     const data = { lat: st.lat, lng: st.lng };
                     await cache.put('data.json', new Response(JSON.stringify(data)));
 
-                    document.getElementById('nav-map').disabled = false;
-                    btn.textContent = "✅ ¡Guardado!";
-                    setTimeout(() => btn.textContent = "💾 Guardar Proyecto", 2000);
+                    if(getEl('nav-map')) getEl('nav-map').disabled = false;
+                    
+                    if(btn) {
+                        btn.textContent = "✅ ¡Guardado!";
+                        setTimeout(() => btn.textContent = "💾 Guardar Proyecto", 2000);
+                    }
                     toast("Proyecto guardado en memoria");
                     
                 } catch (e) {
                     console.error(e);
-                    alert("Error guardando: " + e.message);
+                    alert("Error guardando (puede ser modo incógnito): " + e.message);
+                    if(btn) btn.textContent = "❌ Error";
                 }
             },
 
@@ -361,11 +402,15 @@
                         const data = await dataRes.json();
                         st.lat = data.lat; st.lng = data.lng;
 
-                        document.getElementById('in-lat').value = st.lat;
-                        document.getElementById('in-lng').value = st.lng;
-                        document.getElementById('file-name-display').textContent = "✅ Modelo Recuperado";
-                        document.getElementById('file-name-display').className = "text-sm font-bold text-blue-600 truncate";
-                        document.getElementById('nav-map').disabled = false;
+                        if(getEl('in-lat')) getEl('in-lat').value = st.lat;
+                        if(getEl('in-lng')) getEl('in-lng').value = st.lng;
+                        
+                        const lbl = getEl('file-name-display');
+                        if(lbl) {
+                            lbl.textContent = "✅ Modelo Recuperado";
+                            lbl.className = "text-sm font-bold text-blue-600 truncate";
+                        }
+                        if(getEl('nav-map')) getEl('nav-map').disabled = false;
                     }
                 } catch (e) { console.log("No hay caché previo"); }
             },
@@ -376,16 +421,18 @@
                     p.classList.remove('active');
                     p.style.display = 'none';
                 });
-                const target = document.getElementById(pageId + '-page');
-                target.classList.add('active');
-                target.style.display = 'flex';
+                const target = getEl(pageId + '-page');
+                if(target) {
+                    target.classList.add('active');
+                    target.style.display = 'flex';
+                }
                 if (pageId === 'map') setTimeout(initMap, 200);
             },
 
             startAR: async () => {
                 if (!st.url) return alert("Modelo no cargado");
                 app.nav('ar');
-                document.getElementById('ar-loader').classList.remove('hidden');
+                if(getEl('ar-loader')) getEl('ar-loader').classList.remove('hidden');
                 
                 try {
                     await loadARLibs();
@@ -400,19 +447,22 @@
         // --- MAPA ---
         function initMap() {
             if (!map) {
-                map = L.map('map-c').setView([st.lat, st.lng], 18);
+                map = L.map('map-c').setView([st.lat || 0, st.lng || 0], 18);
                 L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri'}).addTo(map);
             } else {
                 map.invalidateSize();
-                map.setView([st.lat, st.lng], 18);
+                map.setView([st.lat || 0, st.lng || 0], 18);
             }
-            if (mk) mk.setLatLng([st.lat, st.lng]);
-            else mk = L.marker([st.lat, st.lng]).addTo(map);
+            if (mk) mk.setLatLng([st.lat || 0, st.lng || 0]);
+            else mk = L.marker([st.lat || 0, st.lng || 0]).addTo(map);
         }
 
         // --- AR SCENE ---
         function initScene() {
-            document.getElementById('ar-c').innerHTML = '';
+            const container = getEl('ar-c');
+            if(!container) return;
+            
+            container.innerHTML = '';
             const html = `
                 <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" renderer="logarithmicDepthBuffer: true; colorManagement: true;">
                     <a-camera gps-camera="minDistance: 2;" rotation-reader near="0.1" far="10000"></a-camera>
@@ -421,62 +471,79 @@
                     <a-entity id="ent" gps-entity-place="latitude: ${st.lat}; longitude: ${st.lng};" position="0 0 0" scale="1 1 1" gltf-model="${st.url}" visible="false"></a-entity>
                 </a-scene>
             `;
-            document.getElementById('ar-c').innerHTML = html;
-            const el = document.querySelector('#ent');
-            arEnt = el;
+            container.innerHTML = html;
             
-            el.addEventListener('model-loaded', () => {
-                const mesh = el.getObject3D('mesh');
-                if(mesh) mesh.traverse(n => { if(n.isMesh) { n.material.side = THREE.DoubleSide; n.material.transparent = true; } });
-                el.setAttribute('visible', 'true');
-                document.getElementById('ar-loader').classList.add('hidden');
-                toast("Modelo AR Visible");
-            });
+            // Esperar a que el DOM inyecte los elementos A-Frame
+            setTimeout(() => {
+                const el = document.querySelector('#ent');
+                if(el) {
+                    arEnt = el;
+                    el.addEventListener('model-loaded', () => {
+                        const mesh = el.getObject3D('mesh');
+                        if(mesh) mesh.traverse(n => { if(n.isMesh) { n.material.side = THREE.DoubleSide; n.material.transparent = true; } });
+                        el.setAttribute('visible', 'true');
+                        if(getEl('ar-loader')) getEl('ar-loader').classList.add('hidden');
+                        toast("Modelo AR Visible");
+                    });
+                }
+            }, 500);
             
             window.addEventListener('gps-camera-update-position', e => {
                 const acc = Math.round(e.detail.position.accuracy);
-                document.getElementById('ar-gps-stat').textContent = `±${acc}m`;
+                if(getEl('ar-gps-stat')) getEl('ar-gps-stat').textContent = `±${acc}m`;
             });
         }
 
-        // --- EVENT LISTENER GLOBAL (CONEXIÓN DE BOTONES) ---
+        // --- VINCULACIÓN DE EVENTOS SEGURA ---
+        function bind(id, event, func) {
+            const el = getEl(id);
+            if(el) {
+                el.addEventListener(event, func);
+            } else {
+                console.warn(`Elemento ${id} no encontrado para evento ${event}`);
+            }
+        }
+
         document.addEventListener('DOMContentLoaded', () => {
-            // 1. Permisos
-            document.getElementById('btn-start-app').addEventListener('click', app.checkPermissions);
-            
-            // 2. Archivos
-            document.getElementById('btn-select-file').addEventListener('click', app.selectFile);
-            document.getElementById('real-file-input').addEventListener('change', app.handleFile);
-            
-            // 3. GPS y Guardado
-            document.getElementById('btn-get-gps').addEventListener('click', app.getGPS);
-            document.getElementById('btn-save').addEventListener('click', app.saveData);
-            
-            // 4. Navegación
-            document.getElementById('nav-map').addEventListener('click', () => app.nav('map'));
-            document.getElementById('btn-go-map').addEventListener('click', () => app.nav('map'));
-            document.getElementById('btn-go-scale').addEventListener('click', () => app.nav('scale'));
-            document.getElementById('btn-back-map').addEventListener('click', () => app.nav('upload'));
-            document.getElementById('btn-back-scale').addEventListener('click', () => app.nav('upload'));
-            
-            // 5. Mapa y AR
-            document.getElementById('btn-map-fix').addEventListener('click', () => {
+            window.app = app; // Exponer globalmente
+
+            // Pantalla 0: Permisos
+            bind('btn-start-app', 'click', app.checkPermissions);
+
+            // Pantalla 1: Upload
+            bind('btn-select-file', 'click', app.selectFile);
+            bind('real-file-input', 'change', app.handleFile);
+            bind('btn-get-gps', 'click', app.getGPS);
+            bind('btn-save', 'click', app.saveData);
+            bind('nav-map', 'click', () => app.nav('map'));
+            bind('btn-go-map', 'click', () => app.nav('map'));
+            bind('btn-go-scale', 'click', () => app.nav('scale'));
+            bind('btn-reset', 'click', async () => {
+                if(confirm("¿Reiniciar todo?")) { await caches.delete(CACHE_NAME); location.reload(); }
+            });
+
+            // Pantalla 2: Mapa
+            bind('btn-back-map', 'click', () => app.nav('upload'));
+            bind('btn-start-ar', 'click', app.startAR);
+            bind('btn-map-fix', 'click', () => {
+                if(!map) return;
                 const c = map.getCenter();
                 st.lat = c.lat; st.lng = c.lng;
-                document.getElementById('in-lat').value = st.lat.toFixed(6);
-                document.getElementById('in-lng').value = st.lng.toFixed(6);
+                if(getEl('in-lat')) getEl('in-lat').value = st.lat.toFixed(6);
+                if(getEl('in-lng')) getEl('in-lng').value = st.lng.toFixed(6);
                 mk.setLatLng(c);
                 toast("Ubicación fijada");
             });
-            
-            document.getElementById('btn-start-ar').addEventListener('click', app.startAR);
-            document.getElementById('btn-save-scale').addEventListener('click', () => { toast('Escala guardada'); app.nav('upload'); });
-            
-            document.getElementById('btn-exit-ar').addEventListener('click', () => location.reload());
-            document.getElementById('btn-toggle-adj').addEventListener('click', () => document.getElementById('adj-panel').classList.toggle('hidden'));
-            
-            document.getElementById('btn-reset').addEventListener('click', async () => {
-                if(confirm("¿Borrar todo?")) { await caches.delete(CACHE_NAME); location.reload(); }
+
+            // Pantalla 3: Escala
+            bind('btn-back-scale', 'click', () => app.nav('upload'));
+            bind('btn-save-scale', 'click', () => { toast('Escala guardada'); app.nav('upload'); });
+
+            // Pantalla 4: AR
+            bind('btn-exit-ar', 'click', () => location.reload());
+            bind('btn-toggle-adj', 'click', () => {
+                const p = getEl('adj-panel');
+                if(p) p.classList.toggle('hidden');
             });
 
             // Sliders
@@ -486,9 +553,10 @@
                 arEnt.setAttribute('scale', `${st.adj.s} ${st.adj.s} ${st.adj.s}`);
                 arEnt.setAttribute('rotation', `0 ${st.adj.r} 0`);
             };
-            document.getElementById('sl-h').oninput = e => { st.adj.h = parseFloat(e.target.value); document.getElementById('val-h').textContent=st.adj.h+'m'; upd(); };
-            document.getElementById('sl-s').oninput = e => { st.adj.s = parseFloat(e.target.value); document.getElementById('val-s').textContent=st.adj.s+'x'; upd(); };
-            document.getElementById('sl-r').oninput = e => { st.adj.r = parseFloat(e.target.value); document.getElementById('val-r').textContent=st.adj.r+'°'; upd(); };
+            
+            bind('sl-h', 'input', (e) => { st.adj.h = parseFloat(e.target.value); if(getEl('val-h')) getEl('val-h').textContent=st.adj.h+'m'; upd(); });
+            bind('sl-s', 'input', (e) => { st.adj.s = parseFloat(e.target.value); if(getEl('val-s')) getEl('val-s').textContent=st.adj.s+'x'; upd(); });
+            bind('sl-r', 'input', (e) => { st.adj.r = parseFloat(e.target.value); if(getEl('val-r')) getEl('val-r').textContent=st.adj.r+'°'; upd(); });
         });
     </script>
 </body>
