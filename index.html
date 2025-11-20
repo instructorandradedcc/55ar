@@ -3,587 +3,526 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Visor AR Arquitectura Pro</title>
+    <title>AR Pro Cloud</title>
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
     
-    <!-- Estilos y Mapas -->
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    
+    <!-- Leaflet (Mapas) -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
     <!-- Three.js & Model Viewer -->
     <script type="importmap">
         {
             "imports": {
-                "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
-                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/"
+                "three": "https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/",
+                "firebase/app": "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js",
+                "firebase/firestore": "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js",
+                "firebase/analytics": "https://www.gstatic.com/firebasejs/10.7.1/firebase-analytics.js"
             }
         }
     </script>
+    <!-- Model Viewer para Surface Mode -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 
     <style>
-        /* Bloqueo de selección para experiencia App nativa */
-        html, body { 
-            margin: 0; padding: 0; width: 100%; height: 100%; 
-            overflow: hidden; font-family: 'Inter', sans-serif; background-color: #000;
-            -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+        /* Reset y Estilos Base */
+        html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #111; user-select: none; -webkit-user-select: none; }
+        .page { display: none; height: 100%; width: 100%; position: relative; background: #f5f5f5; flex-direction: column; }
+        .page.active { display: flex; }
+
+        /* UI Components */
+        .control-btn { background: #2563eb; color: white; padding: 12px; border-radius: 12px; font-weight: 600; text-align: center; width: 100%; transition: 0.2s; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1); }
+        .control-btn:active { transform: scale(0.98); }
+        .control-btn.secondary { background: white; color: #333; border: 1px solid #ddd; }
+        
+        /* Mapa */
+        #map-canvas { width: 100%; flex: 1; z-index: 1; }
+        .map-ui { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); width: 90%; max-width: 400px; z-index: 500; background: rgba(255,255,255,0.95); padding: 16px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2); backdrop-filter: blur(10px); }
+
+        /* A-Frame (AR GPS) */
+        a-scene { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 1; }
+        
+        /* Model Viewer (Interior) */
+        model-viewer { width: 100%; height: 100%; background-color: #222; --poster-color: transparent; }
+        
+        /* Botón Activar Cámara (Estilo Apple) */
+        .ar-button {
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(10px);
+            padding: 0 24px; height: 50px; border-radius: 25px;
+            display: flex; align-items: center; gap: 10px;
+            font-weight: 600; color: #000; box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+            z-index: 100; border: 1px solid rgba(255,255,255,0.5);
+            transition: transform 0.2s;
         }
-        
-        .page { display: none; height: 100%; width: 100%; position: relative; background: white; }
-        .page.active { display: flex; flex-direction: column; }
+        .ar-button:active { transform: translateX(-50%) scale(0.95); }
 
-        /* UI Styles */
-        .control-button { background-color: #4CAF50; color: white; padding: 12px 20px; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; transition: transform 0.1s; box-shadow: 0 4px 6px rgba(0,0,0,0.2); font-weight: bold; }
-        .control-button:active { transform: scale(0.96); }
-        
-        #message-box { position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background-color: rgba(30, 30, 30, 0.95); color: white; padding: 12px 24px; border-radius: 30px; font-size: 0.9rem; z-index: 10001; opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; width: 85%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
-        #message-box.show { opacity: 1; }
-
-        /* Mapa Fixes */
-        #map-container { position: relative; flex: 1; width: 100%; z-index: 1; touch-action: none; }
-        #map-canvas { width: 100%; height: 100%; z-index: 1; outline: none; -webkit-tap-highlight-color: transparent; }
-        
-        .map-ui-container { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); z-index: 402; background-color: rgba(255, 255, 255, 0.95); padding: 15px; border-radius: 16px; width: 92%; max-width: 380px; display: flex; flex-direction: column; gap: 10px; backdrop-filter: blur(10px); box-shadow: 0 -5px 20px rgba(0,0,0,0.1); }
-
-        /* AR Styles */
-        a-scene { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; z-index: 1 !important; }
-        video, .arjs-video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; z-index: -2 !important; }
-
-        .ar-loading-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #111; color: white; display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 10002; }
-        .ar-loading-screen.active { display: flex; }
-        
-        .loader { border: 4px solid #333; border-top: 4px solid #4CAF50; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
-        /* Model Viewer Customization */
-        model-viewer { width: 100%; height: 100%; background-color: #f0f0f0; }
-        
-        .ar-activate-btn {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            background: linear-gradient(135deg, #4CAF50, #45a049); color: white;
-            padding: 15px 30px; border-radius: 50px; font-size: 18px; font-weight: bold;
-            box-shadow: 0 4px 15px rgba(76, 175, 80, 0.4); border: 2px solid white;
-            display: flex; align-items: center; gap: 10px; z-index: 100; cursor: pointer;
-            animation: pulse-btn 2s infinite;
+        /* Panel Calibración Flotante */
+        .calibration-hud {
+            position: fixed; bottom: 100px; right: 16px; z-index: 1000;
+            display: flex; flex-direction: column; gap: 8px;
+            background: rgba(0,0,0,0.6); padding: 12px; border-radius: 16px;
+            backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.1);
+            transform: translateX(120%); transition: transform 0.3s ease;
         }
-        
-        .surface-instruction {
-            position: absolute; top: 80px; left: 50%; transform: translateX(-50%);
-            background: rgba(0,0,0,0.6); color: white; padding: 8px 16px; border-radius: 20px;
-            font-size: 12px; pointer-events: none; text-align: center; width: 90%;
-        }
+        .calibration-hud.visible { transform: translateX(0); }
 
-        @keyframes pulse-btn { 0% { transform: translateX(-50%) scale(1); } 50% { transform: translateX(-50%) scale(1.05); } 100% { transform: translateX(-50%) scale(1); } }
-        
-        /* Calibración Panel */
-        .calibration-panel { position: fixed; bottom: 100px; right: 10px; background: rgba(0,0,0,0.85); padding: 10px; border-radius: 16px; display: none; flex-direction: column; gap: 8px; z-index: 10000; border: 1px solid #555; backdrop-filter: blur(4px); }
-        .calibration-panel.active { display: flex; }
-        .cal-btn { background: #444; color: white; border: 1px solid #666; width: 45px; height: 45px; border-radius: 10px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
-        .cal-btn:active { background: #4CAF50; border-color: #4CAF50; }
+        .pad-btn {
+            width: 48px; height: 48px; background: rgba(255,255,255,0.15); border: none;
+            border-radius: 12px; color: white; font-size: 20px; display: grid; place-items: center;
+        }
+        .pad-btn:active { background: #2563eb; }
+
+        /* Loading Overlay */
+        .loader-overlay {
+            position: fixed; inset: 0; background: #000; z-index: 9999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            color: white; transition: opacity 0.5s;
+        }
+        .loader-overlay.hidden { opacity: 0; pointer-events: none; }
+        .spinner { border: 3px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* Toast Notification */
+        .toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px);
+            background: #333; color: white; padding: 12px 24px; border-radius: 50px;
+            font-size: 14px; z-index: 10002; transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3); display: flex; align-items: center; gap: 8px;
+        }
+        .toast.show { transform: translateX(-50%) translateY(0); }
     </style>
 </head>
 <body>
 
-    <div id="message-box"></div>
+    <!-- Notifications -->
+    <div id="toast" class="toast">
+        <span id="toast-icon">ℹ️</span>
+        <span id="toast-msg">Mensaje del sistema</span>
+    </div>
 
-    <!-- PAGINA 1: CARGA -->
-    <div id="page-upload" class="page active p-4 items-center justify-center bg-gray-50">
-        <div class="bg-white p-6 rounded-2xl shadow-xl w-full max-w-md border border-gray-100">
-            <div class="text-center mb-6">
-                <h1 class="text-2xl font-extrabold text-gray-800">AR Constructor Pro</h1>
-                <p class="text-xs text-gray-400 mt-1">v4.0 • Mobile Field Ready</p>
+    <!-- Loading Screen -->
+    <div id="loader" class="loader-overlay">
+        <div class="spinner mb-4"></div>
+        <h2 class="text-lg font-bold tracking-widest">CARGANDO SISTEMA</h2>
+        <p class="text-sm text-gray-400 mt-2" id="loader-text">Iniciando Firebase...</p>
+    </div>
+
+    <!-- PAGINA 1: INICIO / FIREBASE -->
+    <div id="page-home" class="page active justify-center items-center p-6 bg-gray-50">
+        <div class="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl">
+            <div class="text-center mb-8">
+                <div class="w-16 h-16 bg-blue-100 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl">🏗️</div>
+                <h1 class="text-2xl font-bold text-gray-900">AR Constructor Cloud</h1>
+                <p class="text-sm text-gray-500">Gestión de Anclajes Espaciales</p>
             </div>
 
-            <!-- Alerta Archivo Recuperado -->
-            <div id="status-section" class="hidden mb-6 bg-green-50 border border-green-100 rounded-xl p-4">
-                <div class="flex items-center gap-3 mb-3">
-                    <div class="bg-green-100 p-2 rounded-full">📂</div>
-                    <div>
-                        <h3 class="text-sm font-bold text-green-800">Proyecto Guardado</h3>
-                        <p class="text-xs text-green-600">Modelo y coordenadas listas.</p>
-                    </div>
-                </div>
-                <div class="flex gap-2">
-                    <button id="continue-btn" class="flex-1 bg-green-600 text-white py-2 rounded-lg text-xs font-bold shadow-sm">Continuar</button>
-                    <button id="clear-cache-btn" class="flex-1 bg-white text-red-500 border border-red-100 py-2 rounded-lg text-xs font-bold">Borrar</button>
-                </div>
-            </div>
-
-            <div id="upload-section" class="space-y-4">
-                <!-- Input Archivo -->
-                <div class="relative border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition-colors group">
-                    <input type="file" id="model-upload" accept=".glb,.gltf" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"/>
-                    <div class="text-4xl mb-2 group-hover:scale-110 transition-transform">🏗️</div>
-                    <p class="text-sm font-semibold text-gray-600">Toca para cargar modelo 3D</p>
-                    <p class="text-xs text-gray-400 mt-1" id="file-name-display">Formato .glb recomendado</p>
-                </div>
-                
-                <!-- Coordenadas -->
-                <div class="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                    <div class="flex justify-between items-center mb-3">
-                        <label class="text-xs font-bold text-gray-500 uppercase">Ubicación Inicial</label>
-                        <button id="use-location-btn" class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded flex items-center gap-1">
-                            <span>📍</span> GPS Actual
+            <div class="space-y-4">
+                <!-- Input Proyecto ID -->
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ID de Proyecto (Sala)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="project-id" value="demo-proyecto-1" class="flex-1 bg-gray-50 border border-gray-200 rounded-xl px-4 py-3 text-sm font-mono outline-none focus:ring-2 focus:ring-blue-500">
+                        <button id="load-cloud-btn" class="bg-blue-600 text-white px-4 rounded-xl font-bold shadow-md hover:bg-blue-700">
+                            ☁️ Cargar
                         </button>
                     </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <input type="number" id="latitude-input" step="0.000001" placeholder="Latitud" class="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white">
-                        <input type="number" id="longitude-input" step="0.000001" placeholder="Longitud" class="w-full p-2 border border-gray-300 rounded-lg text-sm bg-white">
-                    </div>
+                    <p class="text-[10px] text-gray-400 mt-1">Usa el mismo ID para compartir la ubicación con otros.</p>
                 </div>
 
-                <button id="load-data-btn" class="control-button w-full shadow-lg bg-gray-800 text-white">
-                    Guardar y Continuar
+                <div class="h-px bg-gray-100 my-4"></div>
+
+                <!-- Carga Local -->
+                <div class="border-2 border-dashed border-gray-300 rounded-xl p-6 text-center hover:bg-gray-50 transition relative cursor-pointer">
+                    <input type="file" id="file-input" accept=".glb,.gltf" class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                    <div class="text-3xl mb-2">📂</div>
+                    <p class="text-sm font-medium text-gray-600">Toca para cargar modelo (.glb)</p>
+                    <p class="text-xs text-gray-400 mt-1" id="filename">Ningún archivo seleccionado</p>
+                </div>
+
+                <button id="start-btn" class="control-btn bg-gray-900 text-white mt-4" disabled>
+                    Configurar Ubicación
                 </button>
             </div>
         </div>
     </div>
 
-    <!-- PAGINA 2: MAPA -->
+    <!-- PAGINA 2: MAPA SATELITAL -->
     <div id="page-map" class="page">
-        <div id="map-container">
-            <div id="map-canvas"></div>
-        </div>
-
-        <!-- Botón Config Mapa -->
-        <button id="back-to-setup-from-map-btn" class="absolute top-4 right-4 z-[402] bg-white w-10 h-10 rounded-full shadow-md flex items-center justify-center text-lg">
-            ⚙️
-        </button>
-
-        <div class="map-ui-container">
-            <div class="flex justify-between items-end border-b pb-2 mb-2 border-gray-100">
-                <div>
-                    <h3 class="font-bold text-gray-800 text-sm">Ajuste de Ubicación</h3>
-                    <p class="text-[10px] text-gray-400">Arrastra el marcador naranja</p>
+        <div id="map-canvas"></div>
+        
+        <div class="map-ui">
+            <div class="flex justify-between items-center mb-3">
+                <h3 class="font-bold text-gray-800">Geolocalización</h3>
+                <span class="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-full">SÁTELITE</span>
+            </div>
+            <p class="text-xs text-gray-500 mb-4">Arrastra el marcador al punto exacto de construcción.</p>
+            
+            <div class="grid grid-cols-2 gap-2 mb-3">
+                <div class="bg-gray-50 p-2 rounded-lg">
+                    <span class="text-[9px] text-gray-400 font-bold block">LATITUD</span>
+                    <span id="disp-lat" class="text-xs font-mono font-bold text-gray-700">0.000000</span>
+                </div>
+                <div class="bg-gray-50 p-2 rounded-lg">
+                    <span class="text-[9px] text-gray-400 font-bold block">LONGITUD</span>
+                    <span id="disp-lon" class="text-xs font-mono font-bold text-gray-700">0.000000</span>
                 </div>
             </div>
-            
-            <!-- Coordenadas en tiempo real -->
-            <div class="flex gap-2 bg-gray-100 p-2 rounded-lg">
-                <div class="w-1/2">
-                    <label class="block text-[9px] text-gray-500 font-bold">LATITUD</label>
-                    <input type="number" id="jumpto-lat" class="w-full bg-transparent text-xs font-mono font-bold text-gray-700 outline-none" readonly>
-                </div>
-                <div class="w-1/2 border-l border-gray-300 pl-2">
-                    <label class="block text-[9px] text-gray-500 font-bold">LONGITUD</label>
-                    <input type="number" id="jumpto-lon" class="w-full bg-transparent text-xs font-mono font-bold text-gray-700 outline-none" readonly>
-                </div>
-            </div>
-            
-            <button id="goto-scale-btn" class="control-button w-full text-sm mt-1">
-                Confirmar Ubicación
-            </button>
+
+            <button onclick="app.setMode('ar')" class="control-btn">Confirmar y Ver en AR</button>
+            <button onclick="app.setMode('surface')" class="control-btn secondary mt-2">Ver solo Modelo (Interior)</button>
         </div>
     </div>
 
-    <!-- PAGINA 3: SELECCIÓN -->
-    <div id="page-scale" class="page items-center justify-center p-5 bg-gray-100">
-        <div class="bg-white p-6 rounded-2xl shadow-lg w-full max-w-md relative">
-            <button id="back-to-map-from-scale-btn" class="absolute top-6 right-6 text-gray-400 hover:text-gray-600">✕</button>
-            
-            <h2 class="text-xl font-bold text-gray-800 mb-6">Selecciona Experiencia</h2>
-
-            <!-- MODO SUPERFICIE -->
-            <div class="mb-4 p-5 bg-gradient-to-br from-purple-50 to-white border border-purple-100 rounded-2xl shadow-sm active:scale-95 transition-transform cursor-pointer" id="card-surface">
-                <div class="flex items-center gap-4 mb-3">
-                    <div class="bg-purple-100 p-3 rounded-xl text-2xl">🏠</div>
-                    <div>
-                        <h3 class="font-bold text-purple-900">Modo Interior (Superficie)</h3>
-                        <p class="text-[10px] text-purple-600 font-medium">Escala 1:1 • Sin GPS</p>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-500 mb-4 leading-relaxed">
-                    Detecta el piso y coloca el modelo manualmente. Ideal para visualizar maquetas, muebles o interiores.
-                </p>
-                <button id="start-surface-mode-btn" class="w-full bg-purple-600 text-white py-3 rounded-xl font-bold text-sm shadow-md">
-                    Abrir Cámara Interior
-                </button>
-            </div>
-
-            <!-- MODO GPS -->
-            <div class="p-5 bg-gradient-to-br from-green-50 to-white border border-green-100 rounded-2xl shadow-sm">
-                <div class="flex items-center gap-4 mb-3">
-                    <div class="bg-green-100 p-3 rounded-xl text-2xl">🌍</div>
-                    <div>
-                        <h3 class="font-bold text-green-900">Modo Exterior (GPS)</h3>
-                        <p class="text-[10px] text-green-600 font-medium">Geolocalizado • Terreno</p>
-                    </div>
-                </div>
-                <p class="text-xs text-gray-500 mb-4 leading-relaxed">
-                    Fija el modelo en las coordenadas del mapa. Ideal para ver el edificio en el terreno real.
-                </p>
-                
-                <div class="bg-white p-3 rounded-lg border border-gray-100 mb-4">
-                    <div class="flex justify-between mb-1">
-                        <span class="text-[10px] font-bold text-gray-400">AJUSTE DE ESCALA</span>
-                        <span id="initial-scale-value" class="text-[10px] font-bold text-green-600">1.0x</span>
-                    </div>
-                    <input type="range" id="initial-ar-scale-slider" min="0.1" max="2" step="0.1" value="1" class="w-full h-1 bg-gray-200 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <button id="goto-ar-from-scale-btn" class="w-full bg-green-600 text-white py-3 rounded-xl font-bold text-sm shadow-md">
-                    Abrir Cámara Exterior
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- PAGINA 4: AR GPS (EXTERIOR) -->
+    <!-- PAGINA 3: AR GPS (EXTERIOR) -->
     <div id="page-ar" class="page bg-black">
-        <div id="ar-scene-container" class="absolute inset-0 z-0"></div>
+        <div id="ar-container"></div> <!-- A-Frame se inyecta aquí -->
         
-        <div id="ar-loading-screen" class="ar-loading-screen">
-            <div class="loader"></div>
-            <h2 class="text-lg font-bold tracking-widest">CALIBRANDO GPS</h2>
-            <p class="text-xs text-gray-400 mt-2">Mantén el cielo despejado</p>
+        <!-- HUD GPS -->
+        <div class="absolute top-4 left-4 bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full border border-white/10 pointer-events-none z-50">
+            <span class="text-xs font-mono">GPS: <span id="gps-stat">Buscando...</span></span>
         </div>
 
-        <div class="ar-hud w-full top-0 p-4 flex justify-between pointer-events-none">
-            <div class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full flex items-center gap-2 border border-white/10">
-                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span class="font-mono text-[10px]" id="gps-accuracy-display">± --m</span>
-            </div>
-        </div>
-
-        <!-- Panel de Ajuste Fino -->
-        <div id="calibration-panel" class="calibration-panel">
-            <div class="text-white text-[10px] font-bold text-center mb-1 border-b border-gray-600 pb-1">AJUSTE FINO</div>
-            <div class="flex justify-center gap-2">
-                <button class="cal-btn" id="move-z-minus">⬆️</button>
-            </div>
-            <div class="flex justify-center gap-2">
-                <button class="cal-btn" id="move-x-minus">⬅️</button>
-                <button class="cal-btn" id="move-z-plus">⬇️</button>
-                <button class="cal-btn" id="move-x-plus">➡️</button>
-            </div>
-            <div class="flex justify-center gap-2 mt-2 border-t border-gray-600 pt-2">
-                <button class="cal-btn text-xs font-bold" id="move-y-plus">SUBIR</button>
-                <button class="cal-btn text-xs font-bold" id="move-y-minus">BAJAR</button>
-            </div>
-            <div class="flex justify-center gap-2 mt-1">
-                <button class="cal-btn text-xs" id="rot-minus">↺ GIRO</button>
-                <button class="cal-btn text-xs" id="rot-plus">GIRO ↻</button>
-            </div>
-        </div>
-
-        <div class="ar-hud bottom-8 left-0 w-full px-6 flex justify-between pointer-events-auto items-end">
-            <button id="exit-ar-btn" class="bg-red-500/80 backdrop-blur text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl border border-white/20">✕</button>
-            <button id="toggle-calibration-btn" class="bg-blue-600/90 backdrop-blur text-white px-5 py-3 rounded-full shadow-lg font-bold text-sm border border-white/20 flex items-center gap-2">
-                <span>🛠️</span> Ajustar Posición
+        <!-- Botones AR -->
+        <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3 z-50 w-full px-4 max-w-md">
+            <button onclick="window.location.reload()" class="bg-red-500/90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl">✕</button>
+            <button onclick="app.toggleCalibration()" class="flex-1 bg-white/90 backdrop-blur text-black font-bold py-3 rounded-full shadow-lg">🛠️ Calibrar</button>
+            <button onclick="app.saveToCloud()" class="flex-1 bg-blue-600 text-white font-bold py-3 rounded-full shadow-lg flex items-center justify-center gap-2">
+                <span>☁️</span> Guardar
             </button>
+        </div>
+
+        <!-- Panel Calibración -->
+        <div id="cal-hud" class="calibration-hud">
+            <div class="text-white text-[10px] font-bold text-center mb-1 opacity-50">POSICIÓN</div>
+            <div class="grid grid-cols-3 gap-1">
+                <div></div> <button class="pad-btn" onmousedown="app.adjust('z', -0.5)">⬆️</button> <div></div>
+                <button class="pad-btn" onmousedown="app.adjust('x', -0.5)">⬅️</button>
+                <button class="pad-btn" onmousedown="app.adjust('z', 0.5)">⬇️</button>
+                <button class="pad-btn" onmousedown="app.adjust('x', 0.5)">➡️</button>
+            </div>
+            <div class="text-white text-[10px] font-bold text-center mt-2 opacity-50">ALTURA / GIRO</div>
+            <div class="flex justify-center gap-2">
+                <button class="pad-btn text-sm" onmousedown="app.adjust('y', 0.5)">⏫</button>
+                <button class="pad-btn text-sm" onmousedown="app.adjust('y', -0.5)">⏬</button>
+                <button class="pad-btn text-sm" onmousedown="app.adjust('r', -5)">↺</button>
+                <button class="pad-btn text-sm" onmousedown="app.adjust('r', 5)">↻</button>
+            </div>
         </div>
     </div>
 
-    <!-- PAGINA 5: AR SUPERFICIE (INTERIOR) -->
-    <div id="page-surface" class="page relative bg-gray-900">
-        <button id="exit-surface-btn" class="absolute top-4 left-4 z-50 bg-white/90 w-10 h-10 rounded-full shadow-lg flex items-center justify-center font-bold text-black">←</button>
+    <!-- PAGINA 4: SURFACE MODE (INTERIOR) -->
+    <div id="page-surface" class="page bg-gray-900">
+        <button onclick="app.setMode('map')" class="absolute top-4 left-4 z-50 bg-white/20 text-white w-10 h-10 rounded-full backdrop-blur flex items-center justify-center">←</button>
         
-        <div class="surface-instruction z-50">
-            Vista Previa 3D. Pulsa abajo para AR.
-        </div>
-
         <model-viewer 
-            id="surface-viewer"
+            id="viewer"
             src=""
             ar 
             ar-modes="webxr scene-viewer quick-look" 
             camera-controls 
             shadow-intensity="1" 
-            ar-scale="fixed"
-            ar-placement="floor"
-            touch-action="pan-y"
-            disable-zoom
             auto-rotate
-            class="w-full h-full">
+            touch-action="pan-y"
+            ar-scale="fixed"
+            ar-placement="floor">
             
-            <button slot="ar-button" class="ar-activate-btn">
-                <span>👋</span> ACTIVAR CÁMARA AR
+            <button slot="ar-button" class="ar-button">
+                <span>📷 ABRIR CÁMARA</span>
             </button>
-            
-            <div id="ar-prompt" class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2">
-                <img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="w-12 opacity-50 animate-bounce">
+
+            <div class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-4 py-2 rounded-full text-xs backdrop-blur pointer-events-none text-center w-max">
+                👋 1 dedo: Girar • 2 dedos: Mover/Zoom
             </div>
         </model-viewer>
     </div>
 
-    <!-- LOGICA -->
+    <!-- LÓGICA DE LA APLICACIÓN -->
     <script type="module">
-        import * as THREE from 'three';
-        import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+        // --- 1. IMPORTACIONES ---
+        import { initializeApp } from 'firebase/app';
+        import { getFirestore, doc, getDoc, setDoc } from 'firebase/firestore';
 
-        const DB_NAME = 'ARConstructorProDB_v4';
-        const appState = {
-            coords: { latitude: 0, longitude: 0 },
-            arTargetCoords: null,
-            modelBlobURL: null,
-            settings: { groundHeight: 0, initialScale: 1.0 },
-            calibration: { x: 0, y: 0, z: 0, rotation: 0 }
+        // --- 2. CONFIGURACIÓN FIREBASE (¡PON TUS DATOS AQUÍ!) ---
+        const firebaseConfig = {
+             // ⚠️ REEMPLAZA ESTO CON TU CONFIGURACIÓN DE LA CONSOLA DE FIREBASE ⚠️
+            apiKey: "TU_API_KEY_AQUI",
+            authDomain: "tu-proyecto.firebaseapp.com",
+            projectId: "tu-proyecto",
+            storageBucket: "tu-proyecto.appspot.com",
+            messagingSenderId: "123456789",
+            appId: "1:123456789:web:abc123456"
         };
 
-        // --- DB ---
-        const dbPromise = new Promise((resolve, reject) => {
-            const req = indexedDB.open(DB_NAME, 1);
-            req.onupgradeneeded = e => {
-                const db = e.target.result;
-                db.createObjectStore('files');
-                db.createObjectStore('settings');
-            };
-            req.onsuccess = () => resolve(req.result);
-            req.onerror = () => reject(req.error);
-        });
+        // --- 3. ESTADO GLOBAL ---
+        const state = {
+            modelUrl: null,
+            coords: { lat: 0, lon: 0 },
+            calibration: { x: 0, y: 0, z: 0, rotation: 0, scale: 1.0 },
+            projectId: 'demo-1',
+            db: null
+        };
 
-        async function saveProject(file, coords) {
-            const db = await dbPromise;
-            const tx = db.transaction(['files', 'settings'], 'readwrite');
-            if(file) tx.objectStore('files').put(file, 'model');
-            tx.objectStore('settings').put({ coords }, 'config');
-            return new Promise(r => tx.oncomplete = r);
-        }
-
-        async function loadProject() {
-            const db = await dbPromise;
-            const settings = await new Promise(r => db.transaction('settings').objectStore('settings').get('config').onsuccess = e => r(e.target.result));
-            const file = await new Promise(r => db.transaction('files').objectStore('files').get('model').onsuccess = e => r(e.target.result));
-            if (settings && file) {
-                appState.coords = settings.coords;
-                appState.modelBlobURL = URL.createObjectURL(file);
-                return true;
+        // --- 4. CLASE PRINCIPAL ---
+        class ARApp {
+            constructor() {
+                this.initFirebase();
+                this.initUI();
             }
-            return false;
-        }
 
-        // --- NAVEGACION ROBUSTA ---
-        const pages = { 
-            upload: document.getElementById('page-upload'), 
-            map: document.getElementById('page-map'), 
-            scale: document.getElementById('page-scale'), 
-            ar: document.getElementById('page-ar'),
-            surface: document.getElementById('page-surface')
-        };
+            initFirebase() {
+                try {
+                    const app = initializeApp(firebaseConfig);
+                    state.db = getFirestore(app);
+                    console.log("Firebase conectado");
+                } catch (e) {
+                    console.warn("Firebase no configurado (Modo Offline)", e);
+                    this.toast("⚠️ Firebase no configurado. Modo Local.", "error");
+                }
+                document.getElementById('loader').classList.add('hidden');
+            }
 
-        function navigateTo(id) {
-            // Limpieza agresiva al salir de AR
-            if (document.getElementById('page-ar').classList.contains('active') && id !== 'page-ar') {
-                const scene = document.querySelector('a-scene');
-                if(scene) { 
-                    scene.parentNode.removeChild(scene); // Destruir A-Frame para liberar cámara
-                    window.location.reload(); // Recargar para limpiar contexto WebGL (más seguro en móviles)
-                    return; 
+            initUI() {
+                // Input Archivo
+                document.getElementById('file-input').addEventListener('change', (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                        state.modelUrl = URL.createObjectURL(file);
+                        document.getElementById('filename').textContent = file.name;
+                        document.getElementById('start-btn').disabled = false;
+                        document.getElementById('start-btn').classList.replace('bg-gray-900', 'bg-blue-600');
+                    }
+                });
+
+                // Botón Cargar Nube
+                document.getElementById('load-cloud-btn').addEventListener('click', () => this.loadFromCloud());
+
+                // Botón Iniciar
+                document.getElementById('start-btn').addEventListener('click', () => {
+                    this.setMode('map');
+                    this.initMap();
+                });
+            }
+
+            // --- NUBE (FIREBASE) ---
+            async loadFromCloud() {
+                if (!state.db) return;
+                
+                const pid = document.getElementById('project-id').value;
+                this.showLoader(true, "Buscando proyecto...");
+
+                try {
+                    const docRef = doc(state.db, "ar_projects", pid);
+                    const docSnap = await getDoc(docRef);
+
+                    if (docSnap.exists()) {
+                        const data = docSnap.data();
+                        state.coords = data.coords;
+                        state.calibration = data.calibration;
+                        this.toast(`✅ Proyecto "${pid}" cargado`);
+                        
+                        // Si hay modelo cargado localmente, usar las coords de la nube
+                        if(state.modelUrl) {
+                            this.setMode('map');
+                            this.initMap(); // Refrescar mapa con coords nuevas
+                        }
+                    } else {
+                        this.toast("❌ Proyecto no encontrado", "error");
+                    }
+                } catch (e) {
+                    console.error(e);
+                    this.toast("Error de conexión", "error");
+                }
+                this.showLoader(false);
+            }
+
+            async saveToCloud() {
+                if (!state.db) return this.toast("Configura Firebase primero");
+                
+                const pid = document.getElementById('project-id').value;
+                this.showLoader(true, "Guardando anclaje...");
+
+                try {
+                    await setDoc(doc(state.db, "ar_projects", pid), {
+                        coords: state.coords,
+                        calibration: state.calibration,
+                        timestamp: new Date().toISOString()
+                    });
+                    this.toast("☁️ Posición Guardada Exitosamente");
+                } catch (e) {
+                    console.error(e);
+                    this.toast("Error al guardar: Revisa Permisos", "error");
+                }
+                this.showLoader(false);
+            }
+
+            // --- MAPA ---
+            initMap() {
+                const mapDiv = document.getElementById('map-canvas');
+                // Prevenir menú contextual al mantener pulsado
+                mapDiv.addEventListener('contextmenu', e => e.preventDefault());
+
+                if (this.map) this.map.remove();
+
+                // Google Híbrido
+                const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                    maxZoom: 21, maxNativeZoom: 19
+                });
+
+                // Ubicación inicial (o guardada)
+                const startLat = state.coords.lat || 4.6097; // Default
+                const startLon = state.coords.lon || -74.0817;
+
+                this.map = L.map(mapDiv, {
+                    zoomControl: false,
+                    layers: [googleHybrid],
+                    center: [startLat, startLon],
+                    zoom: 19,
+                    tap: false // Fix iOS
+                });
+
+                const marker = L.marker([startLat, startLon], { draggable: true }).addTo(this.map);
+
+                // Actualizar coords al mover
+                const updateCoords = (e) => {
+                    const ll = e.target.getLatLng();
+                    state.coords = { lat: ll.lat, lon: ll.lng };
+                    document.getElementById('disp-lat').textContent = ll.lat.toFixed(6);
+                    document.getElementById('disp-lon').textContent = ll.lng.toFixed(6);
+                };
+
+                marker.on('drag', updateCoords);
+                marker.on('dragend', updateCoords);
+                updateCoords({ target: marker }); // Init
+
+                // Geolocalizar usuario
+                if (state.coords.lat === 0) {
+                    this.toast("📍 Buscando tu ubicación...");
+                    this.map.locate({ setView: true, maxZoom: 19 });
+                    this.map.on('locationfound', e => {
+                        marker.setLatLng(e.latlng);
+                        updateCoords({ target: marker });
+                    });
                 }
             }
 
-            Object.values(pages).forEach(p => p.classList.remove('active'));
-            pages[id].classList.add('active');
-            
-            if(id === 'map') {
-                setTimeout(() => { 
-                    if(map) map.invalidateSize(); 
-                    updateMapUI(appState.arTargetCoords || appState.coords);
-                }, 300);
-            }
-        }
-
-        function showMessage(msg) {
-            const box = document.getElementById('message-box');
-            box.textContent = msg; box.classList.add('show');
-            setTimeout(() => box.classList.remove('show'), 3000);
-        }
-
-        // --- MAPA (FIX TOUCH) ---
-        let map = null;
-        function initMap() {
-            const container = document.getElementById('map-canvas');
-            
-            // Bloquear menú contextual de Android/iOS en el mapa
-            document.getElementById('map-container').addEventListener('contextmenu', e => e.preventDefault());
-
-            if (map) map.remove();
-            
-            const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', { maxZoom: 22, maxNativeZoom: 19 });
-            
-            // Configuración Anti-Inercia para evitar "flotación"
-            map = L.map(container, { 
-                zoomControl: false, 
-                layers: [googleHybrid],
-                inertia: false, // Movimiento seco
-                tap: false // Fix para algunos eventos touch
-            }).setView([appState.coords.latitude, appState.coords.longitude], 18);
-
-            const marker = L.marker([appState.coords.latitude, appState.coords.longitude], { draggable: true }).addTo(map);
-            
-            // Actualización en tiempo real (mientras arrastras)
-            marker.on('drag', e => {
-                const ll = e.target.getLatLng();
-                updateMapUI(ll);
-            });
-
-            marker.on('dragend', e => {
-                const ll = e.target.getLatLng();
-                appState.arTargetCoords = { latitude: ll.lat, longitude: ll.lng };
-                updateMapUI(ll);
-            });
-
-            updateMapUI(marker.getLatLng());
-        }
-
-        function updateMapUI(ll) {
-            if(!ll) return;
-            // Actualiza los inputs de la pantalla del mapa, NO los de la pantalla de carga
-            document.getElementById('jumpto-lat').value = ll.lat.toFixed(6);
-            document.getElementById('jumpto-lon').value = ll.lng.toFixed(6);
-        }
-
-        // --- AR GPS (A-FRAME) ---
-        async function startGPSAR() {
-            navigateTo('ar');
-            document.getElementById('ar-loading-screen').classList.add('active');
-
-            // Carga bajo demanda
-            if (!window.AFRAME) {
-                await loadScript('https://aframe.io/releases/1.3.0/aframe.min.js');
-                await loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js');
-                await loadScript('https://cdn.jsdelivr.net/gh/donmccurdy/aframe-extras@v6.1.1/dist/aframe-extras.min.js');
-            }
-
-            const container = document.getElementById('ar-scene-container');
-            const t = appState.arTargetCoords || appState.coords;
-            
-            container.innerHTML = `
-                <a-scene embedded vr-mode-ui="enabled: false" 
-                    renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true;"
-                    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
-                    
-                    <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
-                    
-                    <a-entity id="calibrator" position="0 0 0">
-                        <a-entity gltf-model="${appState.modelBlobURL}" 
-                            gps-entity-place="latitude: ${t.latitude}; longitude: ${t.longitude};"
-                            scale="${appState.settings.initialScale} ${appState.settings.initialScale} ${appState.settings.initialScale}">
-                        </a-entity>
-                    </a-entity>
-
-                    <a-light type="ambient" intensity="1.5"></a-light>
-                    <a-light type="directional" position="-1 1 0" intensity="1"></a-light>
-                </a-scene>
-            `;
-
-            document.querySelector('a-scene').addEventListener('loaded', () => {
-                document.getElementById('ar-loading-screen').classList.remove('active');
-                startGPSWatch(); // Iniciar monitoreo real
-            });
-        }
-
-        function updateGPSCalibration() {
-            const el = document.getElementById('calibrator');
-            if(el) {
-                el.setAttribute('position', `${appState.calibration.x} ${appState.calibration.y} ${appState.calibration.z}`);
-                el.setAttribute('rotation', `0 ${appState.calibration.rotation} 0`);
-                showMessage(`X: ${appState.calibration.x} Z: ${appState.calibration.z}`);
-            }
-        }
-        
-        function startGPSWatch() {
-            navigator.geolocation.watchPosition(pos => {
-                document.getElementById('gps-accuracy-display').textContent = `± ${pos.coords.accuracy.toFixed(0)}m`;
-            }, err => {}, { enableHighAccuracy: true });
-        }
-
-        function loadScript(src) {
-            return new Promise(r => { const s = document.createElement('script'); s.src = src; s.onload = r; document.head.appendChild(s); });
-        }
-
-        // --- AR SUPERFICIE (MODEL VIEWER) ---
-        function startSurfaceAR() {
-            if (!appState.modelBlobURL) return showMessage("No hay modelo cargado");
-            
-            const viewer = document.getElementById('surface-viewer');
-            viewer.src = appState.modelBlobURL;
-            navigateTo('surface');
-            
-            // Mensaje guía
-            showMessage("Modo Interior Activo. Pulsa el botón verde para ver cámara.");
-        }
-
-        // --- INIT ---
-        document.addEventListener('DOMContentLoaded', async () => {
-            const hasData = await loadProject();
-            if (hasData) {
-                document.getElementById('status-section').classList.remove('hidden');
-                document.getElementById('upload-section').classList.add('hidden');
-            }
-
-            // File Input UI
-            document.getElementById('model-upload').addEventListener('change', e => {
-                if(e.target.files[0]) document.getElementById('file-name-display').textContent = e.target.files[0].name;
-            });
-
-            // Carga de Proyecto
-            document.getElementById('load-data-btn').addEventListener('click', async () => {
-                const file = document.getElementById('model-upload').files[0];
-                const lat = parseFloat(document.getElementById('latitude-input').value) || 0;
-                const lon = parseFloat(document.getElementById('longitude-input').value) || 0;
+            // --- AR GPS ---
+            startAR() {
+                const container = document.getElementById('ar-container');
                 
-                if(file) {
-                    await saveProject(file, { latitude: lat, longitude: lon });
-                    await loadProject();
-                    initMap(); navigateTo('map');
-                } else showMessage("Falta el archivo 3D");
-            });
+                // Inyectar A-Frame dinámicamente
+                if (!window.AFRAME) {
+                    this.loadScript('https://aframe.io/releases/1.3.0/aframe.min.js')
+                        .then(() => this.loadScript('https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'))
+                        .then(() => this.renderScene());
+                } else {
+                    this.renderScene();
+                }
+            }
 
-            document.getElementById('continue-btn').addEventListener('click', () => { initMap(); navigateTo('map'); });
-            document.getElementById('clear-cache-btn').addEventListener('click', () => { indexedDB.deleteDatabase(DB_NAME); window.location.reload(); });
+            renderScene() {
+                const t = state.coords;
+                const c = state.calibration;
+                
+                document.getElementById('ar-container').innerHTML = `
+                    <a-scene embedded vr-mode-ui="enabled: false"
+                        renderer="logarithmicDepthBuffer: true; antialias: true; alpha: true;"
+                        arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
+                        
+                        <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
+                        
+                        <a-entity id="geo-anchor" gps-entity-place="latitude: ${t.lat}; longitude: ${t.lon};">
+                            <a-entity id="model-wrapper" 
+                                position="${c.x} ${c.y} ${c.z}" 
+                                rotation="0 ${c.rotation} 0"
+                                scale="${c.scale} ${c.scale} ${c.scale}">
+                                <a-entity gltf-model="${state.modelUrl}"></a-entity>
+                            </a-entity>
+                        </a-entity>
 
-            // Botón Ubicación
-            document.getElementById('use-location-btn').addEventListener('click', () => {
-                showMessage("Buscando GPS...");
-                navigator.geolocation.getCurrentPosition(pos => {
-                    document.getElementById('latitude-input').value = pos.coords.latitude.toFixed(6);
-                    document.getElementById('longitude-input').value = pos.coords.longitude.toFixed(6);
-                    showMessage("Ubicación encontrada");
-                }, err => showMessage("Error GPS: " + err.message), { enableHighAccuracy: true });
-            });
+                        <a-light type="ambient" intensity="1.2"></a-light>
+                        <a-light type="directional" position="-1 1 0" intensity="1.5"></a-light>
+                    </a-scene>
+                `;
 
-            // Navegación
-            document.getElementById('goto-scale-btn').addEventListener('click', () => navigateTo('scale'));
-            document.getElementById('back-to-setup-from-map-btn').addEventListener('click', () => navigateTo('upload'));
-            document.getElementById('back-to-map-from-scale-btn').addEventListener('click', () => navigateTo('map'));
-            
-            // AR Triggers
-            document.getElementById('start-surface-mode-btn').addEventListener('click', startSurfaceAR);
-            document.getElementById('goto-ar-from-scale-btn').addEventListener('click', startGPSAR);
-            
-            // Salidas
-            document.getElementById('exit-ar-btn').addEventListener('click', () => window.location.reload()); // Reinicio seguro
-            document.getElementById('exit-surface-btn').addEventListener('click', () => navigateTo('scale'));
+                // Monitor GPS Accuracy
+                window.addEventListener('gps-camera-update-position', e => {
+                    document.getElementById('gps-stat').textContent = `± ${e.detail.position.accuracy.toFixed(0)}m`;
+                });
+            }
 
-            // Ajustes
-            document.getElementById('initial-ar-scale-slider').addEventListener('input', e => {
-                appState.settings.initialScale = e.target.value;
-                document.getElementById('initial-scale-value').textContent = e.target.value + 'x';
-            });
+            // --- CALIBRACIÓN ---
+            adjust(axis, val) {
+                if (axis === 'r') state.calibration.rotation += val;
+                else state.calibration[axis] += val;
+                
+                // Aplicar visualmente
+                const el = document.getElementById('model-wrapper');
+                if (el) {
+                    const c = state.calibration;
+                    el.setAttribute('position', `${c.x} ${c.y} ${c.z}`);
+                    el.setAttribute('rotation', `0 ${c.rotation} 0`);
+                    this.toast(`Pos: ${c.x.toFixed(1)}, ${c.y.toFixed(1)}, ${c.z.toFixed(1)}`);
+                }
+            }
 
-            document.getElementById('toggle-calibration-btn').addEventListener('click', () => {
-                document.getElementById('calibration-panel').classList.toggle('active');
-            });
+            toggleCalibration() {
+                document.getElementById('cal-hud').classList.toggle('visible');
+            }
 
-            // Calibración Buttons (Con Prevent Default para no seleccionar texto)
-            const bindCal = (id, axis, val) => {
-                const btn = document.getElementById(id);
-                const action = (e) => {
-                    e.preventDefault();
-                    appState.calibration[axis] += val;
-                    updateGPSCalibration();
-                };
-                btn.addEventListener('click', action);
-                btn.addEventListener('touchstart', action);
-            };
-            
-            bindCal('move-z-minus', 'z', -0.5); bindCal('move-z-plus', 'z', 0.5);
-            bindCal('move-x-minus', 'x', -0.5); bindCal('move-x-plus', 'x', 0.5);
-            bindCal('move-y-plus', 'y', 0.5);   bindCal('move-y-minus', 'y', -0.5);
-            bindCal('rot-plus', 'rotation', 5); bindCal('rot-minus', 'rotation', -5);
-        });
+            // --- UTILIDADES ---
+            setMode(modeId) {
+                document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+                
+                if (modeId === 'ar') {
+                    document.getElementById('page-ar').classList.add('active');
+                    this.startAR();
+                } else if (modeId === 'surface') {
+                    document.getElementById('page-surface').classList.add('active');
+                    const v = document.getElementById('viewer');
+                    v.src = state.modelUrl;
+                } else if (modeId === 'map') {
+                    document.getElementById('page-map').classList.add('active');
+                    setTimeout(() => this.map.invalidateSize(), 100);
+                } else {
+                    document.getElementById('page-home').classList.add('active');
+                }
+            }
+
+            toast(msg, type = 'info') {
+                const t = document.getElementById('toast');
+                document.getElementById('toast-msg').textContent = msg;
+                document.getElementById('toast-icon').textContent = type === 'error' ? '❌' : 'ℹ️';
+                t.classList.add('show');
+                setTimeout(() => t.classList.remove('show'), 3000);
+            }
+
+            showLoader(show, text) {
+                const l = document.getElementById('loader');
+                if(show) {
+                    document.getElementById('loader-text').textContent = text;
+                    l.classList.remove('hidden');
+                } else {
+                    l.classList.add('hidden');
+                }
+            }
+
+            loadScript(src) {
+                return new Promise(resolve => {
+                    const s = document.createElement('script');
+                    s.src = src;
+                    s.onload = resolve;
+                    document.head.appendChild(s);
+                });
+            }
+        }
+
+        // Iniciar App
+        window.app = new ARApp();
     </script>
 </body>
 </html>
