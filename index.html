@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.21 (Surface Edition)</title>
+    <title>AR Constructor Pro v3.22 (Logic Flow)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -48,11 +48,11 @@
             border: none;
             padding: 15px 30px;
             font-weight: 800;
-            font-size: 14px;
+            font-size: 16px; /* Más grande */
             letter-spacing: 0.5px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             position: absolute;
-            bottom: 140px; /* Subido para no estorbar con el panel inferior */
+            bottom: 40px; /* Posición original centrada */
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -63,10 +63,17 @@
             cursor: pointer;
             white-space: nowrap;
             text-transform: uppercase;
-            transition: transform 0.1s;
+            transition: transform 0.2s, bottom 0.3s;
         }
         .ar-green-btn:active { transform: translateX(-50%) scale(0.95); }
         
+        /* Cuando el botón de guardar aparece, subimos un poco el de AR por si acaso, o lo ocultamos */
+        .ar-green-btn.minimized {
+            bottom: 150px;
+            transform: translateX(-50%) scale(0.8);
+            opacity: 0.8;
+        }
+
         /* Model Viewer y Prompt de Mano */
         model-viewer { width: 100%; height: 100%; --poster-color: transparent; background-color: #111; }
         
@@ -94,6 +101,15 @@
         .ver-badge {
             position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50;
         }
+
+        /* Animación de entrada para el botón de guardar */
+        .slide-up-enter {
+            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+        @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
     </style>
 
     <!-- LÓGICA FIREBASE -->
@@ -114,8 +130,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        // --- VERSIÓN ACTUALIZADA A 3.21 ---
-        const APP_VERSION = "3.21 SURFACE";
+        const APP_VERSION = "3.22 LOGIC FLOW";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -260,33 +275,55 @@
                 state.localBlobUrl = URL.createObjectURL(state.tempFile);
                 this.toggleModal('new-project', false);
                 
+                // RESETEAR UI DEL PASO SIGUIENTE
+                document.getElementById('save-container').classList.add('hidden'); // Ocultar panel guardar
+                const arBtn = document.querySelector('.ar-green-btn');
+                if(arBtn) {
+                    arBtn.classList.remove('minimized', 'hidden');
+                    arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
+                }
+
                 // IR A PASO 1: VISOR DE SUPERFICIE
                 this.navTo('surface');
                 
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
                 
-                this.toast("¡Modelo cargado! Pulsa 'Cámara AR' para colocarlo.", "success");
+                this.toast("Pulsa INICIAR para colocar el modelo.", "info");
+            }
+
+            // Callback cuando se presiona el botón AR
+            onARStarted() {
+                // Cuando el usuario hace clic para entrar a AR, preparamos la UI para cuando regrese
+                // Se mostrará el panel de guardado
+                setTimeout(() => {
+                    const saveContainer = document.getElementById('save-container');
+                    saveContainer.classList.remove('hidden');
+                    saveContainer.classList.add('slide-up-enter');
+                    
+                    // Minimizamos o cambiamos el botón AR para que no estorbe
+                    const arBtn = document.querySelector('.ar-green-btn');
+                    if(arBtn) {
+                        arBtn.classList.add('minimized');
+                        arBtn.innerHTML = "📷";
+                    }
+                }, 2000); // Pequeño delay para que ocurra mientras entra al modo full screen
             }
 
             // SE LLAMA AL DARLE CLIC A "GUARDAR UBICACIÓN"
             captureDataAndGoMap() {
-                this.loader(true, "Capturando Datos y Satélites...");
+                this.loader(true, "Procesando Ubicación...");
                 
                 // Intentar capturar la escala/rotación actual del visor
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) {
-                     // Nota: Esto captura el estado del DOM. Si el usuario escaló en AR (WebXR), a veces no se refleja aquí, 
-                     // pero capturamos lo mejor posible.
                     const scaleStr = viewer.scale; 
                     if(scaleStr) {
-                         // Parsear "1 1 1" a número
                          const s = parseFloat(scaleStr.toString().split(' ')[0]);
                          state.draftData.calibration.s = s || 1;
                     }
                 }
 
-                // Configuración con TIMEOUT para evitar bloqueo
                 const geoOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
                 // 1. Capturar GPS
@@ -301,7 +338,7 @@
                     // 3. Ir al Mapa para confirmar
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
-                    this.toast("Posición Capturada. Confirma en mapa.", "success");
+                    this.toast("Posición OK. Confirma en mapa.", "success");
 
                 }, err => {
                     this.loader(false);
@@ -335,7 +372,6 @@
 
                 try {
                     let cloudUrl = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
-                    // Subir archivo solo al final
                     if(state.tempFile) {
                         const fileRef = ref(storage, `users/${state.user.uid}/${Date.now()}_${state.tempFile.name}`);
                         const snap = await uploadBytes(fileRef, state.tempFile);
@@ -347,7 +383,6 @@
                         name: state.draftData.name,
                         modelUrl: cloudUrl,
                         coords: state.draftData.coords,
-                        // Guardamos la calibración que hayamos capturado (escala)
                         calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
                         createdAt: new Date().toISOString()
                     });
@@ -371,12 +406,18 @@
                     if(!snap.exists()) throw new Error("No existe");
                     state.currentProject = { id, data: snap.data() };
                     
-                    // Al abrir uno existente, el creador puede ver el mapa o ir al GPS AR
                     this.navTo('surface'); 
                     const viewer = document.getElementById('model-viewer-surface');
                     viewer.src = state.currentProject.data.modelUrl;
                     
-                    // Cambio de botón para modo edición
+                    // Al ver proyecto existente, no mostramos el botón de "Iniciar Cámara AR" para guardar
+                    // sino uno para ir directo a ver en GPS
+                    const arBtn = document.querySelector('.ar-green-btn');
+                    if(arBtn) arBtn.classList.add('hidden');
+
+                    // Mostrar directamente panel de ir a GPS
+                    const saveContainer = document.getElementById('save-container');
+                    saveContainer.classList.remove('hidden');
                     const btn = document.getElementById('btn-capture-location');
                     btn.innerHTML = "<span>🗺️</span> VER EN MAPA / GPS";
                     btn.onclick = () => { 
@@ -399,8 +440,7 @@
                     const viewer = document.getElementById('model-viewer-surface');
                     viewer.src = data.modelUrl;
                     
-                    // Clientes solo ven, no guardan
-                    document.getElementById('btn-capture-location').classList.add('hidden');
+                    document.getElementById('save-container').classList.add('hidden');
                 } catch(e) { this.toast("Error: " + e.message, "error"); }
                 this.loader(false);
             }
@@ -421,7 +461,6 @@
                 setTimeout(() => this.updateOpacity(state.calibration.opacity), 1500);
             }
 
-             // Ajustes A-Frame
             adjust(axis, val) {
                 const c = state.calibration;
                 if(axis === 'r') c.r += val;
@@ -509,14 +548,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.21</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.22</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.21</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.22</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -566,7 +605,7 @@
             <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-red-500/50 transition border border-white/10">✕</button>
         </div>
 
-        <!-- MODEL VIEWER ACTUALIZADO PARA SURFACE DETECTION -->
+        <!-- MODEL VIEWER ACTUALIZADO -->
         <model-viewer 
             id="model-viewer-surface" 
             src="" 
@@ -580,25 +619,29 @@
             interaction-prompt="none"
             class="w-full h-full z-0">
             
-            <!-- Botón para iniciar sesión AR -->
-            <button slot="ar-button" class="ar-green-btn">
-                👋 ACTIVAR CÁMARA AR
-                <span class="text-[9px] font-normal normal-case mt-1 opacity-80">Detectar Piso</span>
+            <!-- Botón único y grande de Iniciar AR -->
+            <button slot="ar-button" class="ar-green-btn" onclick="app.onARStarted()">
+                📷 INICIAR CÁMARA AR
+                <span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>
             </button>
             
-            <!-- Guía de mano (solo visible en AR) -->
+            <!-- Guía de mano -->
             <div class="ar-prompt">
                 <img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon">
                 <p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p>
             </div>
         </model-viewer>
 
-        <div class="absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pointer-events-none">
+        <!-- CONTENEDOR DE GUARDADO (OCULTO INICIALMENTE) -->
+        <div id="save-container" class="hidden absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pointer-events-none">
             <div class="pointer-events-auto">
+                <div class="bg-emerald-900/30 border border-emerald-500/30 p-3 rounded-xl mb-3 backdrop-blur-sm">
+                    <p class="text-center text-emerald-100 text-xs font-bold">✅ ¿Ya acomodaste el modelo?</p>
+                </div>
                 <button id="btn-capture-location" onclick="app.captureDataAndGoMap()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20">
                     <span>📍</span> GUARDAR POSICIÓN Y GPS AQUÍ
                 </button>
-                <p class="text-center text-slate-500 text-xs">1. Usa la Cámara AR 2. Coloca el modelo 3. Guarda</p>
+                <p class="text-center text-slate-500 text-[10px]">Esto guardará las coordenadas actuales y la escala del modelo.</p>
             </div>
         </div>
     </div>
@@ -648,3 +691,4 @@
     </div>
 </body>
 </html>
+
