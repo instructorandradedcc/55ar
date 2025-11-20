@@ -1,10 +1,10 @@
-<!DOCTYPE html>
+
 <html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <title>AR Constructor Pro v1.4</title>
+    <title>AR Constructor Pro v1.5</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
@@ -25,7 +25,7 @@
         .page { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow-y: auto; z-index: 10; background: #f3f4f6; }
         .page.active { display: flex; flex-direction: column; }
         
-        /* PANTALLA DE PERMISOS (Inicio) */
+        /* PANTALLA DE PERMISOS */
         #permission-screen {
             position: fixed; inset: 0; z-index: 9999; background: #0f172a;
             display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -37,15 +37,16 @@
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #ffffff; border: 2px solid #2563eb; margin-top: -10px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; }
         
-        /* LOGS DE DEPURACIÓN */
-        #debug-log {
-            position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px;
-            background: rgba(0,0,0,0.8); color: #00ff00; font-family: monospace; font-size: 10px;
-            overflow-y: auto; padding: 5px; z-index: 20000; pointer-events: none; display: none;
-        }
-
         /* VIDEO AR FIX */
         video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; z-index: -2 !important; }
+        
+        /* Notificaciones */
+        #toast {
+            position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px);
+            background: rgba(0,0,0,0.8); color: white; padding: 10px 20px; border-radius: 20px;
+            transition: transform 0.3s; z-index: 10000; font-weight: bold;
+        }
+        #toast.show { transform: translateX(-50%) translateY(0); }
     </style>
 
     <!-- CARGA MOTOR AR -->
@@ -67,50 +68,50 @@
 </head>
 <body>
 
-    <!-- CONSOLA DE ESTADO -->
-    <div id="debug-log">Sistema iniciado...</div>
+    <!-- NOTIFICACIÓN FLOTANTE -->
+    <div id="toast">Mensaje del Sistema</div>
 
-    <!-- 0. PANTALLA DE PERMISOS (Landing Page) CON LOGO -->
+    <!-- 0. PANTALLA DE PERMISOS (Landing Page) -->
     <div id="permission-screen">
-        <!-- LOGO AGREGADO -->
-        <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-24 mb-6 object-contain bg-white p-2 rounded-xl shadow-lg">
+        <!-- LOGO FUNDACIÓN -->
+        <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-32 mb-6 object-contain bg-white p-4 rounded-2xl shadow-xl">
         
         <h1 class="text-2xl font-bold mb-2">AR Constructor Pro</h1>
-        <p class="text-gray-400 mb-8 max-w-xs text-sm">Para visualizar modelos en el mundo real, la aplicación requiere acceso a GPS y Cámara.</p>
+        <p class="text-gray-400 mb-8 max-w-xs text-sm">Aplicación de Realidad Aumentada para Arquitectura. Requiere acceso total a sensores.</p>
         
         <div class="space-y-4 w-full max-w-xs">
-            <div id="perm-status-gps" class="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
-                <span class="flex items-center gap-2">📍 GPS</span> <span id="txt-gps" class="text-yellow-500 font-bold text-xs">PENDIENTE</span>
+            <div class="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="flex items-center gap-2">📍 GPS</span> 
+                <span id="txt-gps" class="text-yellow-500 font-bold text-xs">REQUERIDO</span>
             </div>
-            <div id="perm-status-cam" class="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
-                <span class="flex items-center gap-2">📸 Cámara</span> <span id="txt-cam" class="text-yellow-500 font-bold text-xs">PENDIENTE</span>
+            <div class="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
+                <span class="flex items-center gap-2">📸 Cámara</span> 
+                <span id="txt-cam" class="text-yellow-500 font-bold text-xs">REQUERIDO</span>
             </div>
             
             <button id="btn-start-app" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition transform active:scale-95 mt-4 ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-900">
                 CONCEDER PERMISOS
             </button>
             
-            <p id="secure-warning" class="text-red-400 text-[10px] hidden mt-2">⚠️ No seguro (HTTP). El GPS podría fallar.</p>
+            <p id="secure-warning" class="text-red-400 text-[10px] hidden mt-2">⚠️ Error: Sitio no seguro (HTTP). El GPS fallará.</p>
         </div>
-        <p class="text-[10px] text-gray-600 mt-8">v1.4 - Permission Fix</p>
+        <p class="text-[10px] text-gray-600 mt-8">v1.5 - Final Fix</p>
     </div>
 
     <!-- 1. PÁGINA DE CARGA (UPLOAD) -->
     <div id="upload-page" class="page items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden relative z-10">
             <div class="bg-slate-50 p-6 text-center border-b border-slate-100">
-                <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-14 mx-auto mb-2 object-contain">
-                <h2 class="text-lg font-bold text-slate-800">Configuración</h2>
+                <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-16 mx-auto mb-2 object-contain">
+                <h2 class="text-lg font-bold text-slate-800">Configuración de Proyecto</h2>
             </div>
 
             <div class="p-6 space-y-6">
                 <!-- ARCHIVO -->
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-2">1. Modelo 3D (.glb)</label>
-                    <!-- Input oculto real -->
                     <input type="file" id="real-file-input" accept=".glb" style="display: none;">
                     
-                    <!-- Botón disparador visible -->
                     <button id="btn-select-file" class="w-full border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 hover:bg-blue-50 hover:border-blue-400 transition group">
                         <div class="text-3xl mb-2">📂</div>
                         <p id="file-name-display" class="text-sm font-bold text-slate-600 truncate">Toca para buscar archivo</p>
@@ -137,12 +138,12 @@
                 </button>
                 
                 <div class="grid grid-cols-2 gap-3 pt-2">
-                    <button onclick="app.nav('map')" id="nav-map" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 disabled:opacity-50" disabled>🗺️ Mapa</button>
-                    <button onclick="app.nav('scale')" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50">📏 Escala</button>
+                    <button id="btn-go-map" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 disabled:opacity-50" disabled>🗺️ Mapa</button>
+                    <button id="btn-go-scale" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50">📏 Escala</button>
                 </div>
                 
                 <div class="text-center">
-                     <button id="btn-reset" class="text-xs text-red-400 underline">Resetear App</button>
+                     <button id="btn-reset" class="text-xs text-red-400 underline">Borrar datos y reiniciar</button>
                 </div>
             </div>
         </div>
@@ -151,13 +152,15 @@
     <!-- 2. PÁGINA MAPA -->
     <div id="map-page" class="page">
         <div id="map-c" class="w-full h-full z-0"></div>
-        <div class="absolute top-4 left-4 z-20"><button onclick="app.nav('upload')" class="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow font-bold text-xs text-slate-700">← Volver</button></div>
+        <div class="absolute top-4 left-4 z-20">
+            <button id="btn-back-map" class="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow font-bold text-xs text-slate-700">← Volver</button>
+        </div>
         <div class="absolute bottom-8 left-0 w-full px-6 z-20 pointer-events-none">
             <div class="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl pointer-events-auto text-center max-w-sm mx-auto">
-                <p class="text-xs text-slate-500 mb-3 font-medium">Mueve el mapa para ajustar</p>
+                <p class="text-xs text-slate-500 mb-3 font-medium">Arrastra el mapa para ajustar el punto exacto</p>
                 <div class="flex gap-2">
                     <button id="btn-map-fix" class="flex-1 bg-orange-500 text-white py-3 rounded-xl font-bold text-xs shadow">FIJAR AQUÍ</button>
-                    <button onclick="app.startAR()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs shadow">INICIAR AR 🚀</button>
+                    <button id="btn-start-ar" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs shadow">INICIAR AR 🚀</button>
                 </div>
             </div>
         </div>
@@ -173,7 +176,10 @@
                 <div><label class="text-[10px] font-bold text-slate-400">ALTO (Y)</label><input id="dim-h" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="3"></div>
                 <div><label class="text-[10px] font-bold text-slate-400">FONDO (Z)</label><input id="dim-d" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="10"></div>
             </div>
-            <div class="flex gap-2"><button onclick="app.nav('upload')" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancelar</button><button onclick="app.nav('upload'); app.log('Escala guardada')" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow">Guardar</button></div>
+            <div class="flex gap-2">
+                <button id="btn-back-scale" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancelar</button>
+                <button id="btn-save-scale" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow">Guardar</button>
+            </div>
         </div>
     </div>
 
@@ -183,7 +189,7 @@
         <div class="absolute inset-0 pointer-events-none z-50 flex flex-col justify-between p-4">
             <div class="flex justify-between items-start pointer-events-auto">
                 <div class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-mono border border-white/10 shadow-lg">GPS: <span id="ar-gps-stat" class="text-yellow-400">...</span></div>
-                <button onclick="document.getElementById('adj-panel').classList.toggle('hidden')" class="bg-black/60 backdrop-blur p-2 rounded-lg text-white border border-white/10 shadow-lg">⚙️</button>
+                <button id="btn-toggle-adj" class="bg-black/60 backdrop-blur p-2 rounded-lg text-white border border-white/10 shadow-lg">⚙️</button>
             </div>
             
             <!-- PANEL AJUSTES -->
@@ -197,7 +203,7 @@
             </div>
 
             <div class="flex justify-center pointer-events-auto pb-8">
-                <button onclick="location.reload()" class="bg-red-500/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-xl hover:bg-red-600 text-sm">❌ SALIR</button>
+                <button id="btn-exit-ar" class="bg-red-500/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-xl hover:bg-red-600 text-sm">❌ SALIR</button>
             </div>
         </div>
         <div id="ar-loader" class="absolute inset-0 bg-slate-900 z-[60] flex flex-col items-center justify-center text-white hidden">
@@ -209,161 +215,135 @@
     <script type="module">
         import * as THREE from 'three';
         
-        // --- UTILIDADES ---
-        const $ = id => document.getElementById(id);
-        const CACHE_NAME = 'geo-ar-cache-v1';
-
-        // --- ESTADO GLOBAL ---
-        const st = {
-            url: null,
-            lat: 0,
-            lng: 0,
-            adj: { h: 0, s: 1, r: 0 }
-        };
-
+        // --- CONFIGURACIÓN GLOBAL ---
+        const CACHE_NAME = 'geo-ar-v1-5';
+        const st = { url: null, lat: 0, lng: 0, adj: { h: 0, s: 1, r: 0 } };
         let map, mk, arEnt, selectedFile;
 
-        // --- LÓGICA PRINCIPAL ---
-        const app = {
-            log: (msg) => {
-                console.log(msg);
-                const d = $('debug-log');
-                d.style.display = 'block';
-                d.textContent = `> ${msg}`;
-                setTimeout(() => d.style.display = 'none', 5000);
-            },
+        // --- UTILIDADES ---
+        const toast = (msg) => {
+            const t = document.getElementById('toast');
+            t.textContent = msg;
+            t.classList.add('show');
+            setTimeout(() => t.classList.remove('show'), 3000);
+        };
 
-            // 1. PANTALLA DE PERMISOS (CRÍTICO - FIX)
+        // --- LÓGICA DE LA APP ---
+        const app = {
+            // 1. PERMISOS
             checkPermissions: async () => {
-                const btn = $('btn-start-app');
-                const txtGps = $('txt-gps');
-                const txtCam = $('txt-cam');
+                const btn = document.getElementById('btn-start-app');
+                const txtGps = document.getElementById('txt-gps');
+                const txtCam = document.getElementById('txt-cam');
                 
-                // Verificación de seguridad HTTP vs HTTPS
+                // Verificar contexto seguro (HTTPS)
                 if (!window.isSecureContext) {
-                    $('secure-warning').classList.remove('hidden');
+                    document.getElementById('secure-warning').classList.remove('hidden');
                 }
 
-                btn.innerHTML = "⏳ Procesando...";
+                btn.innerHTML = "⏳ Solicitando...";
                 btn.disabled = true;
                 btn.classList.add('opacity-50');
 
                 try {
-                    // A. GPS (Con timeout para evitar bloqueo eterno)
-                    txtGps.textContent = "⏳";
-                    await new Promise((res, rej) => {
-                        navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 });
+                    // GPS
+                    await new Promise((resolve, reject) => {
+                        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
                     });
                     txtGps.textContent = "✅ OK";
                     txtGps.className = "text-emerald-400 font-bold text-xs";
 
-                    // B. CÁMARA
-                    txtCam.textContent = "⏳";
+                    // CÁMARA
                     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    stream.getTracks().forEach(t => t.stop()); // Cerrar stream de prueba
+                    stream.getTracks().forEach(t => t.stop());
                     txtCam.textContent = "✅ OK";
                     txtCam.className = "text-emerald-400 font-bold text-xs";
 
-                    // Éxito
+                    // ÉXITO
                     btn.innerHTML = "¡LISTO!";
                     btn.classList.replace('bg-blue-600', 'bg-emerald-600');
                     
                     setTimeout(() => {
-                        $('permission-screen').style.display = 'none';
-                        $('upload-page').style.display = 'flex'; // Mostrar página carga
-                        app.loadCache(); // Intentar cargar datos previos
-                    }, 800);
+                        document.getElementById('permission-screen').style.display = 'none';
+                        document.getElementById('upload-page').style.display = 'flex';
+                        app.loadCache();
+                    }, 1000);
 
                 } catch (e) {
-                    alert("❌ ATENCIÓN: " + e.message + "\n\nDebes activar el GPS y permitir la cámara en la configuración del navegador para usar esta app.");
-                    btn.innerHTML = "REINTENTAR PERMISOS";
+                    alert("ERROR DE PERMISOS: \n" + e.message + "\n\nPor favor, activa el GPS y permite la cámara en tu navegador.");
+                    btn.innerHTML = "REINTENTAR";
                     btn.disabled = false;
                     btn.classList.remove('opacity-50');
-                    
-                    // Marcar fallos
-                    if(txtGps.textContent !== "✅ OK") txtGps.textContent = "❌ ERROR";
-                    if(txtCam.textContent !== "✅ OK") txtCam.textContent = "❌ ERROR";
                 }
             },
 
-            // 2. CARGA DE ARCHIVO (MÉTODO CLÁSICO)
+            // 2. ARCHIVOS
             selectFile: () => {
-                $('real-file-input').click(); // Simular clic en el input oculto
+                document.getElementById('real-file-input').click();
             },
 
-            handleFileSelect: (e) => {
+            handleFile: (e) => {
                 const file = e.target.files[0];
-                if (!file) return;
-                
-                selectedFile = file;
-                st.url = URL.createObjectURL(file);
-                
-                // Feedback Visual
-                $('file-name-display').textContent = "✅ " + file.name;
-                $('file-name-display').className = "text-sm font-bold text-emerald-600 truncate";
-                $('btn-select-file').classList.add('border-emerald-500', 'bg-emerald-50');
-                app.log("Archivo seleccionado correctamente");
+                if (file) {
+                    selectedFile = file;
+                    st.url = URL.createObjectURL(file);
+                    
+                    const lbl = document.getElementById('file-name-display');
+                    lbl.textContent = "✅ " + file.name;
+                    lbl.className = "text-sm font-bold text-emerald-600 truncate";
+                    document.getElementById('btn-select-file').classList.add('border-emerald-500', 'bg-emerald-50');
+                    toast("Archivo cargado");
+                }
             },
 
-            // 3. GPS MANUAL
-            getCurrentLocation: () => {
-                const btn = $('btn-get-gps');
-                const originalText = btn.innerHTML;
+            // 3. GPS
+            getGPS: () => {
+                const btn = document.getElementById('btn-get-gps');
                 btn.textContent = "⏳...";
-                btn.disabled = true;
                 
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
-                        $('in-lat').value = pos.coords.latitude.toFixed(6);
-                        $('in-lng').value = pos.coords.longitude.toFixed(6);
+                        document.getElementById('in-lat').value = pos.coords.latitude.toFixed(6);
+                        document.getElementById('in-lng').value = pos.coords.longitude.toFixed(6);
                         btn.textContent = "✅ Detectado";
-                        btn.disabled = false;
-                        app.log("GPS detectado con éxito");
-                        setTimeout(() => btn.innerHTML = originalText, 2000);
+                        setTimeout(() => btn.textContent = "📍 Detectar mi ubicación", 2000);
+                        toast("Ubicación actualizada");
                     },
                     (err) => {
                         alert("Error GPS: " + err.message);
                         btn.textContent = "❌ Error";
-                        btn.disabled = false;
                     },
-                    { enableHighAccuracy: true, timeout: 5000 }
+                    { enableHighAccuracy: true }
                 );
             },
 
-            // 4. GUARDADO (CACHE API REAL)
+            // 4. GUARDAR
             saveData: async () => {
-                st.lat = parseFloat($('in-lat').value);
-                st.lng = parseFloat($('in-lng').value);
+                st.lat = parseFloat(document.getElementById('in-lat').value);
+                st.lng = parseFloat(document.getElementById('in-lng').value);
 
-                if (isNaN(st.lat) || isNaN(st.lng)) return alert("Faltan coordenadas válidas (Lat/Lng)");
-                if (!selectedFile && !st.url) return alert("Falta seleccionar un archivo 3D (.glb)");
+                if (isNaN(st.lat) || isNaN(st.lng)) return alert("Faltan coordenadas");
+                if (!selectedFile && !st.url) return alert("Falta archivo 3D");
 
-                app.log("Guardando en caché...");
-                const btn = $('btn-save');
+                const btn = document.getElementById('btn-save');
                 btn.textContent = "⏳ Guardando...";
                 
                 try {
                     const cache = await caches.open(CACHE_NAME);
-                    
-                    // Si hay archivo nuevo, guardarlo. Si no, usamos el existente.
                     if (selectedFile) {
                         await cache.put('model.glb', new Response(selectedFile));
                     }
-
-                    // Guardar JSON de coordenadas
                     const data = { lat: st.lat, lng: st.lng };
                     await cache.put('data.json', new Response(JSON.stringify(data)));
 
-                    // Habilitar Mapa
-                    $('nav-map').disabled = false;
-                    
+                    document.getElementById('nav-map').disabled = false;
                     btn.textContent = "✅ ¡Guardado!";
                     setTimeout(() => btn.textContent = "💾 Guardar Proyecto", 2000);
+                    toast("Proyecto guardado en memoria");
                     
                 } catch (e) {
                     console.error(e);
                     alert("Error guardando: " + e.message);
-                    btn.textContent = "❌ Error";
                 }
             },
 
@@ -376,48 +356,42 @@
                     if (modelRes && dataRes) {
                         const blob = await modelRes.blob();
                         st.url = URL.createObjectURL(blob);
-                        selectedFile = null; // Ya tenemos blobUrl
-
+                        selectedFile = null; 
+                        
                         const data = await dataRes.json();
-                        st.lat = data.lat;
-                        st.lng = data.lng;
+                        st.lat = data.lat; st.lng = data.lng;
 
-                        // Llenar UI
-                        $('in-lat').value = st.lat;
-                        $('in-lng').value = st.lng;
-                        $('file-name-display').textContent = "✅ Modelo Recuperado";
-                        $('file-name-display').className = "text-sm font-bold text-blue-600 truncate";
-                        $('nav-map').disabled = false;
-                        app.log("Datos restaurados de caché");
+                        document.getElementById('in-lat').value = st.lat;
+                        document.getElementById('in-lng').value = st.lng;
+                        document.getElementById('file-name-display').textContent = "✅ Modelo Recuperado";
+                        document.getElementById('file-name-display').className = "text-sm font-bold text-blue-600 truncate";
+                        document.getElementById('nav-map').disabled = false;
                     }
-                } catch (e) {
-                    console.log("No hay caché");
-                }
+                } catch (e) { console.log("No hay caché previo"); }
             },
 
             // 5. NAVEGACIÓN
-            nav: (p) => {
-                document.querySelectorAll('.page').forEach(x => {
-                    x.classList.remove('active');
-                    x.style.display = 'none';
+            nav: (pageId) => {
+                document.querySelectorAll('.page').forEach(p => {
+                    p.classList.remove('active');
+                    p.style.display = 'none';
                 });
-                const target = $(p + '-page');
+                const target = document.getElementById(pageId + '-page');
                 target.classList.add('active');
-                target.style.display = 'flex'; // Forzar flex para centrado
-
-                if (p === 'map') setTimeout(initMap, 200);
+                target.style.display = 'flex';
+                if (pageId === 'map') setTimeout(initMap, 200);
             },
 
             startAR: async () => {
-                if (!st.url) return alert("Error: Modelo no cargado");
+                if (!st.url) return alert("Modelo no cargado");
                 app.nav('ar');
-                $('ar-loader').classList.remove('hidden');
+                document.getElementById('ar-loader').classList.remove('hidden');
                 
                 try {
                     await loadARLibs();
                     initScene();
                 } catch(e) {
-                    alert("Error cargando AR: " + e);
+                    alert("Error AR: " + e);
                     location.reload();
                 }
             }
@@ -432,14 +406,13 @@
                 map.invalidateSize();
                 map.setView([st.lat, st.lng], 18);
             }
-
             if (mk) mk.setLatLng([st.lat, st.lng]);
             else mk = L.marker([st.lat, st.lng]).addTo(map);
         }
 
-        // --- ESCENA AR ---
+        // --- AR SCENE ---
         function initScene() {
-            $('ar-c').innerHTML = '';
+            document.getElementById('ar-c').innerHTML = '';
             const html = `
                 <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" renderer="logarithmicDepthBuffer: true; colorManagement: true;">
                     <a-camera gps-camera="minDistance: 2;" rotation-reader near="0.1" far="10000"></a-camera>
@@ -448,78 +421,74 @@
                     <a-entity id="ent" gps-entity-place="latitude: ${st.lat}; longitude: ${st.lng};" position="0 0 0" scale="1 1 1" gltf-model="${st.url}" visible="false"></a-entity>
                 </a-scene>
             `;
-            $('ar-c').innerHTML = html;
-            
+            document.getElementById('ar-c').innerHTML = html;
             const el = document.querySelector('#ent');
             arEnt = el;
-
+            
             el.addEventListener('model-loaded', () => {
-                // Fix doble cara
                 const mesh = el.getObject3D('mesh');
-                if (mesh) mesh.traverse(n => { if (n.isMesh) { n.material.side = THREE.DoubleSide; n.material.transparent = true; } });
-                
+                if(mesh) mesh.traverse(n => { if(n.isMesh) { n.material.side = THREE.DoubleSide; n.material.transparent = true; } });
                 el.setAttribute('visible', 'true');
-                $('ar-loader').classList.add('hidden');
-                app.log("Modelo AR Visible");
+                document.getElementById('ar-loader').classList.add('hidden');
+                toast("Modelo AR Visible");
             });
-
+            
             window.addEventListener('gps-camera-update-position', e => {
                 const acc = Math.round(e.detail.position.accuracy);
-                $('ar-gps-stat').textContent = `±${acc}m`;
+                document.getElementById('ar-gps-stat').textContent = `±${acc}m`;
             });
         }
 
-        // --- EVENTOS ---
-        window.addEventListener('DOMContentLoaded', () => {
-            // Aseguramos que app sea global para acceso inline
-            window.app = app;
-
-            // Eventos de botones con verificación
-            const btnStart = $('btn-start-app');
-            if(btnStart) btnStart.addEventListener('click', app.checkPermissions);
-
-            const btnSelect = $('btn-select-file');
-            if(btnSelect) btnSelect.addEventListener('click', app.selectFile);
-
-            const inpFile = $('real-file-input');
-            if(inpFile) inpFile.addEventListener('change', app.handleFileSelect);
+        // --- EVENT LISTENER GLOBAL (CONEXIÓN DE BOTONES) ---
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Permisos
+            document.getElementById('btn-start-app').addEventListener('click', app.checkPermissions);
             
-            const btnGps = $('btn-get-gps');
-            if(btnGps) btnGps.addEventListener('click', app.getCurrentLocation);
-
-            const btnSave = $('btn-save');
-            if(btnSave) btnSave.addEventListener('click', app.saveData);
+            // 2. Archivos
+            document.getElementById('btn-select-file').addEventListener('click', app.selectFile);
+            document.getElementById('real-file-input').addEventListener('change', app.handleFile);
             
-            // Mapa Set
-            const btnMapFix = $('btn-map-fix');
-            if(btnMapFix) btnMapFix.addEventListener('click', () => {
+            // 3. GPS y Guardado
+            document.getElementById('btn-get-gps').addEventListener('click', app.getGPS);
+            document.getElementById('btn-save').addEventListener('click', app.saveData);
+            
+            // 4. Navegación
+            document.getElementById('nav-map').addEventListener('click', () => app.nav('map'));
+            document.getElementById('btn-go-map').addEventListener('click', () => app.nav('map'));
+            document.getElementById('btn-go-scale').addEventListener('click', () => app.nav('scale'));
+            document.getElementById('btn-back-map').addEventListener('click', () => app.nav('upload'));
+            document.getElementById('btn-back-scale').addEventListener('click', () => app.nav('upload'));
+            
+            // 5. Mapa y AR
+            document.getElementById('btn-map-fix').addEventListener('click', () => {
                 const c = map.getCenter();
                 st.lat = c.lat; st.lng = c.lng;
-                $('in-lat').value = st.lat.toFixed(6);
-                $('in-lng').value = st.lng.toFixed(6);
+                document.getElementById('in-lat').value = st.lat.toFixed(6);
+                document.getElementById('in-lng').value = st.lng.toFixed(6);
                 mk.setLatLng(c);
-                app.log("Ubicación fijada desde mapa");
+                toast("Ubicación fijada");
+            });
+            
+            document.getElementById('btn-start-ar').addEventListener('click', app.startAR);
+            document.getElementById('btn-save-scale').addEventListener('click', () => { toast('Escala guardada'); app.nav('upload'); });
+            
+            document.getElementById('btn-exit-ar').addEventListener('click', () => location.reload());
+            document.getElementById('btn-toggle-adj').addEventListener('click', () => document.getElementById('adj-panel').classList.toggle('hidden'));
+            
+            document.getElementById('btn-reset').addEventListener('click', async () => {
+                if(confirm("¿Borrar todo?")) { await caches.delete(CACHE_NAME); location.reload(); }
             });
 
-            // Reset
-            const btnReset = $('btn-reset');
-            if(btnReset) btnReset.addEventListener('click', async () => {
-                if (confirm("¿Borrar todo?")) {
-                    await caches.delete(CACHE_NAME);
-                    location.reload();
-                }
-            });
-
-            // Sliders AR
+            // Sliders
             const upd = () => {
-                if (!arEnt) return;
+                if(!arEnt) return;
                 arEnt.setAttribute('position', `0 ${st.adj.h} 0`);
                 arEnt.setAttribute('scale', `${st.adj.s} ${st.adj.s} ${st.adj.s}`);
                 arEnt.setAttribute('rotation', `0 ${st.adj.r} 0`);
             };
-            $('sl-h').oninput = e => { st.adj.h = parseFloat(e.target.value); $('val-h').textContent=st.adj.h+'m'; upd(); };
-            $('sl-s').oninput = e => { st.adj.s = parseFloat(e.target.value); $('val-s').textContent=st.adj.s+'x'; upd(); };
-            $('sl-r').oninput = e => { st.adj.r = parseFloat(e.target.value); $('val-r').textContent=st.adj.r+'°'; upd(); };
+            document.getElementById('sl-h').oninput = e => { st.adj.h = parseFloat(e.target.value); document.getElementById('val-h').textContent=st.adj.h+'m'; upd(); };
+            document.getElementById('sl-s').oninput = e => { st.adj.s = parseFloat(e.target.value); document.getElementById('val-s').textContent=st.adj.s+'x'; upd(); };
+            document.getElementById('sl-r').oninput = e => { st.adj.r = parseFloat(e.target.value); document.getElementById('val-r').textContent=st.adj.r+'°'; upd(); };
         });
     </script>
 </body>
