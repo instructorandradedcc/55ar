@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.25 (Orientation Fix)</title>
+    <title>AR Constructor Pro v3.26 (Offline & Satellite)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -120,7 +120,7 @@
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 
-    <!-- LÓGICA FIREBASE -->
+    <!-- LÓGICA FIREBASE & DB -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
@@ -138,11 +138,50 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.25 ORIENTATION FIX";
+        const APP_VERSION = "3.26 OFFLINE & SAT";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
         let isPreviewEnv = false;
+
+        // --- CACHE DATABASE (IndexedDB) ---
+        const dbPromise = new Promise((resolve, reject) => {
+            const request = indexedDB.open("ARConstructorCache", 1);
+            request.onupgradeneeded = (event) => {
+                if (!event.target.result.objectStoreNames.contains("models")) {
+                    event.target.result.createObjectStore("models");
+                }
+            };
+            request.onsuccess = (event) => resolve(event.target.result);
+            request.onerror = (event) => reject(event.target.error);
+        });
+
+        async function cacheModel(url) {
+            const db = await dbPromise;
+            
+            // Check if exists
+            const existing = await new Promise(r => {
+                const req = db.transaction("models").objectStore("models").get(url);
+                req.onsuccess = () => r(req.result);
+                req.onerror = () => r(null);
+            });
+
+            if (existing) {
+                console.log("Modelo cargado desde Caché");
+                return URL.createObjectURL(existing);
+            }
+
+            // Fetch and store
+            console.log("Descargando modelo para offline...");
+            const response = await fetch(url);
+            const blob = await response.blob();
+            
+            const tx = db.transaction("models", "readwrite");
+            tx.objectStore("models").put(blob, url);
+            
+            return URL.createObjectURL(blob);
+        }
+        // ----------------------------------
 
         try {
             let configToUse = firebaseConfig;
@@ -165,7 +204,7 @@
             localBlobUrl: null,
             draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
             map: null,
-            modelOrientation: { roll: 0, pitch: 0, yaw: 0 } // Nuevo estado para rotación
+            modelOrientation: { roll: 0, pitch: 0, yaw: 0 }
         };
 
         class ARSystem {
@@ -305,20 +344,16 @@
                 this.toast("Usa los botones laterales para girar si está acostada.", "info");
             }
 
-            // --- LÓGICA DE ROTACIÓN DE MODELO (FIX PARA CASAS ACOSTADAS) ---
             rotateModel(axis, deg) {
-                if (axis === 'pitch') state.modelOrientation.pitch += deg; // X axis
-                if (axis === 'roll') state.modelOrientation.roll += deg;   // Z axis
-                if (axis === 'yaw') state.modelOrientation.yaw += deg;     // Y axis
-                
+                if (axis === 'pitch') state.modelOrientation.pitch += deg; 
+                if (axis === 'roll') state.modelOrientation.roll += deg;   
+                if (axis === 'yaw') state.modelOrientation.yaw += deg;     
                 this.updateModelOrientation();
             }
 
             updateModelOrientation() {
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) {
-                    // model-viewer orientation="roll pitch yaw" (en grados o radianes, usaremos deg)
-                    // Nota: El orden en model-viewer suele ser Roll Pitch Yaw o X Y Z
                     viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
                     this.toast(`Rotación: ${state.modelOrientation.pitch}°`);
                 }
@@ -375,7 +410,13 @@
                 if(state.map) { state.map.remove(); state.map = null; }
                 
                 state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
-                L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: 'CartoDB' }).addTo(state.map);
+                
+                // MAPA HÍBRIDO (Google Satélite + Calles)
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
+                    maxZoom: 20,
+                    subdomains:['mt0','mt1','mt2','mt3'],
+                    attribution: 'Google Maps'
+                }).addTo(state.map);
                 
                 const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
                 const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
@@ -389,7 +430,7 @@
 
             async saveFinalProject() {
                 if(!state.user) return;
-                this.loader(true, "Subiendo a la Nube...");
+                this.loader(true, "Subiendo y Cacheando...");
 
                 try {
                     let cloudUrl = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
@@ -397,6 +438,9 @@
                         const fileRef = ref(storage, `users/${state.user.uid}/${Date.now()}_${state.tempFile.name}`);
                         const snap = await uploadBytes(fileRef, state.tempFile);
                         cloudUrl = await getDownloadURL(snap.ref);
+                        
+                        // Cachear para uso propio offline inmediato
+                        await cacheModel(cloudUrl);
                     }
 
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
@@ -405,11 +449,11 @@
                         modelUrl: cloudUrl,
                         coords: state.draftData.coords,
                         calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
-                        orientation: state.modelOrientation, // Guardar rotación
+                        orientation: state.modelOrientation,
                         createdAt: new Date().toISOString()
                     });
 
-                    this.toast("¡Proyecto Guardado!", "success");
+                    this.toast("¡Proyecto Guardado y Disponible Offline!", "success");
                     this.navTo('dashboard');
                     state.tempFile = null;
 
@@ -421,7 +465,7 @@
             }
 
             async openProject(id, mode) {
-                this.loader(true, "Cargando...");
+                this.loader(true, "Cargando Proyecto...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
@@ -430,20 +474,19 @@
                     
                     this.navTo('surface'); 
                     const viewer = document.getElementById('model-viewer-surface');
-                    viewer.src = state.currentProject.data.modelUrl;
+
+                    // CACHÉ CHECK
+                    const cachedBlob = await cacheModel(state.currentProject.data.modelUrl);
+                    viewer.src = cachedBlob;
                     
-                    // Cargar orientación guardada si existe
                     if(state.currentProject.data.orientation) {
                         state.modelOrientation = state.currentProject.data.orientation;
-                        this.updateModelOrientation();
-                    } else {
-                        state.modelOrientation = {roll:0, pitch:0, yaw:0};
                         this.updateModelOrientation();
                     }
                     
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) arBtn.classList.add('hidden');
-                    document.querySelector('.tools-panel').classList.add('hidden'); // Ocultar herramientas en modo lectura
+                    document.querySelector('.tools-panel').classList.add('hidden'); 
 
                     const saveContainer = document.getElementById('save-container');
                     saveContainer.classList.remove('hidden');
@@ -458,7 +501,7 @@
             }
             
             async openSharedProject(id, ownerUid) {
-                this.loader(true, "Cargando...");
+                this.loader(true, "Descargando Proyecto...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
@@ -467,11 +510,32 @@
                     const data = snap.data();
                     this.navTo('surface');
                     const viewer = document.getElementById('model-viewer-surface');
-                    viewer.src = data.modelUrl;
-                    
+
+                    // CACHÉ CHECK FOR VISITOR
+                    const cachedBlob = await cacheModel(data.modelUrl);
+                    viewer.src = cachedBlob;
+
+                    // RESTAURAR ORIENTACIÓN GUARDADA
+                    if(data.orientation) {
+                        state.modelOrientation = data.orientation;
+                        this.updateModelOrientation();
+                    }
+
+                    // UI MODO SOLO LECTURA
                     document.getElementById('save-container').classList.add('hidden');
+                    document.querySelector('.tools-panel').classList.add('hidden'); // Ocultar edición
+                    
+                    // Visitante solo ve el botón de iniciar AR para caminar
                     const arBtn = document.getElementById('force-ar-btn');
-                    if(arBtn) arBtn.classList.add('hidden');
+                    if(arBtn) {
+                        arBtn.classList.remove('hidden', 'minimized');
+                        arBtn.innerHTML = "👓 ENTRAR AL MODELO";
+                        arBtn.onclick = () => {
+                             app.activateAR();
+                             // Al ser visitante, no mostramos el botón de guardar ubicación después
+                        };
+                    }
+                    
                 } catch(e) { this.toast("Error: " + e.message, "error"); }
                 this.loader(false);
             }
@@ -579,14 +643,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.25</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.26</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.25</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.26</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -672,7 +736,7 @@
                 </div>
             </model-viewer>
 
-            <!-- BOTÓN AR FORZADO (FUERA DEL COMPONENTE) -->
+            <!-- BOTÓN AR FORZADO -->
             <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">
                 📷 INICIAR CÁMARA AR
                 <span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>
