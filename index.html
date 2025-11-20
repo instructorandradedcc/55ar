@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.27 (Progress Bar & Drafts)</title>
+    <title>AR Constructor Pro v3.28 (Fail-Safe)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -84,15 +84,8 @@
         .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center;}
         model-viewer[ar-status="session-started"] > .ar-prompt { display: block; }
         
-        .hand-icon {
-            width: 60px; height: 60px;
-            animation: circle 4s linear infinite;
-            filter: invert(1); opacity: 0.8;
-        }
-        @keyframes circle { 
-            0% { transform: translateX(-50%) rotate(0deg) translateX(20px) rotate(0deg); } 
-            100% { transform: translateX(-50%) rotate(360deg) translateX(20px) rotate(-360deg); } 
-        }
+        .hand-icon { width: 60px; height: 60px; animation: circle 4s linear infinite; filter: invert(1); opacity: 0.8; }
+        @keyframes circle { 0% { transform: translateX(-50%) rotate(0deg) translateX(20px) rotate(0deg); } 100% { transform: translateX(-50%) rotate(360deg) translateX(20px) rotate(-360deg); } }
 
         .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -101,25 +94,16 @@
         .btn-pad:active { background: #4f46e5; transform: scale(0.92); }
         input[type=range] { width: 100%; accent-color: #4f46e5; height: 6px; border-radius: 3px; background: #333; }
 
-        .ver-badge {
-            position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50;
-        }
+        .ver-badge { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50; }
         
-        .tools-panel {
-            position: absolute; right: 10px; top: 80px; z-index: 50;
-            display: flex; flex-direction: column; gap: 8px;
-        }
-        .tool-btn {
-            width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px);
-            border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px;
-            display: flex; align-items: center; justify-content: center; font-size: 18px;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
+        .tools-panel { position: absolute; right: 10px; top: 80px; z-index: 50; display: flex; flex-direction: column; gap: 8px; }
+        .tool-btn { width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .tool-btn:active { background: #4f46e5; }
         .tool-label { font-size: 8px; position: absolute; bottom: 2px; width: 100%; text-align: center; opacity: 0.7; }
 
         .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
         .status-local { background: #F59E0B; color: #000; }
+        .status-unsynced { background: #EF4444; color: #fff; }
         .status-global { background: #10B981; color: #fff; }
 
         .slide-up-enter { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
@@ -129,10 +113,9 @@
     <!-- LÓGICA FIREBASE & DB -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
-        import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, addDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js'; // Note: using uploadBytesResumable
+        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWWwD72sPod5cOWmq0SYPIp6I",
@@ -144,7 +127,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.27 PROGRESS & DRAFTS";
+        const APP_VERSION = "3.28 FAIL-SAFE";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -152,29 +135,45 @@
 
         // --- CACHE DATABASE (IndexedDB) ---
         const dbPromise = new Promise((resolve, reject) => {
-            const request = indexedDB.open("ARConstructorCache", 1);
+            const request = indexedDB.open("ARConstructorDB", 2);
             request.onupgradeneeded = (event) => {
-                if (!event.target.result.objectStoreNames.contains("models")) {
-                    event.target.result.createObjectStore("models");
-                }
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains("models")) db.createObjectStore("models");
+                if (!db.objectStoreNames.contains("projects")) db.createObjectStore("projects", { keyPath: "id" });
             };
             request.onsuccess = (event) => resolve(event.target.result);
             request.onerror = (event) => reject(event.target.error);
         });
 
-        async function saveToCache(key, blob) {
+        async function saveModelToCache(key, blob) {
             const db = await dbPromise;
             const tx = db.transaction("models", "readwrite");
             tx.objectStore("models").put(blob, key);
             return new Promise(r => tx.oncomplete = r);
         }
 
-        async function getFromCache(key) {
+        async function getModelFromCache(key) {
             const db = await dbPromise;
             return new Promise(r => {
                 const req = db.transaction("models").objectStore("models").get(key);
                 req.onsuccess = () => r(req.result);
                 req.onerror = () => r(null);
+            });
+        }
+
+        async function saveProjectToLocalDB(project) {
+            const db = await dbPromise;
+            const tx = db.transaction("projects", "readwrite");
+            tx.objectStore("projects").put(project);
+            return new Promise(r => tx.oncomplete = r);
+        }
+
+        async function getAllLocalProjects() {
+            const db = await dbPromise;
+            return new Promise(r => {
+                const req = db.transaction("projects").objectStore("projects").getAll();
+                req.onsuccess = () => r(req.result || []);
+                req.onerror = () => r([]);
             });
         }
         // ----------------------------------
@@ -200,7 +199,8 @@
             localBlobUrl: null,
             draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
             map: null,
-            modelOrientation: { roll: 0, pitch: 0, yaw: 0 }
+            modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
+            localProjects: []
         };
 
         class ARSystem {
@@ -221,7 +221,7 @@
                             this.openSharedProject(params.get('id'), params.get('uid'));
                         } else {
                             this.navTo('dashboard');
-                            this.loadProjects();
+                            this.loadProjects(); // Carga mixta
                         }
                     } else {
                         if (params.get('id')) signInAnonymously(auth); 
@@ -239,8 +239,21 @@
 
             async loginGoogle() { 
                 this.loader(true, "Conectando..."); 
-                try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
-                catch (e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
+                
+                // Timeout de seguridad por si se pega
+                const timeout = setTimeout(() => {
+                    this.loader(false);
+                    this.toast("Google tarda mucho. Intenta 'Modo Invitado'", "warning");
+                }, 10000);
+
+                try { 
+                    await signInWithPopup(auth, new GoogleAuthProvider()); 
+                    clearTimeout(timeout);
+                } catch (e) { 
+                    clearTimeout(timeout);
+                    this.loader(false); 
+                    this.toast("Error Login: " + e.message, "error"); 
+                }
             }
 
             async loginAnonymous() {
@@ -265,29 +278,59 @@
                 }
             }
 
-            loadProjects() {
+            async loadProjects() {
                 if (state.role === 'client') return;
                 const list = document.getElementById('projects-list');
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 
+                // 1. Cargar Locales (IndexedDB)
+                const localProjs = await getAllLocalProjects();
+                state.localProjects = localProjs;
+
+                // 2. Cargar Nube (Firestore)
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
 
                 onSnapshot(projectsRef, (snap) => {
                     list.innerHTML = '';
-                    if (snap.empty) { 
+                    
+                    // Combinar Listas: Preferir Nube sobre Local si tienen el mismo ID
+                    const cloudMap = new Map();
+                    snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
+
+                    const merged = [...cloudMap.values()];
+                    
+                    // Agregar locales que NO están en la nube
+                    localProjs.forEach(lp => {
+                        if(!cloudMap.has(lp.id)) {
+                            merged.push(lp);
+                        }
+                    });
+
+                    // Ordenar por fecha
+                    merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+                    if (merged.length === 0) { 
                         list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`; 
                         return; 
                     }
-                    snap.forEach(doc => this.renderProjectCard(doc.id, doc.data(), list));
+                    
+                    merged.forEach(p => this.renderProjectCard(p, list));
                 });
             }
 
-            renderProjectCard(id, data, container) {
+            renderProjectCard(data, container) {
                 const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
-                const isLocal = data.status === 'local';
-                const statusLabel = isLocal ? 'BORRADOR LOCAL' : 'GLOBAL (NUBE)';
-                const statusClass = isLocal ? 'status-local' : 'status-global';
+                let statusLabel = 'GLOBAL (NUBE)';
+                let statusClass = 'status-global';
+                
+                if (data.status === 'local') {
+                    statusLabel = 'BORRADOR LOCAL';
+                    statusClass = 'status-local';
+                } else if (data.status === 'unsynced') {
+                    statusLabel = 'SOLO DISPOSITIVO';
+                    statusClass = 'status-unsynced';
+                }
                 
                 const el = document.createElement('div');
                 el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
@@ -304,22 +347,21 @@
                             </div>
                         </div>
                         <div class="flex gap-1">
-                            <button onclick="app.deleteProject('${id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
+                            <button onclick="app.deleteProject('${data.id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
                         </div>
                     </div>
                     <div class="flex gap-2 mt-2">
-                        <button onclick="app.openProject('${id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
-                        ${isLocal ? 
-                            `<button onclick="app.publishProject('${id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` 
+                        <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
+                        ${data.status !== 'global' ? 
+                            `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` 
                             : 
-                            `<button onclick="app.shareProject('${id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>`
+                            `<button onclick="app.shareProject('${data.id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>`
                         }
                     </div>
                 `;
                 container.appendChild(el);
             }
 
-            // --- RESET Y LIMPIEZA ---
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -384,9 +426,9 @@
                 }, 2000); 
             }
 
-            // BOTÓN: GUARDAR POSICIÓN (AHORA GUARDA DRAFT LOCAL Y SALE)
+            // GUARDADO ROBUSTO (Offline First)
             captureDataAndGoMap() {
-                this.loader(true, "Capturando GPS...");
+                this.loader(true, "Guardando...");
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) {
                     const scaleStr = viewer.scale; 
@@ -398,52 +440,81 @@
 
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    // GUARDAR LOCALMENTE AHORA
-                    this.saveLocalDraft(); 
+                    this.saveLocalDraft(); // Guardar inmediatamente
                 }, err => {
                     this.loader(false);
-                    this.toast("Error GPS: " + err.message, "error");
-                }, { enableHighAccuracy: true, timeout: 10000 });
+                    this.toast("No se pudo obtener GPS, usando 0,0", "warning");
+                    state.draftData.coords = { lat: 0, lon: 0 };
+                    this.saveLocalDraft();
+                }, { enableHighAccuracy: true, timeout: 8000 });
             }
 
             async saveLocalDraft() {
-                this.loader(true, "Guardando Borrador Local...");
-                try {
-                    // 1. Generar ID único
-                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    const docRef = await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
-                        name: state.draftData.name,
-                        modelUrl: "local_pending", // Marca temporal
-                        coords: state.draftData.coords,
-                        calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
-                        orientation: state.modelOrientation,
-                        status: 'local', // ESTADO LOCAL
-                        createdAt: new Date().toISOString()
-                    });
+                this.loader(true, "Protegiendo Datos...");
+                
+                // 1. Generar ID local
+                const projectId = `loc_${Date.now()}`;
+                
+                const projectData = {
+                    id: projectId,
+                    name: state.draftData.name,
+                    modelUrl: projectId, // Referencia para cache local
+                    coords: state.draftData.coords,
+                    calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
+                    orientation: state.modelOrientation,
+                    status: 'unsynced', // Asumimos fallo primero
+                    createdAt: new Date().toISOString()
+                };
 
-                    // 2. Guardar BLOB en IndexedDB usando el ID del documento como clave
-                    if(state.tempFile) {
-                        await saveToCache(docRef.id, state.tempFile);
+                try {
+                    // 2. GUARDADO BLINDADO EN DISPOSITIVO (IndexedDB)
+                    if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
+                    await saveProjectToLocalDB(projectData);
+
+                    // 3. Intentar Sincronizar con Nube (Si falla, no importa, ya está en local)
+                    if (state.user) {
+                        try {
+                            const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                            const docRef = await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
+                                ...projectData,
+                                status: 'local' // Si sube, es local pero conocido por el admin
+                            });
+                            
+                            // Actualizar ID local con el de la nube si tuvo éxito
+                            // (Esto es complejo, por simplicidad mantenemos ambos o recargamos)
+                            this.toast("Guardado y Sincronizado", "success");
+                        } catch (errCloud) {
+                            console.warn("Sin conexión a nube, guardado local:", errCloud);
+                            this.toast("Guardado Localmente (Sin Internet)", "warning");
+                        }
+                    } else {
+                        this.toast("Guardado en Dispositivo (Invitado)", "success");
                     }
 
                     this.loader(false);
-                    this.toast("Guardado como Borrador Local", "success");
-                    this.resetCreationState(); // Limpiar para permitir nuevo
+                    this.resetCreationState(); 
                     this.navTo('dashboard');
+                    this.loadProjects(); // Recargar lista mixta
 
                 } catch(e) {
                     this.loader(false);
-                    this.toast("Error guardando local: " + e.message, "error");
+                    this.toast("Error Crítico de Memoria: " + e.message, "error");
                 }
             }
 
-            // BOTÓN: PUBLICAR (SUBIR A NUBE REAL CON BARRA)
             async publishProject(id) {
-                // 1. Recuperar el blob de IndexedDB
-                const blob = await getFromCache(id);
-                if(!blob) return this.toast("Error: No se encuentra el archivo local", "error");
+                // Lógica para subir de Local a Global
+                // Busca por ID en Cache primero
+                let blob = await getModelFromCache(id);
+                // Si no está por ID (quizás es un doc de firebase con status 'local'), busca por URL
+                if (!blob) {
+                    const proj = state.localProjects.find(p => p.id === id) || (state.currentProject && state.currentProject.data);
+                    if(proj) blob = await getModelFromCache(proj.modelUrl);
+                }
 
-                this.loader(true, "Preparando subida...");
+                if(!blob) return this.toast("Error: Archivo original no encontrado en dispositivo", "error");
+
+                this.loader(true, "Iniciando subida...");
                 document.getElementById('progress-wrapper').classList.remove('hidden');
                 
                 try {
@@ -463,19 +534,33 @@
                             this.toast("Error subida: " + error.message, "error");
                         }, 
                         async () => {
-                            // Subida completada
                             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                             
-                            // Actualizar Firestore
+                            // Actualizar en Firebase
                             const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                            await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), {
-                                modelUrl: downloadURL,
-                                status: 'global' // CAMBIAR A GLOBAL
-                            });
+                            
+                            // Si el ID empieza con "loc_", es puramente local, hay que CREARLO en firebase
+                            if (id.startsWith('loc_')) {
+                                const projData = state.localProjects.find(p => p.id === id);
+                                await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
+                                    ...projData,
+                                    modelUrl: downloadURL,
+                                    status: 'global',
+                                    id: undefined // Firestore pone su propio ID
+                                });
+                                // Borrar local viejo opcionalmente
+                            } else {
+                                // Es un doc existente marcado como 'local'
+                                await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), {
+                                    modelUrl: downloadURL,
+                                    status: 'global'
+                                });
+                            }
 
                             this.loader(false);
                             document.getElementById('progress-wrapper').classList.add('hidden');
-                            this.toast("¡Publicado Exitosamente!", "success");
+                            this.toast("¡Publicado al Mundo!", "success");
+                            this.loadProjects();
                         }
                     );
 
@@ -485,34 +570,39 @@
                 }
             }
 
-            // ABRIR PROYECTO (LOCAL O GLOBAL)
             async openProject(id, mode) {
-                this.loader(true, "Cargando...");
+                this.loader(true, "Abriendo...");
                 try {
-                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                    if(!snap.exists()) throw new Error("No existe");
-                    state.currentProject = { id, data: snap.data() };
+                    // Buscar en local o nube
+                    let data = state.localProjects.find(p => p.id === id);
+                    
+                    if (!data) {
+                        const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                        const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                        if(snap.exists()) data = { id: snap.id, ...snap.data() };
+                    }
+
+                    if(!data) throw new Error("No encontrado");
+                    state.currentProject = { id, data };
                     
                     this.navTo('surface'); 
                     const viewer = document.getElementById('model-viewer-surface');
 
-                    // INTENTAR CARGAR: 1. LOCAL DB (ID), 2. LOCAL DB (URL), 3. NUBE
-                    let blob = await getFromCache(id); // Buscar por ID primero (drafts)
-                    if(!blob && state.currentProject.data.status === 'global') {
-                        // Si es global y no está por ID, buscar por URL o descargar
-                        blob = await this.fetchAndCache(state.currentProject.data.modelUrl);
-                    }
-
+                    // Intentar cargar de caché
+                    let blob = await getModelFromCache(data.id) || await getModelFromCache(data.modelUrl);
+                    
                     if(blob) {
-                        viewer.src = (blob instanceof Blob) ? URL.createObjectURL(blob) : blob;
+                        viewer.src = URL.createObjectURL(blob);
+                    } else if (data.status === 'global') {
+                        // Si no está en cache, descargar y cachear
+                        blob = await this.fetchAndCache(data.modelUrl);
+                        viewer.src = blob;
                     } else {
-                        // Fallback raro
-                        viewer.src = state.currentProject.data.modelUrl; 
+                        viewer.src = data.modelUrl;
                     }
                     
-                    if(state.currentProject.data.orientation) {
-                        state.modelOrientation = state.currentProject.data.orientation;
+                    if(data.orientation) {
+                        state.modelOrientation = data.orientation;
                         this.updateModelOrientation();
                     }
                     
@@ -521,32 +611,27 @@
                     if(arBtn) arBtn.classList.add('hidden');
                     document.querySelector('.tools-panel').classList.add('hidden'); 
 
-                    // MOSTRAR MAPA DIRECTO
                     const saveContainer = document.getElementById('save-container');
                     saveContainer.classList.remove('hidden');
                     const btn = document.getElementById('btn-capture-location');
                     btn.innerHTML = "<span>🗺️</span> VER EN MAPA / GPS";
                     btn.onclick = () => { 
                         this.navTo('ar'); 
-                        this.startARGPS(state.currentProject.data); 
+                        this.startARGPS(data); 
                     };
                 } catch(e) { this.toast(e.message, "error"); }
                 this.loader(false);
             }
 
             async fetchAndCache(url) {
-                // Verifica cache por URL
-                let blob = await getFromCache(url);
-                if(blob) return URL.createObjectURL(blob);
-                // Descarga con barra de progreso (simulada para download, o fetch streams)
                 const response = await fetch(url);
-                blob = await response.blob();
-                await saveToCache(url, blob);
+                const blob = await response.blob();
+                await saveModelToCache(url, blob);
                 return URL.createObjectURL(blob);
             }
             
             async openSharedProject(id, ownerUid) {
-                this.loader(true, "Descargando...");
+                this.loader(true, "Descargando Proyecto...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
@@ -627,8 +712,11 @@
             toast(msg, type = 'info') {
                 const t = document.getElementById('toast');
                 const bg = type==='error'?'bg-red-600': type==='success'?'bg-emerald-600':'bg-slate-800';
+                const textCol = type==='warning'?'text-black':'text-white';
+                if(type==='warning') { t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-xl z-[9999] transition-all duration-300 bg-yellow-400 ${textCol} border border-black/10`; }
+                else { t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${bg} border border-white/20`; }
+                
                 t.innerHTML = msg;
-                t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${bg} border border-white/20`;
                 setTimeout(() => t.classList.add('-translate-y-24'), 3000);
                 t.classList.remove('-translate-y-24');
             }
@@ -639,10 +727,7 @@
             }
             toggleModal(id, show) {
                 const m = document.getElementById(`modal-${id}`);
-                if(id === 'new-project' && show) {
-                    // Si abrimos el modal, asegurarnos de que el estado esté limpio
-                    this.resetCreationState();
-                }
+                if(id === 'new-project' && show) { this.resetCreationState(); }
                 show ? m.classList.remove('hidden') : m.classList.add('hidden');
             }
             handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
@@ -652,13 +737,22 @@
             }
             async deleteProject(id) {
                 if(!confirm("¿Eliminar?")) return;
-                const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                // Borrar local también
+                const dbL = await dbPromise;
+                const tx = dbL.transaction(["projects", "models"], "readwrite");
+                tx.objectStore("projects").delete(id);
+                tx.objectStore("models").delete(id);
+                
+                // Borrar nube si es global
+                try {
+                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                } catch(e) {}
+                
+                this.loadProjects();
             }
             updateVersionUI() { 
                 document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); 
-                const vDisplay = document.getElementById('version-display');
-                if(vDisplay) vDisplay.innerText = APP_VERSION;
             }
         }
         
@@ -671,7 +765,6 @@
     <div id="loader" class="hidden fixed inset-0 bg-black/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
         <div class="loader-spin mb-4"></div>
         <p id="loader-text" class="font-bold tracking-widest text-sm animate-pulse">PROCESANDO...</p>
-        <!-- BARRA DE PROGRESO -->
         <div id="progress-wrapper" class="hidden w-64 mt-4">
             <div class="progress-container">
                 <div id="upload-progress" class="progress-bar"></div>
@@ -690,14 +783,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.27</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.28</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.27</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.28</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
