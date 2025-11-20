@@ -69,10 +69,10 @@
         .pad-btn { width: 45px; height: 45px; background: rgba(255,255,255,0.15); color: white; border-radius: 8px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
         .pad-btn:active { background: #2563eb; }
 
-        /* Version Display (MEJORADO - COLOR ROJO PARA VERLO CLARO) */
+        /* Version Display */
         #app-version-tag { 
             position: fixed; bottom: 5px; right: 5px; 
-            font-size: 12px; color: #dc2626; /* Rojo para debugging */
+            font-size: 12px; color: #dc2626; 
             font-family: monospace; font-weight: bold;
             z-index: 99999; pointer-events: none; 
             background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 6px;
@@ -96,7 +96,7 @@
         .btn-google {
             background-color: white; color: #757575; border: 1px solid #ddd; width: 100%;
             padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px;
-            font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;
+            font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s; cursor: pointer;
         }
         .btn-google:active { background-color: #f1f1f1; }
     </style>
@@ -104,35 +104,35 @@
 <body>
 
     <!-- VERSIÓN GLOBAL -->
-    <div id="app-version-tag">v9.09 - Google Auth Fix</div>
+    <div id="app-version-tag">v9.11</div>
 
     <!-- UI GLOBAL -->
     <div id="toast"><span>ℹ️</span><span id="toast-msg"></span></div>
     <div id="loader" class="hidden"><div class="spinner mb-4"></div><p id="loader-text">Cargando...</p></div>
 
     <!-- VISTA 1: AUTH -->
-    <div id="view-auth" class="view-section justify-center items-center p-6">
+    <div id="view-auth" class="view-section justify-center items-center p-6 bg-gray-50">
         <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl relative text-center">
             <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg shadow-blue-200">🏗️</div>
             <h1 class="text-2xl font-bold text-gray-900">AR Cloud Pro</h1>
             <p class="text-sm text-gray-500 mb-6">Plataforma de Gestión AR</p>
 
             <!-- BOTÓN GOOGLE -->
-            <button onclick="app.loginGoogle()" class="btn-google mb-4">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" alt="Google">
-                <span>Continuar con Google</span>
+            <button onclick="app.loginGoogle()" class="btn-google mb-6 hover:bg-gray-50">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="24" alt="Google">
+                <span class="text-gray-700 text-sm">Acceder con Google</span>
             </button>
 
-            <div class="flex items-center my-4">
+            <div class="flex items-center mb-6">
                 <div class="flex-1 border-t border-gray-200"></div>
-                <span class="px-3 text-gray-400 text-xs">O usa correo</span>
+                <span class="px-3 text-gray-400 text-xs uppercase">O con correo</span>
                 <div class="flex-1 border-t border-gray-200"></div>
             </div>
 
             <form id="auth-form" class="space-y-3 text-left">
                 <div>
                     <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">CORREO</label>
-                    <input type="email" id="email" class="input-field" placeholder="ejemplo@empresa.com">
+                    <input type="email" id="email" class="input-field" placeholder="tu@correo.com">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">CONTRASEÑA</label>
@@ -145,7 +145,7 @@
             </form>
             
             <div id="guest-link-container" class="mt-6 text-center border-t pt-4">
-                 <button id="guest-btn" class="text-blue-600 text-sm font-bold mt-1">Entrar como Espectador</button>
+                 <button id="guest-btn" class="text-blue-600 text-sm font-bold mt-1 hover:underline">Entrar como Espectador (ID)</button>
             </div>
         </div>
     </div>
@@ -157,7 +157,7 @@
                 <h2 class="text-lg font-bold text-gray-800">Mis Proyectos</h2>
                 <p id="user-role-display" class="text-xs text-gray-400">Cargando...</p>
             </div>
-            <button onclick="app.logout()" class="text-sm text-red-500 font-medium">Salir</button>
+            <button onclick="app.logout()" class="text-sm text-red-500 font-medium hover:text-red-700">Salir</button>
         </div>
 
         <div class="p-4 overflow-y-auto flex-1" id="projects-list">
@@ -174,7 +174,7 @@
     <!-- VISTA 3: EDITOR -->
     <div id="view-editor" class="view-section">
         <div class="absolute top-4 left-4 z-[500]">
-            <button onclick="app.navTo('dashboard')" class="bg-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center font-bold text-gray-600">←</button>
+            <button onclick="app.navTo('dashboard')" class="bg-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center font-bold text-gray-600 hover:bg-gray-50">←</button>
         </div>
 
         <!-- Paso 1: Archivo -->
@@ -203,8 +203,8 @@
                     <h3 class="font-bold text-gray-800">Ubicación Geográfica</h3>
                     <p class="text-xs text-gray-500">Arrastra el marcador al punto cero</p>
                 </div>
-                <button onclick="app.useGPS()" class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1">
-                    📍 GPS
+                <button onclick="app.useGPS()" class="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 hover:bg-blue-200">
+                    📍 Mi GPS
                 </button>
             </div>
             
@@ -219,7 +219,7 @@
                 </div>
             </div>
 
-            <button onclick="app.saveProjectData()" class="btn-primary bg-green-600">
+            <button onclick="app.saveProjectData()" class="btn-primary bg-green-600 hover:bg-green-700">
                 💾 Guardar y Publicar
             </button>
         </div>
@@ -237,11 +237,11 @@
             </div>
             
             <model-viewer id="viewer" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate touch-action="pan-y" ar-scale="fixed" ar-placement="floor" class="w-full h-full">
-                <button slot="ar-button" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white text-black px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 z-50">
+                <button slot="ar-button" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white text-black px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 z-50 hover:scale-105 transition">
                     📷 INICIAR CÁMARA AR
                 </button>
             </model-viewer>
-            <button onclick="app.closeSurface()" class="absolute top-4 left-4 z-50 bg-white w-10 h-10 rounded-full shadow flex items-center justify-center">✕</button>
+            <button onclick="app.closeSurface()" class="absolute top-4 left-4 z-50 bg-white w-10 h-10 rounded-full shadow flex items-center justify-center hover:bg-gray-100">✕</button>
             
             <div class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-xs backdrop-blur pointer-events-none text-center w-max">
                 Acomoda el modelo aquí antes de abrir la cámara
@@ -256,10 +256,10 @@
         </div>
 
         <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-3 z-50 w-full px-4 max-w-md pointer-events-auto">
-            <button onclick="app.exitAR()" class="bg-red-500/90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl">✕</button>
-            <button onclick="app.openSurface()" class="flex-1 bg-purple-600/90 text-white font-bold py-3 rounded-full shadow-lg backdrop-blur">🏠 Interior</button>
-            <button id="admin-save-btn" onclick="app.saveCalibration()" class="hidden flex-1 bg-blue-600/90 text-white font-bold py-3 rounded-full shadow-lg">💾 Guardar Ajustes</button>
-            <button onclick="app.toggleCal()" class="bg-gray-700/80 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl">🛠️</button>
+            <button onclick="app.exitAR()" class="bg-red-500/90 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-red-600">✕</button>
+            <button onclick="app.openSurface()" class="flex-1 bg-purple-600/90 text-white font-bold py-3 rounded-full shadow-lg backdrop-blur hover:bg-purple-700">🏠 Interior</button>
+            <button id="admin-save-btn" onclick="app.saveCalibration()" class="hidden flex-1 bg-blue-600/90 text-white font-bold py-3 rounded-full shadow-lg hover:bg-blue-700">💾 Guardar Ajustes</button>
+            <button onclick="app.toggleCal()" class="bg-gray-700/80 text-white w-12 h-12 rounded-full shadow-lg flex items-center justify-center text-xl hover:bg-gray-600">🛠️</button>
         </div>
 
         <div id="cal-hud" class="cal-hud">
@@ -287,9 +287,9 @@
         import { getAnalytics } from 'firebase/analytics';
 
         // --- VERSIÓN DE LA APP ---
-        const APP_VERSION = "9.09"; 
+        const APP_VERSION = "9.11"; 
 
-        // --- CONFIGURACIÓN CORRECTA (TOMADA DE TU FOTO) ---
+        // --- CONFIGURACIÓN ---
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWwwD72sPod5cOWmq0SYPIp6I",
             authDomain: "ar-constructor-v2.firebaseapp.com",
@@ -339,11 +339,10 @@
             initServiceWorker() {
                 if ('serviceWorker' in navigator) {
                     const swCode = `
-                        // CAMBIAMOS EL NOMBRE PARA FORZAR LIMPIEZA DE CACHE
-                        const CACHE_NAME = 'ar-models-v5-force-clean';
+                        // FORZAMOS LIMPIEZA V9.11
+                        const CACHE_NAME = 'ar-models-v7-force-clean';
                         
                         self.addEventListener('install', (event) => {
-                            // Borrar caches viejos
                             caches.keys().then(keys => {
                                 keys.forEach(key => {
                                     if(key !== CACHE_NAME) caches.delete(key);
@@ -408,7 +407,14 @@
                 try { 
                     await signInWithPopup(this.auth, provider); 
                 } catch (err) { 
-                    this.toast("Error Google: " + err.message, "error"); 
+                    console.error(err);
+                    // Si falla popup, intentar redirección (mejor para móviles)
+                    // Pero para simplificar, mostramos el error.
+                    if (err.code === 'auth/api-key-not-valid') {
+                        alert("Error de Llave API: Verifica las restricciones en Google Cloud Console.");
+                    } else {
+                        this.toast("Error Google: " + err.message, "error");
+                    }
                 }
                 this.loader(false);
             }
@@ -418,7 +424,13 @@
                 const p = document.getElementById('password').value;
                 this.loader(true, "Iniciando...");
                 try { await signInWithEmailAndPassword(this.auth, e, p); } 
-                catch (err) { this.toast("Error: " + err.message, "error"); }
+                catch (err) { 
+                    if (err.code === 'auth/api-key-not-valid') {
+                        alert("Error de Llave API: Verifica las restricciones en Google Cloud Console.");
+                    } else {
+                        this.toast("Error: " + err.message, "error"); 
+                    }
+                }
                 this.loader(false);
             }
 
@@ -429,7 +441,13 @@
                 try { 
                     await createUserWithEmailAndPassword(this.auth, e, p);
                     this.toast("¡Bienvenido!"); 
-                } catch (err) { this.toast("Error: " + err.message, "error"); }
+                } catch (err) { 
+                    if (err.code === 'auth/api-key-not-valid') {
+                        alert("Error de Llave API: Verifica las restricciones en Google Cloud Console.");
+                    } else {
+                        this.toast("Error: " + err.message, "error"); 
+                    }
+                }
                 this.loader(false);
             }
 
@@ -464,11 +482,11 @@
                                     <h3 class="font-bold text-gray-800">${p.name}</h3>
                                     <p class="text-xs text-gray-500 font-mono">ID: ${pid}</p>
                                 </div>
-                                <button onclick="app.shareProject('${pid}')" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded font-bold">🔗 Link</button>
+                                <button onclick="app.shareProject('${pid}')" class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded font-bold hover:bg-blue-200">🔗 Link</button>
                             </div>
                             <div class="flex gap-2 mt-3">
-                                <button onclick="app.openProject('${pid}', 'view')" class="flex-1 bg-gray-800 text-white py-2 rounded-lg text-xs font-bold">Ver AR</button>
-                                ${isOwner || state.isAdmin ? `<button onclick="app.openProject('${pid}', 'edit')" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-bold">Editar</button>` : ''}
+                                <button onclick="app.openProject('${pid}', 'view')" class="flex-1 bg-gray-800 text-white py-2 rounded-lg text-xs font-bold hover:bg-gray-900">Ver AR</button>
+                                ${isOwner || state.isAdmin ? `<button onclick="app.openProject('${pid}', 'edit')" class="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg text-xs font-bold hover:bg-gray-50">Editar</button>` : ''}
                             </div>
                         `;
                         list.appendChild(card);
