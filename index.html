@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.24 (Scale Unlocked)</title>
+    <title>AR Constructor Pro v3.25 (Orientation Fix)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -40,9 +40,9 @@
             background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); 
         }
         
-        /* Botón AR Verde (Estilo WhatsApp Image) */
+        /* Botón AR Verde */
         .ar-green-btn {
-            background-color: #4CAF50; /* Verde */
+            background-color: #4CAF50; 
             color: white;
             border-radius: 50px;
             border: none;
@@ -74,7 +74,7 @@
             pointer-events: none;
         }
 
-        /* Model Viewer y Prompt */
+        /* Model Viewer */
         model-viewer { width: 100%; height: 100%; --poster-color: transparent; background-color: #111; }
         
         .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center;}
@@ -93,7 +93,7 @@
         .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* Controles AR GPS */
+        /* Controles Ajuste */
         .btn-pad { width: 50px; height: 50px; background: rgba(20,20,20,0.9); backdrop-filter: blur(8px); border-radius: 14px; color: white; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: all 0.1s; }
         .btn-pad:active { background: #4f46e5; transform: scale(0.92); }
         input[type=range] { width: 100%; accent-color: #4f46e5; height: 6px; border-radius: 3px; background: #333; }
@@ -101,15 +101,23 @@
         .ver-badge {
             position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50;
         }
+        
+        /* Panel de Herramientas de Rotación */
+        .tools-panel {
+            position: absolute; right: 10px; top: 80px; z-index: 50;
+            display: flex; flex-direction: column; gap: 8px;
+        }
+        .tool-btn {
+            width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px;
+            display: flex; align-items: center; justify-content: center; font-size: 18px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+        .tool-btn:active { background: #4f46e5; }
+        .tool-label { font-size: 8px; position: absolute; bottom: 2px; width: 100%; text-align: center; opacity: 0.7; }
 
-        /* Animación de entrada */
-        .slide-up-enter {
-            animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-        }
-        @keyframes slideUp {
-            from { transform: translateY(100%); opacity: 0; }
-            to { transform: translateY(0); opacity: 1; }
-        }
+        .slide-up-enter { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
 
     <!-- LÓGICA FIREBASE -->
@@ -130,7 +138,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.24 SCALING UNLOCKED";
+        const APP_VERSION = "3.25 ORIENTATION FIX";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -156,7 +164,8 @@
             tempFile: null,
             localBlobUrl: null,
             draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
-            map: null
+            map: null,
+            modelOrientation: { roll: 0, pitch: 0, yaw: 0 } // Nuevo estado para rotación
         };
 
         class ARSystem {
@@ -275,24 +284,46 @@
                 state.localBlobUrl = URL.createObjectURL(state.tempFile);
                 this.toggleModal('new-project', false);
                 
-                // RESETEAR UI DEL PASO SIGUIENTE
-                document.getElementById('save-container').classList.add('hidden'); // Ocultar panel guardar
+                // RESETEAR UI
+                document.getElementById('save-container').classList.add('hidden'); 
                 const arBtn = document.getElementById('force-ar-btn');
                 if(arBtn) {
                     arBtn.classList.remove('minimized', 'hidden');
                     arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
                 }
 
-                // IR A PASO 1: VISOR DE SUPERFICIE
+                // RESET ORIENTATION
+                state.modelOrientation = { roll: 0, pitch: 0, yaw: 0 };
+                this.updateModelOrientation();
+
+                // IR A PASO 1
                 this.navTo('surface');
                 
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
                 
-                this.toast("Pulsa INICIAR para colocar el modelo.", "info");
+                this.toast("Usa los botones laterales para girar si está acostada.", "info");
             }
 
-            // Activar AR Manualmente
+            // --- LÓGICA DE ROTACIÓN DE MODELO (FIX PARA CASAS ACOSTADAS) ---
+            rotateModel(axis, deg) {
+                if (axis === 'pitch') state.modelOrientation.pitch += deg; // X axis
+                if (axis === 'roll') state.modelOrientation.roll += deg;   // Z axis
+                if (axis === 'yaw') state.modelOrientation.yaw += deg;     // Y axis
+                
+                this.updateModelOrientation();
+            }
+
+            updateModelOrientation() {
+                const viewer = document.getElementById('model-viewer-surface');
+                if(viewer) {
+                    // model-viewer orientation="roll pitch yaw" (en grados o radianes, usaremos deg)
+                    // Nota: El orden en model-viewer suele ser Roll Pitch Yaw o X Y Z
+                    viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
+                    this.toast(`Rotación: ${state.modelOrientation.pitch}°`);
+                }
+            }
+
             activateAR() {
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) {
@@ -301,7 +332,6 @@
                 }
             }
 
-            // Callback cuando se presiona el botón AR
             onARStarted() {
                 setTimeout(() => {
                     const saveContainer = document.getElementById('save-container');
@@ -309,13 +339,10 @@
                     saveContainer.classList.add('slide-up-enter');
                     
                     const arBtn = document.getElementById('force-ar-btn');
-                    if(arBtn) {
-                        arBtn.classList.add('minimized');
-                    }
+                    if(arBtn) arBtn.classList.add('minimized');
                 }, 2000); 
             }
 
-            // SE LLAMA AL DARLE CLIC A "GUARDAR UBICACIÓN"
             captureDataAndGoMap() {
                 this.loader(true, "Procesando Ubicación...");
                 
@@ -331,11 +358,7 @@
                 const geoOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
 
                 navigator.geolocation.getCurrentPosition(pos => {
-                    state.draftData.coords = {
-                        lat: pos.coords.latitude,
-                        lon: pos.coords.longitude
-                    };
-                    
+                    state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
                     this.loader(false);
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
@@ -343,10 +366,7 @@
 
                 }, err => {
                     this.loader(false);
-                    let errMsg = "Error GPS.";
-                    if(err.code === 1) errMsg = "Permiso denegado.";
-                    if(err.code === 3) errMsg = "Tiempo de espera agotado.";
-                    this.toast(errMsg, "error");
+                    this.toast("Error GPS: " + err.message, "error");
                 }, geoOptions);
             }
 
@@ -385,6 +405,7 @@
                         modelUrl: cloudUrl,
                         coords: state.draftData.coords,
                         calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
+                        orientation: state.modelOrientation, // Guardar rotación
                         createdAt: new Date().toISOString()
                     });
 
@@ -411,8 +432,18 @@
                     const viewer = document.getElementById('model-viewer-surface');
                     viewer.src = state.currentProject.data.modelUrl;
                     
+                    // Cargar orientación guardada si existe
+                    if(state.currentProject.data.orientation) {
+                        state.modelOrientation = state.currentProject.data.orientation;
+                        this.updateModelOrientation();
+                    } else {
+                        state.modelOrientation = {roll:0, pitch:0, yaw:0};
+                        this.updateModelOrientation();
+                    }
+                    
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) arBtn.classList.add('hidden');
+                    document.querySelector('.tools-panel').classList.add('hidden'); // Ocultar herramientas en modo lectura
 
                     const saveContainer = document.getElementById('save-container');
                     saveContainer.classList.remove('hidden');
@@ -548,14 +579,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.24</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.25</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.24</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.25</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -605,7 +636,20 @@
             <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-red-500/50 transition border border-white/10">✕</button>
         </div>
 
-        <!-- MODEL VIEWER ACTUALIZADO (SIN BOTÓN SLOT) -->
+        <!-- CONTROLES DE ROTACIÓN LATERAL (CORRECCIÓN MODELO) -->
+        <div class="tools-panel pointer-events-auto">
+            <button class="tool-btn" onclick="app.rotateModel('pitch', 90)">
+                🔃 <span class="tool-label">ACOST</span>
+            </button>
+            <button class="tool-btn" onclick="app.rotateModel('pitch', -90)">
+                🔄 <span class="tool-label">LEVAN</span>
+            </button>
+            <button class="tool-btn" onclick="app.rotateModel('yaw', 45)">
+                ⤵️ <span class="tool-label">GIRAR</span>
+            </button>
+        </div>
+
+        <!-- MODEL VIEWER ACTUALIZADO -->
         <div class="relative w-full h-full z-0">
             <model-viewer 
                 id="model-viewer-surface" 
