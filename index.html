@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.19 (Logic Fix)</title>
+    <title>AR Constructor Pro v3.21 (Surface Edition)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -15,7 +15,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Model Viewer (AR Interiores) -->
+    <!-- Model Viewer (AR Interiores & Superficies) -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 
     <!-- A-Frame & AR.js (AR GPS) -->
@@ -52,7 +52,7 @@
             letter-spacing: 0.5px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             position: absolute;
-            bottom: 40px;
+            bottom: 140px; /* Subido para no estorbar con el panel inferior */
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -63,11 +63,26 @@
             cursor: pointer;
             white-space: nowrap;
             text-transform: uppercase;
+            transition: transform 0.1s;
         }
         .ar-green-btn:active { transform: translateX(-50%) scale(0.95); }
-
+        
+        /* Model Viewer y Prompt de Mano */
         model-viewer { width: 100%; height: 100%; --poster-color: transparent; background-color: #111; }
         
+        .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center;}
+        model-viewer[ar-status="session-started"] > .ar-prompt { display: block; }
+        
+        .hand-icon {
+            width: 60px; height: 60px;
+            animation: circle 4s linear infinite;
+            filter: invert(1); opacity: 0.8;
+        }
+        @keyframes circle { 
+            0% { transform: translateX(-50%) rotate(0deg) translateX(20px) rotate(0deg); } 
+            100% { transform: translateX(-50%) rotate(360deg) translateX(20px) rotate(-360deg); } 
+        }
+
         .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
@@ -76,6 +91,9 @@
         .btn-pad:active { background: #4f46e5; transform: scale(0.92); }
         input[type=range] { width: 100%; accent-color: #4f46e5; height: 6px; border-radius: 3px; background: #333; }
 
+        .ver-badge {
+            position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50;
+        }
     </style>
 
     <!-- LÓGICA FIREBASE -->
@@ -96,7 +114,8 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.18 LOGIC FIX";
+        // --- VERSIÓN ACTUALIZADA A 3.21 ---
+        const APP_VERSION = "3.21 SURFACE";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -159,10 +178,10 @@
                 this.updateUserProfile(user);
             }
 
-            async loginGoogle() {
-                 this.loader(true, "Conectando...");
-                 try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
-                 catch (e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
+            async loginGoogle() { 
+                this.loader(true, "Conectando..."); 
+                try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
+                catch (e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
             }
 
             async loginAnonymous() {
@@ -235,7 +254,7 @@
             async startCreationFlow() {
                 const name = document.getElementById('project-name').value;
                 if(!name) return this.toast("Falta el nombre", "warning");
-                if(!state.tempFile) return this.toast("Falta el modelo", "warning");
+                if(!state.tempFile) return this.toast("Falta el modelo 3D", "warning");
 
                 state.draftData.name = name;
                 state.localBlobUrl = URL.createObjectURL(state.tempFile);
@@ -247,13 +266,29 @@
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
                 
-                this.toast("Listo. Pulsa el botón verde para AR.", "success");
+                this.toast("¡Modelo cargado! Pulsa 'Cámara AR' para colocarlo.", "success");
             }
 
             // SE LLAMA AL DARLE CLIC A "GUARDAR UBICACIÓN"
             captureDataAndGoMap() {
-                this.loader(true, "Capturando Metadatos...");
+                this.loader(true, "Capturando Datos y Satélites...");
                 
+                // Intentar capturar la escala/rotación actual del visor
+                const viewer = document.getElementById('model-viewer-surface');
+                if(viewer) {
+                     // Nota: Esto captura el estado del DOM. Si el usuario escaló en AR (WebXR), a veces no se refleja aquí, 
+                     // pero capturamos lo mejor posible.
+                    const scaleStr = viewer.scale; 
+                    if(scaleStr) {
+                         // Parsear "1 1 1" a número
+                         const s = parseFloat(scaleStr.toString().split(' ')[0]);
+                         state.draftData.calibration.s = s || 1;
+                    }
+                }
+
+                // Configuración con TIMEOUT para evitar bloqueo
+                const geoOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
+
                 // 1. Capturar GPS
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = {
@@ -261,20 +296,20 @@
                         lon: pos.coords.longitude
                     };
                     
-                    // 2. Capturar posición visual (simulada del model viewer si fuera posible, aquí asumimos reset 0,0,0 o lo que el usuario haya hecho visualmente en su mente, ya que WebXR no devuelve fácilmente el offset al DOM sin salir de sesión)
-                    // Para A-Frame posterior, usaremos esta posición GPS como ancla.
-                    
                     this.loader(false);
                     
                     // 3. Ir al Mapa para confirmar
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
-                    this.toast("GPS Capturado. Confirma en el mapa.", "success");
+                    this.toast("Posición Capturada. Confirma en mapa.", "success");
 
                 }, err => {
                     this.loader(false);
-                    this.toast("Error GPS: " + err.message, "error");
-                }, { enableHighAccuracy: true });
+                    let errMsg = "Error GPS.";
+                    if(err.code === 1) errMsg = "Permiso denegado.";
+                    if(err.code === 3) errMsg = "Tiempo de espera agotado. Reintenta.";
+                    this.toast(errMsg, "error");
+                }, geoOptions);
             }
 
             initMap(coords) {
@@ -312,7 +347,8 @@
                         name: state.draftData.name,
                         modelUrl: cloudUrl,
                         coords: state.draftData.coords,
-                        calibration: { x:0, y:0, z:0, r:0, s:1 }, // Inicial
+                        // Guardamos la calibración que hayamos capturado (escala)
+                        calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
                         createdAt: new Date().toISOString()
                     });
 
@@ -343,9 +379,9 @@
                     // Cambio de botón para modo edición
                     const btn = document.getElementById('btn-capture-location');
                     btn.innerHTML = "<span>🗺️</span> VER EN MAPA / GPS";
-                    btn.onclick = () => {
-                         this.navTo('ar'); 
-                         this.startARGPS(state.currentProject.data);
+                    btn.onclick = () => { 
+                        this.navTo('ar'); 
+                        this.startARGPS(state.currentProject.data); 
                     };
                 } catch(e) { this.toast(e.message, "error"); }
                 this.loader(false);
@@ -371,11 +407,13 @@
 
             startARGPS(data) {
                 const container = document.getElementById('ar-container');
+                const scale = data.calibration && data.calibration.s ? data.calibration.s : state.calibration.s;
+                
                 container.innerHTML = `
                     <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
                         <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
                         <a-entity gps-entity-place="latitude: ${data.coords.lat}; longitude: ${data.coords.lon};">
-                            <a-entity id="ar-model-entity" position="${state.calibration.x} ${state.calibration.y} ${state.calibration.z}" rotation="0 ${state.calibration.r} 0" scale="${state.calibration.s} ${state.calibration.s} ${state.calibration.s}">
+                            <a-entity id="ar-model-entity" position="${state.calibration.x} ${state.calibration.y} ${state.calibration.z}" rotation="0 ${state.calibration.r} 0" scale="${scale} ${scale} ${scale}">
                                 <a-gltf-model src="${data.modelUrl}" opacity="${state.calibration.opacity}" transparent="true"></a-gltf-model>
                             </a-entity>
                         </a-entity>
@@ -442,7 +480,11 @@
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
             }
-            updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
+            updateVersionUI() { 
+                document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); 
+                const vDisplay = document.getElementById('version-display');
+                if(vDisplay) vDisplay.innerText = APP_VERSION;
+            }
         }
         
         window.onload = () => { window.app = new ARSystem(); };
@@ -458,6 +500,7 @@
 
     <!-- VISTA 1: LOGIN -->
     <div id="view-auth" class="view justify-center items-center p-6 hero-bg-dark">
+        <div class="ver-badge">Ver: <span id="version-display">...</span></div>
         <div class="w-full max-w-sm dark-card p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden">
             <div class="w-24 h-24 bg-white/5 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl shadow-inner border border-white/10">🏗️</div>
             <h1 class="text-4xl font-black text-white mb-2 tracking-tighter drop-shadow-lg">AR PRO</h1>
@@ -466,13 +509,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest">v3.18 LOGIC FLOW</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.21</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.21</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -515,30 +559,38 @@
         </div>
     </div>
 
-    <!-- VISTA 3: SURFACE (INTERIOR) -->
+    <!-- VISTA 3: SURFACE (INTERIOR & DETECTOR PISO) -->
     <div id="view-surface" class="view bg-black">
         <div class="absolute top-0 left-0 w-full p-6 z-20 flex justify-between pointer-events-none">
-            <span class="bg-black/60 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold border border-white/10">PASO 1: Acomoda</span>
+            <span class="bg-black/60 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold border border-white/10">PASO 1: Acomoda en AR</span>
             <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-red-500/50 transition border border-white/10">✕</button>
         </div>
 
-        <!-- MODEL VIEWER CON SLOT PARA BOTÓN AR -->
+        <!-- MODEL VIEWER ACTUALIZADO PARA SURFACE DETECTION -->
         <model-viewer 
             id="model-viewer-surface" 
             src="" 
             ar 
             ar-modes="webxr scene-viewer quick-look" 
             camera-controls 
-            touch-action="none"
             shadow-intensity="1" 
             auto-rotate
+            ar-placement="floor"
+            ar-scale="fixed"
+            interaction-prompt="none"
             class="w-full h-full z-0">
             
-            <!-- BOTÓN VERDE GRANDE PARA ACTIVAR CÁMARA -->
+            <!-- Botón para iniciar sesión AR -->
             <button slot="ar-button" class="ar-green-btn">
                 👋 ACTIVAR CÁMARA AR
-                <span class="text-[9px] font-normal normal-case mt-1 opacity-80">Coloca en mesa/suelo</span>
+                <span class="text-[9px] font-normal normal-case mt-1 opacity-80">Detectar Piso</span>
             </button>
+            
+            <!-- Guía de mano (solo visible en AR) -->
+            <div class="ar-prompt">
+                <img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon">
+                <p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p>
+            </div>
         </model-viewer>
 
         <div class="absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pointer-events-none">
@@ -546,7 +598,7 @@
                 <button id="btn-capture-location" onclick="app.captureDataAndGoMap()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20">
                     <span>📍</span> GUARDAR POSICIÓN Y GPS AQUÍ
                 </button>
-                <p class="text-center text-slate-500 text-xs">Usa la Cámara AR primero, luego guarda cuando estés listo.</p>
+                <p class="text-center text-slate-500 text-xs">1. Usa la Cámara AR 2. Coloca el modelo 3. Guarda</p>
             </div>
         </div>
     </div>
