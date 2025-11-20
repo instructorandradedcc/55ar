@@ -22,7 +22,7 @@
         }
     </script>
 
-    <!-- MODEL VIEWER (La clave para ARCore/ARKit nativo en Web) -->
+    <!-- MODEL VIEWER -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 
     <style>
@@ -109,7 +109,7 @@
         <div class="bg-white p-6 rounded-xl shadow-xl w-full max-w-md border border-gray-100">
             <div class="text-center mb-6">
                 <h1 class="text-2xl font-bold text-gray-800 tracking-tight">AR Constructor Pro</h1>
-                <p class="text-xs text-gray-500 mt-1" id="version-display">v3.0 • GPS & Superficie Nativa</p>
+                <p class="text-xs text-gray-500 mt-1" id="version-display">v3.2 • GPS Fix</p>
             </div>
 
             <div id="status-section" class="hidden mb-6">
@@ -161,8 +161,8 @@
         </div>
 
         <div class="map-ui-container">
-            <h3 class="font-bold text-gray-800 text-sm mb-1">Modo GPS (Exteriores)</h3>
-            <p class="text-xs text-gray-500 mb-3">Usa el mapa para ubicar el modelo geográficamente.</p>
+            <h3 class="font-bold text-gray-800 text-sm mb-1">Ubicación en Mapa</h3>
+            <p class="text-xs text-gray-500 mb-3">Cambia entre Satélite/Híbrido desde el icono de capas (↗️).</p>
             <button id="goto-scale-btn" class="control-button w-full text-sm">Siguiente</button>
         </div>
     </div>
@@ -183,7 +183,7 @@
                 </div>
                 <p class="text-xs text-purple-800 mb-3">
                     Escanea el piso, coloca el modelo donde toques y camina dentro de él. 
-                    <b>Ideal para maquetas y muebles.</b> (Usa ARCore/ARKit).
+                    <b>Ideal para maquetas y muebles.</b>
                 </p>
                 <button id="start-surface-mode-btn" class="w-full bg-purple-600 text-white py-3 rounded-lg font-bold shadow hover:bg-purple-700">
                     Iniciar AR Superficie
@@ -355,11 +355,36 @@
             const container = document.getElementById('map-canvas');
             if (map) map.remove();
             
-            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 });
-            const sat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { maxZoom: 20 });
+            // 1. CAPA GOOGLE HÍBRIDO (Imágenes + Etiquetas) - Mejor para ubicarse
+            const googleHybrid = L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}', {
+                maxZoom: 22,
+                maxNativeZoom: 19, // TRUCO: Esto permite hacer zoom profundo sin que se ponga gris
+                attribution: 'Google'
+            });
 
-            map = L.map(container, { zoomControl: false, layers: [sat] }).setView([appState.coords.latitude, appState.coords.longitude], 18);
-            L.control.layers({ "Satélite": sat, "Mapa": osm }).addTo(map);
+            // 2. CAPA GOOGLE SATÉLITE (Solo imágenes)
+            const googleSat = L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}', {
+                maxZoom: 22,
+                maxNativeZoom: 19,
+                attribution: 'Google'
+            });
+
+            // 3. CAPA CALLEJERO (OpenStreetMap)
+            const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { 
+                maxZoom: 19,
+                attribution: 'OSM'
+            });
+
+            // Inicializar mapa con Google Híbrido por defecto (se ve mejor)
+            map = L.map(container, { zoomControl: false, layers: [googleHybrid] }).setView([appState.coords.latitude, appState.coords.longitude], 18);
+
+            // Control de Capas
+            const baseMaps = { 
+                "Híbrido (Google)": googleHybrid,
+                "Satélite (Google)": googleSat, 
+                "Callejero (OSM)": osm 
+            };
+            L.control.layers(baseMaps).addTo(map);
 
             const marker = L.marker([appState.coords.latitude, appState.coords.longitude], { draggable: true }).addTo(map);
             
@@ -495,6 +520,18 @@
             bindCal('move-y-plus', 'y', 0.5);   bindCal('move-y-minus', 'y', -0.5);
             bindCal('rot-plus', 'rotation', 5); bindCal('rot-minus', 'rotation', -5);
 
+            // Boton Ubicacion con Feedback y Error Handling
+            document.getElementById('use-location-btn').addEventListener('click', () => {
+                showMessage("Buscando señal GPS...");
+                navigator.geolocation.getCurrentPosition(pos => {
+                    document.getElementById('latitude-input').value = pos.coords.latitude.toFixed(6);
+                    document.getElementById('longitude-input').value = pos.coords.longitude.toFixed(6);
+                    showMessage("Ubicación encontrada: ±" + pos.coords.accuracy.toFixed(0) + "m");
+                }, err => {
+                    showMessage("Error: " + err.message);
+                }, { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 });
+            });
+
             // Permisos
             document.getElementById('request-permission-btn').addEventListener('click', () => {
                 navigator.mediaDevices.getUserMedia({video:true}).then(s => {
@@ -506,4 +543,3 @@
     </script>
 </body>
 </html>
-
