@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#0f172a">
-    <title>AR Constructor Pro v3.12 (Premium)</title>
+    <title>AR Constructor Pro v3.14 (Cache Flow)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -23,22 +23,29 @@
     <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'></script>
 
     <!-- Fuentes -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;500;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #f8fafc; overflow: hidden; }
+        body { font-family: 'Outfit', sans-serif; background: #f8fafc; overflow: hidden; }
         .view { display: none; width: 100%; height: 100%; position: absolute; inset: 0; flex-direction: column; background: #f8fafc; }
         .view.active { display: flex; z-index: 10; }
         
         /* UI Premium */
-        .glass-panel { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.5); }
-        .hero-gradient { background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); }
-        .card-shadow { box-shadow: 0 10px 30px -10px rgba(0,0,0,0.1); }
-        
+        .glass-card { background: rgba(255, 255, 255, 0.9); backdrop-filter: blur(12px); border: 1px solid rgba(255, 255, 255, 0.6); box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.1); }
+        .hero-bg { background: radial-gradient(circle at top right, #4f46e5, #0f172a); }
+        .btn-action { background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%); transition: transform 0.1s; }
+        .btn-action:active { transform: scale(0.95); }
+
         /* Controles AR */
         .btn-pad { width: 50px; height: 50px; background: rgba(15,23,42,0.85); backdrop-filter: blur(8px); border-radius: 14px; color: white; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.1); box-shadow: 0 4px 10px rgba(0,0,0,0.2); transition: all 0.1s; }
         .btn-pad:active { background: #3b82f6; transform: scale(0.92); }
         input[type=range] { width: 100%; accent-color: #3b82f6; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.2); }
+
+        model-viewer { width: 100%; height: 100%; --poster-color: transparent; }
+        
+        /* Animación de carga */
+        .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 
     <!-- LÓGICA FIREBASE -->
@@ -46,7 +53,7 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, addDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
         // --- CONFIGURACIÓN ---
@@ -60,7 +67,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.12 PREMIUM";
+        const APP_VERSION = "3.14 CACHE FLOW";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -79,18 +86,25 @@
             setPersistence(auth, browserLocalPersistence).catch(console.warn);
         } catch (e) { console.error("Init Error:", e); }
 
+        // --- ESTADO GLOBAL ---
         const state = {
             user: null,
             role: 'guest',
             currentProject: null,
-            tempFile: null,
-            calibration: { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 },
+            // Variables para el flujo de caché
+            tempFile: null,        // Archivo raw para subir al final
+            localBlobUrl: null,    // URL local para visualización inmediata
+            draftData: {           // Datos temporales antes de guardar
+                name: '',
+                coords: { lat: 0, lon: 0 },
+                calibration: { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 }
+            },
             map: null
         };
 
         class ARSystem {
             constructor() {
-                console.log(`%c AR System ${APP_VERSION} `, 'background: #3b82f6; color: #fff; padding: 2px 5px; border-radius: 3px;');
+                console.log(`%c AR System ${APP_VERSION} `, 'background: #4f46e5; color: #fff; padding: 2px 5px; border-radius: 3px;');
                 this.initAuth();
                 this.updateVersionUI();
             }
@@ -121,33 +135,13 @@
                 if (user.email === ADMIN_EMAIL) state.role = 'admin';
                 else if (user.isAnonymous) state.role = 'guest';
                 else state.role = 'architect';
-
                 this.updateUserProfile(user);
-                if (!user.isAnonymous) await this.saveUserData(user);
-            }
-
-            async saveUserData(user) {
-                try {
-                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    await setDoc(doc(db, 'artifacts', namespace, 'users_registry', user.uid), {
-                        uid: user.uid,
-                        email: user.email,
-                        displayName: user.displayName || 'Anon',
-                        photoURL: user.photoURL,
-                        role: state.role,
-                        lastLogin: serverTimestamp()
-                    }, { merge: true });
-                } catch (e) {}
             }
 
             async loginGoogle() {
                  this.loader(true, "Conectando...");
-                 try {
-                     await signInWithPopup(auth, new GoogleAuthProvider());
-                 } catch (e) { 
-                     this.loader(false);
-                     this.toast("Error de acceso: " + e.message, "error");
-                 }
+                 try { await signInWithPopup(auth, new GoogleAuthProvider()); } 
+                 catch (e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
             }
 
             async loginAnonymous() {
@@ -161,14 +155,13 @@
             }
 
             updateUserProfile(user) {
-                // Nombre del usuario
                 const nameEl = document.getElementById('user-name-display');
                 const emailEl = document.getElementById('user-email-display');
                 const avatar = document.getElementById('user-avatar-img');
-                const badge = document.getElementById('user-role-badge');
+                const roleBadge = document.getElementById('user-role-badge');
 
                 if (nameEl) nameEl.textContent = user.displayName || "Invitado";
-                if (emailEl) emailEl.textContent = user.email || "Modo Anónimo";
+                if (emailEl) emailEl.textContent = user.email || "Anónimo";
                 
                 if (avatar && user.photoURL) {
                     avatar.src = user.photoURL;
@@ -176,19 +169,17 @@
                     document.getElementById('user-avatar-placeholder').classList.add('hidden');
                 }
 
-                let roleLabel = "INVITADO";
-                if(state.role === 'admin') roleLabel = "ADMINISTRADOR";
-                if(state.role === 'architect') roleLabel = "ARQUITECTO";
-                if(state.role === 'client') roleLabel = "CLIENTE / VISOR";
-                
-                if(badge) badge.textContent = roleLabel;
+                let roleText = "INVITADO";
+                if(state.role === 'admin') roleText = "ADMINISTRADOR";
+                if(state.role === 'architect') roleText = "ARQUITECTO";
+                if(roleBadge) roleBadge.textContent = roleText;
             }
 
-            // 2. PROYECTOS
+            // 2. GESTIÓN DE PROYECTOS
             loadProjects() {
                 if (state.role === 'client') return;
                 const list = document.getElementById('projects-list');
-                list.innerHTML = '<div class="p-8 text-center text-slate-400 animate-pulse">Sincronizando proyectos...</div>';
+                list.innerHTML = '<div class="p-8 text-center text-slate-400 animate-pulse">Cargando tus proyectos...</div>';
                 
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
@@ -197,10 +188,10 @@
                     list.innerHTML = '';
                     if (snap.empty) { 
                         list.innerHTML = `
-                            <div class="flex flex-col items-center justify-center h-64 text-slate-400 opacity-70">
-                                <div class="text-6xl mb-4">🏗️</div>
-                                <p class="font-bold text-lg text-slate-600">Sin proyectos aún</p>
-                                <p class="text-sm">Toca el botón + para comenzar</p>
+                            <div class="flex flex-col items-center justify-center h-64 text-slate-400 opacity-60">
+                                <div class="text-5xl mb-4 grayscale">📂</div>
+                                <p class="font-bold text-lg">Sin proyectos</p>
+                                <p class="text-sm">Empieza creando uno nuevo</p>
                             </div>`; 
                         return; 
                     }
@@ -209,16 +200,20 @@
             }
 
             renderProjectCard(id, data, container) {
-                const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Reciente';
+                const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
                 const el = document.createElement('div');
-                el.className = `bg-white p-5 rounded-2xl card-shadow border border-slate-50 mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
+                el.className = `glass-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
                 el.innerHTML = `
                     <div class="flex justify-between items-start mb-3">
                         <div class="flex items-center gap-3">
-                            <div class="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center text-xl">📦</div>
+                            <div class="w-12 h-12 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center text-2xl font-bold shadow-sm">
+                                ${data.name.charAt(0).toUpperCase()}
+                            </div>
                             <div>
                                 <h3 class="font-bold text-slate-800 text-lg leading-tight">${data.name}</h3>
-                                <p class="text-xs text-slate-400 font-medium">${date}</p>
+                                <p class="text-xs text-slate-400 font-medium flex items-center gap-1">
+                                    <span>📅</span> ${date}
+                                </p>
                             </div>
                         </div>
                         <div class="flex gap-1">
@@ -228,177 +223,186 @@
                     </div>
                     <div class="flex gap-2 mt-2">
                         <button onclick="app.openProject('${id}', 'view')" class="flex-1 bg-slate-900 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-black transition flex items-center justify-center gap-2">
-                            <span>👓</span> Ver AR
-                        </button>
-                        <button onclick="app.openProject('${id}', 'edit')" class="px-5 bg-white border border-slate-200 text-slate-600 text-sm font-bold py-3 rounded-xl hover:bg-slate-50 transition">
-                            Editar
+                            <span>👀</span> Ver AR
                         </button>
                     </div>
                 `;
                 container.appendChild(el);
             }
 
-            // 3. CREACIÓN ROBUSTA (FIX "SE QUEDA PEGADO")
-            async createProject() {
+            // 3. NUEVO FLUJO: CACHÉ INSTANTÁNEO -> AR -> GUARDADO FINAL
+            
+            // PASO A: Iniciar Creación (Local)
+            async startCreationFlow() {
                 const name = document.getElementById('project-name').value;
-                if(!name) return this.toast("Escribe un nombre para el proyecto", "warning");
+                if(!name) return this.toast("Falta el nombre del proyecto", "warning");
+                if(!state.tempFile) return this.toast("Debes subir un modelo 3D", "warning");
 
-                this.loader(true, "Subiendo archivos...");
+                // 1. Guardar datos en memoria (Estado Borrador)
+                state.draftData.name = name;
+                state.localBlobUrl = URL.createObjectURL(state.tempFile); // ¡Magia Local!
                 
-                try {
-                    let modelUrl = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"; // Default seguro
+                // 2. Limpiar UI
+                this.toggleModal('new-project', false);
+                
+                // 3. Ir a Vista Interior (Previsualización)
+                this.navTo('surface');
+                
+                // 4. Cargar modelo en Visor Interior
+                const viewer = document.getElementById('model-viewer-surface');
+                viewer.src = state.localBlobUrl;
+                
+                this.toast("Cargado en Caché. Ajusta y luego ve al Exterior.", "success");
+            }
+
+            // PASO B: Transición a Exterior (Lleva el blob local)
+            goToExteriorGPS() {
+                // Obtenemos GPS actual para centrar el mapa o AR
+                this.loader(true, "Activando GPS...");
+                navigator.geolocation.getCurrentPosition(pos => {
+                    // Guardamos coordenadas temporales
+                    state.draftData.coords = {
+                        lat: pos.coords.latitude,
+                        lon: pos.coords.longitude
+                    };
+
+                    // Vamos a la vista AR
+                    this.navTo('ar');
                     
-                    // Intentar subida si hay archivo
+                    // Iniciamos AR con el Blob Local (¡Sin internet!)
+                    this.startAR({
+                        modelUrl: state.localBlobUrl, // Usamos el local
+                        coords: state.draftData.coords
+                    }, true); // true = modo borrador
+
+                    // Mostrar controles de guardado final
+                    document.getElementById('ar-controls-final-save').classList.remove('hidden');
+                    document.getElementById('ar-controls-edit').classList.add('hidden');
+                    
+                    this.loader(false);
+                    this.toast("Modo Exterior Activo. Ubica y Guarda.", "info");
+
+                }, err => {
+                    this.loader(false);
+                    this.toast("Error GPS: " + err.message, "error");
+                }, { enableHighAccuracy: true });
+            }
+
+            // PASO C: Guardado Definitivo (Subida a Nube)
+            async saveFinalProject() {
+                if(!state.user) return;
+                this.loader(true, "Subiendo a la Nube... (Esto puede tardar)");
+
+                try {
+                    let cloudUrl = "https://modelviewer.dev/shared-assets/models/Astronaut.glb"; // Fallback
+                    
+                    // 1. Subir el archivo real a Firebase Storage
                     if(state.tempFile) {
-                        try {
-                            const fileRef = ref(storage, `users/${state.user.uid}/${Date.now()}_${state.tempFile.name}`);
-                            const snap = await uploadBytes(fileRef, state.tempFile);
-                            modelUrl = await getDownloadURL(snap.ref);
-                        } catch(e) { 
-                            console.warn("Fallo Storage, usando fallback:", e);
-                            // No detenemos el proceso, seguimos con el modelo default si falla storage
-                            this.toast("Aviso: No se pudo subir el archivo, usando modelo de prueba.", "warning");
-                        }
+                        const fileRef = ref(storage, `users/${state.user.uid}/${Date.now()}_${state.tempFile.name}`);
+                        const snap = await uploadBytes(fileRef, state.tempFile);
+                        cloudUrl = await getDownloadURL(snap.ref);
                     }
 
-                    // Guardar en Firestore
+                    // 2. Guardar metadatos en Firestore
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    const newDoc = doc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'));
-                    
-                    await setDoc(newDoc, {
-                        name, 
-                        modelUrl, 
-                        createdAt: new Date().toISOString(),
-                        coords: { lat: 4.6097, lon: -74.0817 }, // Default Bogotá
-                        calibration: { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 }
+                    await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
+                        name: state.draftData.name,
+                        modelUrl: cloudUrl, // URL Final de Nube
+                        coords: state.draftData.coords,
+                        calibration: state.calibration, // Lo que ajustaste en AR
+                        createdAt: new Date().toISOString()
                     });
-                    
-                    // Éxito total
-                    this.toggleModal('new-project', false);
-                    this.toast("¡Proyecto Creado!", "success");
-                    
-                    // Ir a editar inmediatamente
-                    await this.openProject(newDoc.id, 'edit');
 
-                } catch (error) {
-                    console.error("Error Fatal Creando:", error);
-                    this.toast("Error Crítico: " + error.message, "error");
+                    this.toast("¡Proyecto Guardado y Publicado!", "success");
+                    
+                    // 3. Limpieza
+                    state.tempFile = null;
+                    state.localBlobUrl = null;
+                    
+                    this.navTo('dashboard');
+                    // Recargar dashboard se hace auto por el listener
+
+                } catch(e) {
+                    this.toast("Error al subir: " + e.message, "error");
                 } finally {
-                    // SIEMPRE cerrar el loader, pase lo que pase
                     this.loader(false);
                 }
             }
 
-            shareProject(id) {
-                const url = `${window.location.origin}${window.location.pathname}?id=${id}&uid=${state.user.uid}`;
-                navigator.clipboard.writeText(url).then(() => this.toast("Enlace copiado al portapapeles", "success"));
-            }
-
-            async openSharedProject(id, ownerUid) {
-                this.loader(true, "Cargando...");
-                try {
-                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
-                    
-                    if(!snap.exists()) throw new Error("Proyecto no encontrado");
-                    
-                    state.currentProject = { id, data: snap.data(), ownerUid };
-                    state.calibration = snap.data().calibration || { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 };
-
-                    this.navTo('ar');
-                    this.startAR(state.currentProject.data);
-                    document.getElementById('ar-controls').classList.add('hidden'); // Ocultar controles de guardado
-                    this.toast("Modo Solo Lectura", "info");
-                } catch(e) {
-                    this.toast(e.message, "error");
-                    setTimeout(() => window.location.href = window.location.pathname, 2000);
-                }
-                this.loader(false);
-            }
-
+            // 4. VISUALIZACIÓN (Proyectos ya existentes)
             async openProject(id, mode) {
-                this.loader(true, "Abriendo...");
+                this.loader(true, "Descargando...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
                     
-                    if(!snap.exists()) throw new Error("No existe el proyecto");
+                    if(!snap.exists()) throw new Error("No existe");
                     
-                    state.currentProject = { id, data: snap.data(), ownerUid: state.user.uid };
-                    state.calibration = snap.data().calibration || { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 };
+                    const data = snap.data();
+                    state.currentProject = { id, data };
+                    state.calibration = data.calibration || { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 };
 
-                    if(mode === 'edit') {
-                        this.navTo('editor');
-                        setTimeout(() => this.initMap(state.currentProject.data.coords), 500);
-                    } else {
+                    // Modo Edición de Ubicación (Mapa) o Ver AR
+                    if(mode === 'view') {
                         this.navTo('ar');
-                        this.startAR(state.currentProject.data);
-                        document.getElementById('ar-controls').classList.remove('hidden');
+                        this.startAR(data, false); // false = modo normal (no borrador)
+                        
+                        // Mostrar controles de edición normales
+                        document.getElementById('ar-controls-final-save').classList.add('hidden');
+                        document.getElementById('ar-controls-edit').classList.remove('hidden');
                     }
-                } catch(e) { 
-                    this.toast(e.message, "error"); 
+                } catch(e) { this.toast(e.message, "error"); }
+                this.loader(false);
+            }
+            
+            async openSharedProject(id, ownerUid) {
+                this.loader(true, "Cargando Visita...");
+                try {
+                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
+                    if(!snap.exists()) throw new Error("No encontrado");
+                    
+                    const data = snap.data();
+                    state.calibration = data.calibration;
+                    
+                    this.navTo('ar');
+                    this.startAR(data, false);
+                    
+                    // Ocultar todos los controles de guardado
+                    document.getElementById('ar-controls-final-save').classList.add('hidden');
+                    document.getElementById('ar-controls-edit').classList.add('hidden');
+                    this.toast("Modo Visitante", "info");
+                } catch(e) {
+                    this.toast("Error: " + e.message, "error");
                 }
                 this.loader(false);
             }
 
-            // MAPAS
-            initMap(coords) {
-                const mapEl = document.getElementById('map');
-                if(state.map) { state.map.remove(); state.map = null; }
-                
-                const lat = coords?.lat || 4.6097;
-                const lon = coords?.lon || -74.0817;
-                
-                state.map = L.map(mapEl, { zoomControl: false }).setView([lat, lon], 18);
-                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', { attribution: 'Esri', maxZoom: 19 }).addTo(state.map);
-                
-                const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
-                const marker = L.marker([lat, lon], { draggable: true, icon }).addTo(state.map);
-                
-                marker.on('drag', e => {
-                    const {lat, lng} = e.target.getLatLng();
-                    document.getElementById('lat-disp').textContent = lat.toFixed(6);
-                    document.getElementById('lon-disp').textContent = lng.toFixed(6);
-                });
-                document.getElementById('lat-disp').textContent = lat.toFixed(6);
-                document.getElementById('lon-disp').textContent = lon.toFixed(6);
-                
-                setTimeout(() => state.map.invalidateSize(), 500);
-            }
-
-            async saveCoords() {
-                if(!state.map) return;
-                const c = state.map.getCenter();
-                this.loader(true, "Guardando...");
-                const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', state.currentProject.id), { "coords.lat": c.lat, "coords.lon": c.lng });
-                this.toast("Ubicación Actualizada");
-                this.navTo('dashboard');
-                this.loader(false);
-            }
-
-            // AR ENGINE
-            startAR(data) {
+            // AR ENGINE (A-FRAME)
+            startAR(data, isDraft) {
                 const container = document.getElementById('ar-container');
+                // Si es borrador usamos el blob local, si es final usamos la URL de nube
+                const url = isDraft ? state.localBlobUrl : data.modelUrl;
+                
                 container.innerHTML = `
                     <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
                         <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
                         <a-entity gps-entity-place="latitude: ${data.coords.lat}; longitude: ${data.coords.lon};">
                             <a-entity id="ar-model-entity" position="${state.calibration.x} ${state.calibration.y} ${state.calibration.z}" rotation="0 ${state.calibration.r} 0" scale="${state.calibration.s} ${state.calibration.s} ${state.calibration.s}">
-                                <a-gltf-model src="${data.modelUrl}" opacity="${state.calibration.opacity}" transparent="true"></a-gltf-model>
+                                <a-gltf-model src="${url}" opacity="${state.calibration.opacity}" transparent="true"></a-gltf-model>
                             </a-entity>
                         </a-entity>
                         <a-light type="ambient" intensity="2"></a-light>
                         <a-light type="directional" position="0 1 0" intensity="1"></a-light>
                     </a-scene>`;
+                
                 setTimeout(() => this.updateOpacity(state.calibration.opacity), 1500);
             }
 
+            // CALIBRACIÓN EN TIEMPO REAL
             adjust(axis, val) {
                 const c = state.calibration;
-                if(axis === 'r') c.r += val;
-                else if (axis === 's') c.s = Math.max(0.1, c.s + val);
-                else c[axis] += val;
+                if(axis === 'r') c.r += val; else if (axis === 's') c.s += val; else c[axis] += val;
                 
                 const el = document.getElementById('ar-model-entity');
                 if(el) {
@@ -406,32 +410,30 @@
                     el.setAttribute('rotation', `0 ${c.r} 0`);
                     el.setAttribute('scale', `${c.s} ${c.s} ${c.s}`);
                 }
-                this.toast(`${axis.toUpperCase()}: ${c[axis].toFixed(2)}`);
             }
-
+            
             updateOpacity(val) {
                 state.calibration.opacity = parseFloat(val);
                 const model = document.querySelector('a-gltf-model');
-                if(model) model.setAttribute('opacity', val); 
+                if(model) model.setAttribute('opacity', val);
             }
 
-            async saveCalibration() {
-                this.loader(true, "Guardando...");
+            async saveCalibrationUpdate() {
+                this.loader(true, "Actualizando...");
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', state.currentProject.id), { calibration: state.calibration });
-                this.toast("Calibración Guardada");
+                this.toast("Posición Actualizada");
                 this.loader(false);
             }
 
-            // HELPERS
+            // UTILS
             navTo(id) {
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 document.getElementById(`view-${id}`).classList.add('active');
-                if(id !== 'ar') document.getElementById('ar-container').innerHTML = "";
             }
             toast(msg, type = 'info') {
                 const t = document.getElementById('toast');
-                const bg = type==='error'?'bg-red-500': type==='success'?'bg-green-500':'bg-slate-800';
+                const bg = type==='error'?'bg-red-500': type==='success'?'bg-emerald-500':'bg-slate-800';
                 t.innerHTML = msg;
                 t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${bg}`;
                 setTimeout(() => t.classList.add('-translate-y-24'), 3000);
@@ -448,177 +450,155 @@
                 if(id==='new-project' && show) { document.getElementById('project-name').value = ""; state.tempFile = null; document.getElementById('file-name').textContent = "Máx 50MB"; }
             }
             handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
-            updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
+            shareProject(id) {
+                const url = `${window.location.origin}${window.location.pathname}?id=${id}&uid=${state.user.uid}`;
+                navigator.clipboard.writeText(url).then(() => this.toast("Copiado al portapapeles", "success"));
+            }
             async deleteProject(id) {
-                if(!confirm("¿Eliminar proyecto?")) return;
+                if(!confirm("¿Eliminar?")) return;
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
             }
+            updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
         }
+        
         window.onload = () => { window.app = new ARSystem(); };
     </script>
 </head>
 <body>
     <!-- UI GLOBAL -->
-    <div id="toast" class="-translate-y-24 fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] bg-slate-800 transition-all"></div>
+    <div id="toast" class="-translate-y-24 fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] bg-slate-800 transition-all text-center min-w-[200px]"></div>
     <div id="loader" class="hidden fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
-        <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <div class="loader-spin mb-4"></div>
         <p id="loader-text" class="font-bold tracking-widest text-sm animate-pulse">PROCESANDO...</p>
     </div>
 
     <!-- VISTA 1: LOGIN -->
-    <div id="view-auth" class="view justify-center items-center p-6 hero-gradient">
-        <div class="w-full max-w-sm glass-panel p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden">
-            <div class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-500 to-purple-500"></div>
-            <div class="w-20 h-20 bg-gradient-to-br from-blue-500 to-blue-700 rounded-2xl mx-auto mb-6 flex items-center justify-center text-4xl shadow-lg shadow-blue-500/30">🏗️</div>
-            <h1 class="text-3xl font-black text-slate-900 mb-2 tracking-tight">AR Constructor</h1>
-            <p class="text-slate-500 text-sm mb-8 font-medium">Plataforma de Visualización 1:1</p>
-            
-            <button onclick="app.loginAnonymous()" class="w-full bg-slate-100 text-slate-600 font-bold py-4 rounded-xl hover:bg-slate-200 transition mb-3">
-                Modo Invitado
+    <div id="view-auth" class="view justify-center items-center p-6 hero-bg">
+        <div class="w-full max-w-sm glass-card p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden">
+            <div class="w-24 h-24 bg-white/10 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl shadow-inner backdrop-blur-sm">🏗️</div>
+            <h1 class="text-4xl font-black text-white mb-2 tracking-tighter drop-shadow-lg">AR PRO</h1>
+            <p class="text-indigo-100 text-sm mb-8 font-medium">Visualización Arquitectónica 1:1</p>
+            <button onclick="app.loginAnonymous()" class="w-full bg-white/10 text-white border border-white/20 font-bold py-4 rounded-xl hover:bg-white/20 transition mb-3 backdrop-blur-md">Invitado</button>
+            <button onclick="app.loginGoogle()" class="w-full bg-white text-indigo-900 font-bold py-4 rounded-xl hover:bg-indigo-50 transition flex items-center justify-center gap-3 shadow-xl btn-action">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6"> <span>Google</span>
             </button>
-            <button onclick="app.loginGoogle()" class="w-full bg-slate-900 text-white font-bold py-4 rounded-xl hover:bg-black transition flex items-center justify-center gap-3 shadow-xl shadow-slate-200">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5 bg-white rounded-full p-0.5"> 
-                <span>Acceder con Google</span>
-            </button>
-            <p class="mt-8 text-[10px] text-slate-400 font-mono uppercase tracking-widest">v3.12 PREMIUM UI</p>
+            <p class="mt-8 text-[10px] text-indigo-200/50 font-mono uppercase tracking-widest">v3.14 CACHE FLOW</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-slate-50">
-        <!-- Header Premium -->
-        <div class="hero-gradient px-6 pb-12 pt-8 rounded-b-[2.5rem] shadow-lg relative z-10">
-            <div class="flex justify-between items-start mb-6">
+        <div class="hero-bg px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10">
+            <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
-                    <div class="w-14 h-14 rounded-full bg-white/10 backdrop-blur border border-white/20 p-1 relative">
+                    <div class="w-16 h-16 rounded-full bg-white/20 backdrop-blur-md border-2 border-white/30 p-1 shadow-lg">
                         <img id="user-avatar-img" class="w-full h-full rounded-full object-cover hidden" src="">
-                        <div id="user-avatar-placeholder" class="w-full h-full rounded-full bg-white/20 flex items-center justify-center text-xl">👤</div>
-                        <div class="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-slate-900 rounded-full"></div>
+                        <div id="user-avatar-placeholder" class="w-full h-full rounded-full bg-indigo-800 flex items-center justify-center text-2xl">👤</div>
                     </div>
                     <div>
-                        <p class="text-blue-200 text-xs font-bold uppercase tracking-wider mb-1">Bienvenido</p>
-                        <h2 id="user-name-display" class="text-xl font-bold text-white leading-none">Cargando...</h2>
-                        <p id="user-email-display" class="text-slate-400 text-xs mt-1 truncate max-w-[150px]">...</p>
+                        <h2 id="user-name-display" class="text-2xl font-black text-white leading-none mb-1 drop-shadow-md">Hola!</h2>
+                        <div id="user-role-badge" class="text-[10px] font-bold text-indigo-200 bg-white/10 px-2 py-0.5 rounded inline-block tracking-wider uppercase border border-white/10">Cargando...</div>
                     </div>
                 </div>
-                <button onclick="app.logout()" class="bg-white/10 hover:bg-white/20 text-white p-2 rounded-lg backdrop-blur transition">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                <button onclick="app.logout()" class="bg-white/10 hover:bg-red-500/20 text-white p-3 rounded-2xl backdrop-blur transition border border-white/10">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
                 </button>
             </div>
-            
-            <div class="flex justify-between items-center">
-                <div id="user-role-badge" class="bg-blue-500/20 border border-blue-400/30 text-blue-200 px-3 py-1 rounded-full text-[10px] font-bold tracking-widest uppercase">...</div>
-                <p class="text-slate-400 text-xs">Tus Proyectos</p>
-            </div>
         </div>
-
-        <!-- Lista -->
-        <div id="projects-list" class="flex-1 overflow-y-auto p-6 -mt-6 relative z-0 pt-8 pb-24 space-y-4"></div>
-
-        <!-- FAB -->
-        <button onclick="app.toggleModal('new-project', true)" class="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 text-white rounded-full shadow-2xl shadow-blue-500/50 text-3xl flex items-center justify-center hover:scale-110 hover:bg-blue-700 transition z-30 active:scale-95 border-4 border-white">
-            +
-        </button>
-
-        <!-- Modal Crear -->
-        <div id="modal-new-project" class="hidden fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm p-6 flex items-end sm:items-center justify-center transition-all">
-            <div class="bg-white w-full max-w-md p-6 rounded-3xl shadow-2xl animate-fade-in mb-4 sm:mb-0">
-                <div class="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6"></div>
-                <h2 class="text-2xl font-bold text-slate-900 mb-1">Nuevo Proyecto</h2>
-                <p class="text-slate-400 text-sm mb-6">Sube tu modelo 3D (.glb) para empezar.</p>
-                
-                <div class="space-y-4">
-                    <input type="text" id="project-name" placeholder="Nombre del Proyecto" class="w-full bg-slate-50 border border-slate-200 p-4 rounded-xl font-bold text-slate-800 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition">
-                    
-                    <label class="block bg-blue-50 border-2 border-dashed border-blue-200 p-6 rounded-xl text-center cursor-pointer hover:bg-blue-100 transition group">
+        <div id="projects-list" class="flex-1 overflow-y-auto p-6 -mt-10 relative z-0 pb-32 space-y-4"></div>
+        <button onclick="app.toggleModal('new-project', true)" class="fixed bottom-8 right-6 w-16 h-16 bg-indigo-600 text-white rounded-2xl shadow-2xl shadow-indigo-500/40 text-3xl flex items-center justify-center hover:scale-110 hover:bg-indigo-700 transition z-30 active:scale-95 border-4 border-white">+</button>
+        
+        <div id="modal-new-project" class="hidden fixed inset-0 z-50 bg-slate-900/80 backdrop-blur-md p-6 flex items-end sm:items-center justify-center transition-all">
+            <div class="bg-white w-full max-w-md p-8 rounded-[2rem] shadow-2xl animate-fade-in mb-4 sm:mb-0 border border-slate-100">
+                <h2 class="text-3xl font-black text-slate-900 mb-2">Crear Proyecto</h2>
+                <p class="text-slate-500 text-sm mb-8 font-medium">Carga instantánea (Modo Caché)</p>
+                <div class="space-y-5">
+                    <div class="relative">
+                        <input type="text" id="project-name" placeholder=" " class="peer w-full bg-slate-50 border-2 border-slate-100 p-4 rounded-xl font-bold text-slate-800 outline-none focus:border-indigo-500 transition pt-6">
+                        <label class="absolute left-4 top-2 text-[10px] font-bold text-slate-400 uppercase transition-all peer-placeholder-shown:top-4 peer-placeholder-shown:text-sm peer-focus:top-2 peer-focus:text-[10px] peer-focus:text-indigo-500">Nombre</label>
+                    </div>
+                    <label class="block bg-slate-50 border-2 border-dashed border-slate-200 p-8 rounded-2xl text-center cursor-pointer hover:bg-indigo-50 hover:border-indigo-200 transition group">
                         <input type="file" accept=".glb" class="hidden" onchange="app.handleFile(event)">
-                        <div class="w-12 h-12 bg-white rounded-full flex items-center justify-center mx-auto mb-2 text-2xl shadow-sm group-hover:scale-110 transition">📦</div>
-                        <span class="text-blue-600 font-bold text-sm block">Seleccionar Archivo GLB</span>
-                        <p id="file-name" class="text-xs text-slate-400 mt-2 font-mono">Máximo 50MB</p>
+                        <div class="w-16 h-16 bg-white rounded-full flex items-center justify-center mx-auto mb-3 text-3xl shadow-sm group-hover:scale-110 transition">📦</div>
+                        <span class="text-indigo-600 font-bold text-sm block">Subir GLB</span>
+                        <p id="file-name" class="text-xs text-slate-400 mt-2 font-mono bg-white px-2 py-1 rounded inline-block">Máx 50MB</p>
                     </label>
                 </div>
-
-                <div class="flex gap-3 mt-8">
-                    <button onclick="app.toggleModal('new-project', false)" class="flex-1 py-4 rounded-xl font-bold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                    <button onclick="app.createProject()" class="flex-1 bg-slate-900 text-white py-4 rounded-xl font-bold shadow-lg hover:bg-black transition">Crear Proyecto</button>
+                <div class="flex gap-3 mt-10">
+                    <button onclick="app.toggleModal('new-project', false)" class="flex-1 py-4 rounded-xl font-bold text-slate-500 hover:bg-slate-100 transition">Cancelar</button>
+                    <button onclick="app.startCreationFlow()" class="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-xl shadow-indigo-200 hover:bg-indigo-700 transition active:scale-95">CONTINUAR (LOCAL)</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- VISTA 3: EDITOR MAPA -->
-    <div id="view-editor" class="view">
-        <div id="map" class="flex-1 bg-slate-200 relative z-0"></div>
-        <div class="bg-white p-6 rounded-t-3xl shadow-[0_-10px_40px_rgba(0,0,0,0.1)] relative z-10 pb-8">
-            <div class="w-12 h-1 bg-slate-200 rounded-full mx-auto mb-6"></div>
-            <div class="flex justify-between items-center mb-6">
-                <div>
-                    <h3 class="font-bold text-slate-900 text-xl">Ubicación</h3>
-                    <p class="text-sm text-slate-500">Arrastra el marcador al punto cero</p>
-                </div>
-                <div class="text-right bg-slate-50 p-2 rounded-lg border border-slate-100">
-                    <div class="text-[10px] font-mono text-slate-400 uppercase tracking-wider">Coordenadas</div>
-                    <div class="font-mono font-bold text-slate-800 text-xs mt-1"><span id="lat-disp">0.00</span>, <span id="lon-disp">0.00</span></div>
-                </div>
-            </div>
-            <div class="flex gap-3">
-                <button onclick="app.navTo('dashboard')" class="flex-1 bg-slate-100 text-slate-500 font-bold py-4 rounded-xl hover:bg-slate-200">Cancelar</button>
-                <button onclick="app.saveCoords()" class="flex-[2] bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-700">Confirmar Ubicación</button>
-            </div>
+    <!-- VISTA 3: SURFACE (INTERIOR) -->
+    <div id="view-surface" class="view bg-slate-900">
+        <div class="absolute top-0 left-0 w-full p-6 z-20 flex justify-between pointer-events-none">
+            <span class="bg-black/50 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold border border-white/10">PASO 1: Interior</span>
+            <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-red-500/50 transition">✕</button>
+        </div>
+        <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate class="w-full h-full z-0">
+            <button slot="ar-button" class="absolute bottom-32 left-1/2 transform -translate-x-1/2 bg-white text-indigo-900 px-6 py-3 rounded-full font-black shadow-2xl flex items-center gap-2 z-50 hover:scale-105 transition pointer-events-auto border-4 border-indigo-100">📷 MODO MESA</button>
+        </model-viewer>
+        <div class="absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black/90 to-transparent pt-24">
+            <button onclick="app.goToExteriorGPS()" class="w-full bg-emerald-500 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-600 transition active:scale-95 flex items-center justify-center gap-2">
+                <span>🌍</span> IR AL EXTERIOR (GPS)
+            </button>
+            <p class="text-center text-slate-400 text-xs mt-3">Acomoda primero aquí, luego ve al GPS</p>
         </div>
     </div>
 
-    <!-- VISTA 4: AR -->
+    <!-- VISTA 4: AR GPS -->
     <div id="view-ar" class="view bg-black">
         <div id="ar-container" class="absolute inset-0 z-0"></div>
-        
-        <!-- Top Bar -->
-        <div class="absolute top-0 left-0 w-full p-4 z-20 flex justify-between pointer-events-none bg-gradient-to-b from-black/80 to-transparent">
-            <div class="bg-white/10 backdrop-blur text-white px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 flex items-center gap-2 shadow-lg">
-                <div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                GPS ACTIVO
-            </div>
+        <div class="absolute top-0 left-0 w-full p-6 z-20 flex justify-between pointer-events-none">
+            <div class="bg-black/60 backdrop-blur text-white px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 flex items-center gap-2 shadow-lg"><div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>GPS</div>
             <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 backdrop-blur text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-600 transition border border-white/10">✕</button>
         </div>
 
-        <!-- Controls -->
-        <div id="ar-controls" class="absolute bottom-0 left-0 w-full p-5 z-30 flex flex-col gap-4 pointer-events-none bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20">
-            <!-- Opacidad -->
-            <div class="pointer-events-auto bg-white/10 backdrop-blur p-4 rounded-2xl border border-white/10 shadow-xl">
-                <div class="flex justify-between text-white text-[10px] font-bold uppercase mb-2 tracking-wider opacity-80">
-                    <span>Visibilidad (Rayos X)</span>
-                    <span>100%</span>
-                </div>
-                <input type="range" min="0" max="1" step="0.05" value="1" oninput="app.updateOpacity(this.value)">
-            </div>
-
-            <!-- Pad -->
+        <!-- CONTROLES: FINAL SAVE (SOLO AL CREAR) -->
+        <div id="ar-controls-final-save" class="absolute bottom-0 left-0 w-full p-5 z-30 flex flex-col gap-4 pointer-events-none bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20 hidden">
             <div class="pointer-events-auto flex justify-between items-end gap-3">
                 <div class="grid grid-cols-3 gap-2">
                     <div></div><button class="btn-pad" ontouchstart="app.adjust('z', -0.5)">⬆️</button><div></div>
-                    <button class="btn-pad" ontouchstart="app.adjust('x', -0.5)">⬅️</button>
-                    <div class="w-[50px] h-[50px] flex items-center justify-center text-white/20 text-[10px] font-bold border border-white/10 rounded-xl bg-white/5">MOV</div>
-                    <button class="btn-pad" ontouchstart="app.adjust('x', 0.5)">➡️</button>
+                    <button class="btn-pad" ontouchstart="app.adjust('x', -0.5)">⬅️</button><div class="w-[50px] h-[50px] flex items-center justify-center text-white/20 text-[10px] font-bold border border-white/10 rounded-xl bg-white/5">MOV</div><button class="btn-pad" ontouchstart="app.adjust('x', 0.5)">➡️</button>
                     <div></div><button class="btn-pad" ontouchstart="app.adjust('z', 0.5)">⬇️</button><div></div>
                 </div>
-                
                 <div class="flex flex-col gap-2">
-                    <button class="btn-pad text-[10px] font-bold w-14 bg-orange-600/80 border-orange-500/30" onclick="app.adjust('y', 0.5)">▲ ALT</button>
-                    <button class="btn-pad text-[10px] font-bold w-14 bg-orange-600/80 border-orange-500/30" onclick="app.adjust('y', -0.5)">▼ ALT</button>
-                    <button class="btn-pad text-[10px] font-bold w-14 text-yellow-300" onclick="app.adjust('r', 5)">↻ ROT</button>
-                    <div class="flex gap-1">
-                        <button class="btn-pad w-full text-[10px] font-bold" onclick="app.adjust('s', -0.1)">-</button>
-                        <button class="btn-pad w-full text-[10px] font-bold" onclick="app.adjust('s', 0.1)">+</button>
-                    </div>
+                    <button class="btn-pad text-[10px] font-bold w-14 bg-orange-600/80 border-orange-500/30" onclick="app.adjust('y', 0.5)">▲</button>
+                    <button class="btn-pad text-[10px] font-bold w-14 bg-orange-600/80 border-orange-500/30" onclick="app.adjust('y', -0.5)">▼</button>
+                    <button class="btn-pad text-[10px] font-bold w-14 text-yellow-300" onclick="app.adjust('r', 5)">↻</button>
                 </div>
             </div>
+            <button onclick="app.saveFinalProject()" class="pointer-events-auto w-full bg-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/10">
+                <span>☁️</span> GUARDAR Y SUBIR A NUBE
+            </button>
+        </div>
 
-            <button onclick="app.saveCalibration()" class="pointer-events-auto w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/50 hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/10">
-                <span>💾</span> GUARDAR AJUSTES
+        <!-- CONTROLES: EDICION (SOLO AL EDITAR) -->
+        <div id="ar-controls-edit" class="absolute bottom-0 left-0 w-full p-5 z-30 flex flex-col gap-4 pointer-events-none bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20 hidden">
+            <div class="pointer-events-auto bg-white/10 backdrop-blur p-4 rounded-2xl border border-white/10 shadow-xl">
+                <div class="flex justify-between text-white text-[10px] font-bold uppercase mb-2 tracking-wider opacity-80"><span>Opacidad</span></div>
+                <input type="range" min="0" max="1" step="0.05" value="1" oninput="app.updateOpacity(this.value)">
+            </div>
+             <div class="pointer-events-auto flex justify-between items-end gap-3">
+                <div class="grid grid-cols-3 gap-2">
+                    <div></div><button class="btn-pad" ontouchstart="app.adjust('z', -0.5)">⬆️</button><div></div>
+                    <button class="btn-pad" ontouchstart="app.adjust('x', -0.5)">⬅️</button><div class="w-[50px] h-[50px] flex items-center justify-center text-white/20 text-[10px] font-bold border border-white/10 rounded-xl bg-white/5">MOV</div><button class="btn-pad" ontouchstart="app.adjust('x', 0.5)">➡️</button>
+                    <div></div><button class="btn-pad" ontouchstart="app.adjust('z', 0.5)">⬇️</button><div></div>
+                </div>
+                <div class="flex flex-col gap-2">
+                    <button class="btn-pad text-[10px] font-bold w-14 bg-orange-600/80 border-orange-500/30" onclick="app.adjust('y', 0.5)">▲</button>
+                    <button class="btn-pad text-[10px] font-bold w-14 bg-orange-600/80 border-orange-500/30" onclick="app.adjust('y', -0.5)">▼</button>
+                    <button class="btn-pad text-[10px] font-bold w-14 text-yellow-300" onclick="app.adjust('r', 5)">↻</button>
+                </div>
+            </div>
+            <button onclick="app.saveCalibrationUpdate()" class="pointer-events-auto w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/10">
+                <span>💾</span> ACTUALIZAR POSICIÓN
             </button>
         </div>
     </div>
 </body>
 </html>
-
