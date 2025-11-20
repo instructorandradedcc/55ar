@@ -4,8 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <title>AR Constructor Pro v1.1</title>
+    <title>AR Constructor Pro v1.2</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
@@ -22,7 +21,6 @@
         * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; touch-action: manipulation; }
         body { background-color: #f3f4f6; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         
-        /* SISTEMA DE PÁGINAS */
         .page { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow-y: auto; z-index: 10; background: #f3f4f6; }
         .page.active { display: flex; flex-direction: column; }
         .ui-layer { z-index: 50; position: relative; }
@@ -32,15 +30,15 @@
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #fff; border: 2px solid #2563eb; margin-top: -10px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: rgba(200,200,200,0.5); border-radius: 2px; }
         
-        /* NOTIFICACIONES (TOAST) */
-        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-150px); background: rgba(15,23,42,0.95); color: white; padding: 12px 24px; border-radius: 50px; font-size: 14px; font-weight: 600; z-index: 10000; transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); pointer-events: none; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); white-space: nowrap; }
+        /* TOAST */
+        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-150px); background: rgba(15,23,42,0.95); color: white; padding: 12px 24px; border-radius: 50px; font-size: 14px; font-weight: 600; z-index: 10000; transition: 0.3s; pointer-events: none; white-space: nowrap; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.3); }
         .toast.show { transform: translateX(-50%) translateY(0); }
         
-        /* AR VIDEO FIX */
+        /* VIDEO AR FIX */
         video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; z-index: -2 !important; }
     </style>
 
-    <!-- CARGA DINÁMICA DE AR -->
+    <!-- CARGA DE AR -->
     <script>
         let arLoaded = false;
         const loadAR = () => {
@@ -59,123 +57,94 @@
 </head>
 <body>
 
-    <!-- UI FLOTANTE -->
     <div id="toast" class="toast">Notificación</div>
 
-    <!-- 1. PÁGINA DE CARGA (UPLOAD) -->
+    <!-- PÁGINA 1: UPLOAD -->
     <div id="upload-page" class="page active items-center justify-center p-4">
         <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden ui-layer">
-            
-            <!-- Encabezado -->
             <div class="bg-slate-50 p-6 text-center border-b border-slate-100">
                 <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-16 mx-auto mb-3 object-contain">
                 <h1 class="text-xl font-bold text-slate-800">AR Constructor <span class="text-blue-600">Pro</span></h1>
-                <p class="text-xs text-slate-400 uppercase font-bold tracking-widest">v1.1 UI Fix</p>
+                <p class="text-xs text-slate-400 uppercase font-bold tracking-widest">v1.2 Logic Restore</p>
             </div>
 
             <div class="p-6 space-y-6">
-                
-                <!-- INPUT DE ARCHIVO -->
+                <!-- Archivo -->
                 <div>
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-2">1. Modelo 3D (.glb)</label>
-                    <div class="relative group cursor-pointer">
-                        <!-- El input real es invisible pero cubre todo el área -->
+                    <div class="relative group">
                         <input type="file" id="model-in" accept=".glb" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20">
-                        
-                        <!-- Zona visual de drop -->
-                        <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 transition-all group-hover:border-blue-500 group-hover:bg-blue-50">
+                        <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-5 text-center bg-slate-50 transition-all">
                             <div class="text-3xl mb-2">📦</div>
                             <p id="file-lbl" class="text-sm font-bold text-slate-600 truncate">Toca aquí para subir archivo</p>
-                            <p class="text-xs text-slate-400 mt-1">Formato .GLB requerido</p>
                         </div>
                     </div>
                 </div>
 
-                <!-- INPUT DE UBICACIÓN -->
+                <!-- Ubicación -->
                 <div>
                     <div class="flex justify-between items-center mb-2">
-                        <label class="block text-xs font-bold text-slate-500 uppercase">2. Ubicación del Proyecto</label>
-                        <button id="gps-btn" type="button" class="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-bold hover:bg-blue-200 flex items-center gap-1 transition active:scale-95">
-                            📍 Usar mi ubicación actual
-                        </button>
+                        <label class="block text-xs font-bold text-slate-500 uppercase">2. Ubicación</label>
+                        <button id="gps-btn" class="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-full font-bold hover:bg-blue-200 flex items-center gap-1 transition">📍 Mi Ubicación</button>
                     </div>
                     <div class="grid grid-cols-2 gap-3">
-                        <input type="number" id="lat-in" placeholder="Latitud" step="any" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none transition">
-                        <input type="number" id="lng-in" placeholder="Longitud" step="any" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none transition">
+                        <input type="number" id="lat-in" placeholder="Latitud" step="any" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none">
+                        <input type="number" id="lng-in" placeholder="Longitud" step="any" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none">
                     </div>
                 </div>
 
-                <!-- BOTONES DE ACCIÓN -->
-                <button id="save-btn" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition transform">
-                    💾 Guardar y Continuar
-                </button>
+                <!-- Botón Guardar -->
+                <button id="save-btn" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg shadow-emerald-200 hover:bg-emerald-700 active:scale-95 transition">💾 Guardar en Memoria</button>
                 
                 <div class="grid grid-cols-2 gap-3 pt-2">
-                    <button onclick="app.nav('map')" id="btn-map" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition opacity-50 cursor-not-allowed" disabled>
-                        🗺️ Ver Mapa
-                    </button>
-                    <button onclick="app.nav('scale')" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition">
-                        📏 Ajustar Escala
-                    </button>
+                    <button onclick="app.nav('map')" id="btn-map" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 transition disabled:opacity-50 disabled:cursor-not-allowed" disabled>🗺️ Ver Mapa</button>
+                    <button onclick="app.nav('scale')" class="bg-white border border-slate-200 text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 transition">📏 Ajustar Escala</button>
                 </div>
-
                 <div class="text-center pt-2">
-                    <button onclick="if(confirm('¿Borrar datos y reiniciar?')) location.reload()" class="text-xs text-red-400 underline hover:text-red-600">Reiniciar Aplicación</button>
+                    <button id="clear-cache-btn" class="text-xs text-red-400 underline hover:text-red-600">Borrar datos guardados</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 2. PÁGINA MAPA -->
+    <!-- PÁGINA 2: MAPA -->
     <div id="map-page" class="page">
         <div id="map-c" class="w-full h-full z-0"></div>
-        <div class="absolute top-4 left-4 z-20">
-            <button onclick="app.nav('upload')" class="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow font-bold text-xs text-slate-700 active:scale-95 transition">← Volver</button>
-        </div>
+        <div class="absolute top-4 left-4 z-20"><button onclick="app.nav('upload')" class="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow font-bold text-xs text-slate-700">← Volver</button></div>
         <div class="absolute bottom-8 left-0 w-full px-6 z-20 pointer-events-none">
             <div class="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl pointer-events-auto text-center max-w-sm mx-auto">
                 <p class="text-xs text-slate-500 mb-3 font-medium">Arrastra el mapa para ajustar</p>
                 <div class="flex gap-2">
-                    <button id="map-set" class="flex-1 bg-orange-500 text-white py-3 rounded-xl font-bold text-xs shadow active:scale-95 transition">FIJAR AQUÍ</button>
-                    <button onclick="app.runAR()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs shadow active:scale-95 transition">INICIAR AR 🚀</button>
+                    <button id="map-set" class="flex-1 bg-orange-500 text-white py-3 rounded-xl font-bold text-xs shadow">FIJAR AQUÍ</button>
+                    <button onclick="app.runAR()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs shadow">INICIAR AR 🚀</button>
                 </div>
             </div>
         </div>
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10">
-            <div class="w-8 h-8 border-2 border-white rounded-full shadow-lg"></div>
-            <div class="w-1 h-1 bg-red-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"></div>
-        </div>
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10"><div class="w-8 h-8 border-2 border-white rounded-full shadow-lg"></div><div class="w-1 h-1 bg-red-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"></div></div>
     </div>
 
-    <!-- 3. PÁGINA ESCALA -->
+    <!-- PÁGINA 3: ESCALA -->
     <div id="scale-page" class="page items-center justify-center p-4 bg-white">
         <div class="w-full max-w-md space-y-5">
-            <h2 class="text-xl font-bold text-center text-slate-800">Dimensiones Reales (m)</h2>
+            <h2 class="text-xl font-bold text-center text-slate-800">Dimensiones (m)</h2>
             <div class="space-y-3">
                 <div><label class="text-[10px] font-bold text-slate-400">ANCHO (X)</label><input id="d-w" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="10"></div>
                 <div><label class="text-[10px] font-bold text-slate-400">ALTO (Y)</label><input id="d-h" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="3"></div>
                 <div><label class="text-[10px] font-bold text-slate-400">FONDO (Z)</label><input id="d-d" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="10"></div>
             </div>
-            <div class="flex gap-2">
-                <button onclick="app.nav('upload')" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancelar</button>
-                <button onclick="app.nav('upload'); toast('Escala Guardada')" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow">Guardar</button>
-            </div>
+            <div class="flex gap-2"><button onclick="app.nav('upload')" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancelar</button><button onclick="app.nav('upload'); toast('Escala Guardada')" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow">Guardar</button></div>
         </div>
     </div>
 
-    <!-- 4. PÁGINA AR -->
+    <!-- PÁGINA 4: AR -->
     <div id="ar-page" class="page bg-black">
         <div id="ar-c"></div>
         <div class="absolute inset-0 pointer-events-none z-50 flex flex-col justify-between p-4">
             <div class="flex justify-between items-start pointer-events-auto">
-                <div class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-mono border border-white/10 shadow-lg">
-                    GPS: <span id="ar-gps" class="text-yellow-400">Buscando...</span>
-                </div>
-                <button onclick="$('adj-p').classList.toggle('hidden')" class="bg-black/60 backdrop-blur p-2 rounded-lg text-white border border-white/10 shadow-lg active:scale-95 transition">⚙️ Ajustes</button>
+                <div class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-mono border border-white/10 shadow-lg">GPS: <span id="ar-gps" class="text-yellow-400">Buscando...</span></div>
+                <button onclick="$('adj-p').classList.toggle('hidden')" class="bg-black/60 backdrop-blur p-2 rounded-lg text-white border border-white/10 shadow-lg">⚙️</button>
             </div>
-            
-            <!-- Panel Ajustes -->
-            <div id="adj-p" class="absolute top-14 right-4 w-64 bg-black/80 backdrop-blur p-4 rounded-2xl border border-white/10 text-white pointer-events-auto hidden transition-all origin-top-right">
+            <div id="adj-p" class="absolute top-14 right-4 w-64 bg-black/80 backdrop-blur p-4 rounded-2xl border border-white/10 text-white pointer-events-auto hidden">
                 <h4 class="text-[10px] font-bold text-slate-400 uppercase mb-3 border-b border-white/10 pb-2">Calibración</h4>
                 <div class="space-y-4">
                     <div><div class="flex justify-between text-[10px] mb-1"><span>Altura</span><span id="l-h" class="text-blue-400">0m</span></div><input type="range" id="s-h" min="-10" max="10" step="0.5" value="0"></div>
@@ -183,17 +152,11 @@
                     <div><div class="flex justify-between text-[10px] mb-1"><span>Rotación</span><span id="l-r" class="text-blue-400">0°</span></div><input type="range" id="s-r" min="0" max="360" step="5" value="0"></div>
                 </div>
             </div>
-
-            <div class="flex justify-center pointer-events-auto pb-8">
-                <button onclick="location.reload()" class="bg-red-500/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-xl hover:bg-red-600 text-sm flex items-center gap-2">
-                    ❌ SALIR
-                </button>
-            </div>
+            <div class="flex justify-center pointer-events-auto pb-8"><button onclick="location.reload()" class="bg-red-500/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-xl hover:bg-red-600 text-sm">❌ SALIR</button></div>
         </div>
-        <!-- Loader -->
         <div id="ar-load" class="absolute inset-0 bg-slate-900 z-[60] flex flex-col items-center justify-center text-white hidden">
             <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p class="font-bold">Cargando Realidad Aumentada...</p>
+            <p class="font-bold">Iniciando AR...</p>
         </div>
     </div>
 
@@ -202,24 +165,13 @@
         
         // --- UTILIDADES ---
         const $ = id => document.getElementById(id);
-        const toast = (msg) => { 
-            const t = $('toast'); 
-            t.textContent = msg; 
-            t.classList.add('show'); 
-            setTimeout(() => t.classList.remove('show'), 3000); 
-        };
+        const toast = (msg) => { const t = $('toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 3000); };
+        const CACHE_NAME = 'geo-ar-v05'; // Mismo nombre que tu código guía para compatibilidad
 
         // --- ESTADO ---
-        const st = { 
-            url: null, 
-            lat: 0, 
-            lng: 0,
-            adj: { h: 0, s: 1, r: 0 } 
-        };
-        
-        let map, mk, arEnt;
+        const st = { url: null, lat: 0, lng: 0, adj: { h: 0, s: 1, r: 0 } };
+        let map, mk, arEnt, blobFile;
 
-        // --- APP LOGIC ---
         const app = {
             nav: (p) => { 
                 document.querySelectorAll('.page').forEach(x => x.classList.remove('active')); 
@@ -227,111 +179,115 @@
                 if(p === 'map') initMap(); 
             },
 
-            // 1. MANEJO DE ARCHIVO (CORREGIDO)
-            initFileHandler: () => {
-                const input = $('model-in');
-                const dropZone = $('drop-zone');
-                const label = $('file-lbl');
+            // 1. GESTIÓN DE CACHÉ (Lógica del código guía)
+            saveToCache: async () => {
+                const lat = parseFloat($('lat-in').value);
+                const lng = parseFloat($('lng-in').value);
+                const fileInput = $('model-in');
 
-                input.addEventListener('change', (e) => {
-                    const file = e.target.files[0];
-                    if(file) {
-                        // Visual Feedback Inmediato
-                        st.url = URL.createObjectURL(file);
-                        label.textContent = "✅ " + file.name;
-                        label.classList.add('text-emerald-600');
-                        dropZone.classList.add('bg-emerald-50', 'border-emerald-500');
-                        dropZone.classList.remove('bg-slate-50', 'border-slate-300');
-                        toast("Archivo cargado correctamente");
-                    }
-                });
-            },
-
-            // 2. MANEJO DE GPS (CORREGIDO)
-            initGPSHandler: () => {
-                const btn = $('gps-btn');
-                btn.addEventListener('click', () => {
-                    const originalText = btn.innerHTML;
-                    btn.innerHTML = "⏳ Buscando...";
-                    btn.disabled = true;
-
-                    if(!navigator.geolocation) {
-                        alert("Tu navegador no soporta GPS.");
-                        btn.innerHTML = originalText;
-                        btn.disabled = false;
-                        return;
-                    }
-
-                    navigator.geolocation.getCurrentPosition(
-                        (pos) => {
-                            // Éxito
-                            $('lat-in').value = pos.coords.latitude.toFixed(6);
-                            $('lng-in').value = pos.coords.longitude.toFixed(6);
-                            btn.innerHTML = "✅ Ubicación Lista";
-                            btn.classList.remove('bg-blue-100', 'text-blue-700');
-                            btn.classList.add('bg-emerald-100', 'text-emerald-700');
-                            toast("Ubicación actual obtenida");
-                            setTimeout(() => {
-                                btn.disabled = false;
-                                btn.innerHTML = originalText; // Restaurar tras unos segundos
-                                btn.classList.add('bg-blue-100', 'text-blue-700');
-                                btn.classList.remove('bg-emerald-100', 'text-emerald-700');
-                            }, 3000);
-                        },
-                        (err) => {
-                            // Error
-                            console.error(err);
-                            alert("Error obteniendo GPS: " + err.message + "\nAsegúrate de tener el GPS activo y dar permisos.");
-                            btn.innerHTML = "❌ Error";
-                            setTimeout(() => {
-                                btn.innerHTML = originalText;
-                                btn.disabled = false;
-                            }, 2000);
-                        },
-                        { enableHighAccuracy: true, timeout: 10000 }
-                    );
-                });
-            },
-
-            // 3. GUARDAR
-            save: () => {
-                st.lat = parseFloat($('lat-in').value); 
-                st.lng = parseFloat($('lng-in').value);
+                if(isNaN(lat) || isNaN(lng)) return toast("⚠️ Faltan coordenadas");
                 
-                if(!st.url) return toast("⚠️ Primero sube un modelo 3D");
-                if(isNaN(st.lat) || isNaN(st.lng)) return toast("⚠️ Faltan coordenadas válidas");
+                // Si hay nuevo archivo, guardamos todo
+                if(fileInput.files.length > 0) {
+                    blobFile = fileInput.files[0];
+                } else if (!blobFile) {
+                    return toast("⚠️ No hay modelo seleccionado");
+                }
 
-                // Guardar (Simulado en memoria/localstorage)
-                localStorage.setItem('ar_data', JSON.stringify({lat: st.lat, lng: st.lng}));
+                toast("Guardando en memoria...");
                 
-                // Habilitar botón mapa visualmente
-                const btnMap = $('btn-map');
-                btnMap.disabled = false;
-                btnMap.classList.remove('opacity-50', 'cursor-not-allowed');
-                btnMap.classList.add('hover:bg-slate-50', 'text-emerald-600', 'border-emerald-200');
-                
-                toast("✅ Datos Guardados. Puedes ver el mapa.");
-                
-                // Opcional: ir al mapa automáticamente
-                // app.nav('map'); 
-            },
-
-            // 4. INICIAR AR
-            runAR: async () => {
-                if(!st.url) return toast("⚠️ No hay modelo cargado");
-                
-                app.nav('ar');
-                $('ar-load').classList.remove('hidden');
-
                 try {
-                    await loadAR();
-                    initScene();
+                    const cache = await caches.open(CACHE_NAME);
+                    // Guardar Modelo
+                    await cache.put('model.glb', new Response(blobFile));
+                    // Guardar Datos
+                    const data = { coords: { latitude: lat, longitude: lng } };
+                    await cache.put('data.json', new Response(JSON.stringify(data)));
+                    
+                    // Actualizar estado
+                    st.url = URL.createObjectURL(blobFile);
+                    st.lat = lat; st.lng = lng;
+                    
+                    // Habilitar UI
+                    $('btn-map').disabled = false;
+                    $('btn-map').classList.remove('opacity-50', 'cursor-not-allowed');
+                    
+                    toast("✅ Guardado Correctamente");
                 } catch(e) {
-                    alert("Error cargando motor AR: " + e);
+                    console.error(e);
+                    toast("❌ Error guardando caché");
+                }
+            },
+
+            loadFromCache: async () => {
+                try {
+                    const cache = await caches.open(CACHE_NAME);
+                    const modelRes = await cache.match('model.glb');
+                    const dataRes = await cache.match('data.json');
+
+                    if(modelRes && dataRes) {
+                        console.log("Datos encontrados en caché");
+                        blobFile = await modelRes.blob();
+                        st.url = URL.createObjectURL(blobFile);
+                        
+                        const data = await dataRes.json();
+                        st.lat = data.coords.latitude;
+                        st.lng = data.coords.longitude;
+
+                        // Rellenar UI
+                        $('lat-in').value = st.lat;
+                        $('lng-in').value = st.lng;
+                        $('file-lbl').textContent = "✅ Modelo Recuperado de Memoria";
+                        $('drop-zone').classList.add('bg-emerald-50', 'border-emerald-500');
+                        
+                        // Habilitar botón mapa
+                        $('btn-map').disabled = false;
+                        $('btn-map').classList.remove('opacity-50', 'cursor-not-allowed');
+                    }
+                } catch(e) {
+                    console.log("No hay caché previo");
+                }
+            },
+
+            clearCache: async () => {
+                if(confirm("¿Borrar todos los datos?")) {
+                    await caches.delete(CACHE_NAME);
                     location.reload();
                 }
+            },
+
+            // 2. GPS DIRECTO (Sin bloqueos)
+            getGPS: () => {
+                const btn = $('gps-btn');
+                btn.textContent = "⏳ Obteniendo...";
+                
+                navigator.geolocation.getCurrentPosition(p => {
+                    $('lat-in').value = p.coords.latitude.toFixed(6);
+                    $('lng-in').value = p.coords.longitude.toFixed(6);
+                    btn.textContent = "📍 Mi Ubicación";
+                    toast("Ubicación Actualizada");
+                }, e => {
+                    alert("Error GPS: " + e.message);
+                    btn.textContent = "📍 Mi Ubicación";
+                }, { enableHighAccuracy: true });
+            },
+
+            runAR: async () => {
+                if(!st.url) return toast("⚠️ No hay modelo cargado");
+                app.nav('ar');
+                $('ar-load').classList.remove('hidden');
+                try { await loadAR(); initScene(); } catch(e) { alert(e); location.reload(); }
             }
         };
+
+        // --- UI FILE LISTENER ---
+        $('model-in').addEventListener('change', (e) => {
+            if(e.target.files[0]) {
+                blobFile = e.target.files[0];
+                $('file-lbl').textContent = "✅ " + blobFile.name;
+                $('drop-zone').classList.add('bg-blue-50', 'border-blue-500');
+            }
+        });
 
         // --- MAPA ---
         function initMap() {
@@ -339,20 +295,17 @@
                 if(!map) {
                     map = L.map('map-c').setView([st.lat || 0, st.lng || 0], 18);
                     L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri'}).addTo(map);
-                } else {
-                    map.invalidateSize();
-                }
+                } else map.invalidateSize();
                 
                 const pos = [st.lat || 0, st.lng || 0];
                 if(pos[0] !== 0) {
-                    if(mk) mk.setLatLng(pos);
-                    else mk = L.marker(pos).addTo(map);
+                    if(mk) mk.setLatLng(pos); else mk = L.marker(pos).addTo(map);
                     map.setView(pos, 18);
                 }
             }, 200);
         }
 
-        // --- ESCENA AR ---
+        // --- AR SCENE ---
         function initScene() {
             $('ar-c').innerHTML = '';
             const html = `
@@ -364,44 +317,39 @@
                 </a-scene>
             `;
             $('ar-c').innerHTML = html;
-            
-            const el = document.querySelector('#ent');
-            arEnt = el;
+            const el = document.querySelector('#ent'); arEnt = el;
 
             el.addEventListener('model-loaded', () => {
-                // Fix para ver interiores
                 const mesh = el.getObject3D('mesh');
                 if(mesh) mesh.traverse(n => { if(n.isMesh) { n.material.side = THREE.DoubleSide; n.material.transparent = true; } });
-                
                 el.setAttribute('visible', 'true');
                 $('ar-load').classList.add('hidden');
                 toast("Modelo AR Listo 🏠");
             });
 
-            // Monitor GPS AR
             window.addEventListener('gps-camera-update-position', e => {
                 const acc = Math.round(e.detail.position.accuracy);
                 $('ar-gps').textContent = `±${acc}m`;
             });
         }
 
-        // --- INICIALIZACIÓN ---
+        // --- INIT ---
         window.addEventListener('DOMContentLoaded', () => {
-            app.initFileHandler();
-            app.initGPSHandler();
+            app.loadFromCache(); // Cargar caché al iniciar
             
-            $('save-btn').addEventListener('click', app.save);
+            $('gps-btn').addEventListener('click', app.getGPS);
+            $('save-btn').addEventListener('click', app.saveToCache);
+            $('clear-cache-btn').addEventListener('click', app.clearCache);
             
             $('map-set').addEventListener('click', () => {
                 const c = map.getCenter();
-                $('lat-in').value = c.lat.toFixed(6);
-                $('lng-in').value = c.lng.toFixed(6);
+                $('lat-in').value = c.lat.toFixed(6); $('lng-in').value = c.lng.toFixed(6);
                 st.lat = c.lat; st.lng = c.lng;
                 if(mk) mk.setLatLng(c); else mk = L.marker(c).addTo(map);
                 toast("Ubicación Fijada");
             });
 
-            // Sliders AR
+            // Sliders
             const upd = () => {
                 if(!arEnt) return;
                 arEnt.setAttribute('position', `0 ${st.adj.h} 0`);
@@ -412,7 +360,7 @@
             $('s-s').oninput = e => { st.adj.s = parseFloat(e.target.value); $('l-s').textContent=st.adj.s+'x'; upd(); };
             $('s-r').oninput = e => { st.adj.r = parseFloat(e.target.value); $('l-r').textContent=st.adj.r+'°'; upd(); };
 
-            window.app = app; // Exponer globalmente
+            window.app = app;
         });
     </script>
 </body>
