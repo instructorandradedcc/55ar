@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.26 (Offline & Satellite)</title>
+    <title>AR Constructor Pro v3.27 (Progress Bar & Drafts)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -74,6 +74,10 @@
             pointer-events: none;
         }
 
+        /* Barra de Progreso */
+        .progress-container { width: 100%; background-color: #333; border-radius: 10px; height: 10px; margin-top: 10px; overflow: hidden; }
+        .progress-bar { height: 100%; background-color: #4CAF50; width: 0%; transition: width 0.2s; }
+
         /* Model Viewer */
         model-viewer { width: 100%; height: 100%; --poster-color: transparent; background-color: #111; }
         
@@ -93,7 +97,6 @@
         .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
-        /* Controles Ajuste */
         .btn-pad { width: 50px; height: 50px; background: rgba(20,20,20,0.9); backdrop-filter: blur(8px); border-radius: 14px; color: white; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: all 0.1s; }
         .btn-pad:active { background: #4f46e5; transform: scale(0.92); }
         input[type=range] { width: 100%; accent-color: #4f46e5; height: 6px; border-radius: 3px; background: #333; }
@@ -102,7 +105,6 @@
             position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50;
         }
         
-        /* Panel de Herramientas de Rotación */
         .tools-panel {
             position: absolute; right: 10px; top: 80px; z-index: 50;
             display: flex; flex-direction: column; gap: 8px;
@@ -116,6 +118,10 @@
         .tool-btn:active { background: #4f46e5; }
         .tool-label { font-size: 8px; position: absolute; bottom: 2px; width: 100%; text-align: center; opacity: 0.7; }
 
+        .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+        .status-local { background: #F59E0B; color: #000; }
+        .status-global { background: #10B981; color: #fff; }
+
         .slide-up-enter { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     </style>
@@ -126,7 +132,7 @@
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, addDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-        import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js'; // Note: using uploadBytesResumable
 
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWWwD72sPod5cOWmq0SYPIp6I",
@@ -138,7 +144,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.26 OFFLINE & SAT";
+        const APP_VERSION = "3.27 PROGRESS & DRAFTS";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -156,30 +162,20 @@
             request.onerror = (event) => reject(event.target.error);
         });
 
-        async function cacheModel(url) {
+        async function saveToCache(key, blob) {
             const db = await dbPromise;
-            
-            // Check if exists
-            const existing = await new Promise(r => {
-                const req = db.transaction("models").objectStore("models").get(url);
+            const tx = db.transaction("models", "readwrite");
+            tx.objectStore("models").put(blob, key);
+            return new Promise(r => tx.oncomplete = r);
+        }
+
+        async function getFromCache(key) {
+            const db = await dbPromise;
+            return new Promise(r => {
+                const req = db.transaction("models").objectStore("models").get(key);
                 req.onsuccess = () => r(req.result);
                 req.onerror = () => r(null);
             });
-
-            if (existing) {
-                console.log("Modelo cargado desde Caché");
-                return URL.createObjectURL(existing);
-            }
-
-            // Fetch and store
-            console.log("Descargando modelo para offline...");
-            const response = await fetch(url);
-            const blob = await response.blob();
-            
-            const tx = db.transaction("models", "readwrite");
-            tx.objectStore("models").put(blob, url);
-            
-            return URL.createObjectURL(blob);
         }
         // ----------------------------------
 
@@ -289,6 +285,10 @@
 
             renderProjectCard(id, data, container) {
                 const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
+                const isLocal = data.status === 'local';
+                const statusLabel = isLocal ? 'BORRADOR LOCAL' : 'GLOBAL (NUBE)';
+                const statusClass = isLocal ? 'status-local' : 'status-global';
+                
                 const el = document.createElement('div');
                 el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
                 el.innerHTML = `
@@ -297,19 +297,45 @@
                             <div class="w-12 h-12 rounded-xl bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl font-bold shadow-sm">${data.name.charAt(0).toUpperCase()}</div>
                             <div>
                                 <h3 class="font-bold text-white text-lg leading-tight">${data.name}</h3>
-                                <p class="text-xs text-slate-400 font-medium flex items-center gap-1"><span>📅</span> ${date}</p>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="status-badge ${statusClass}">${statusLabel}</span>
+                                    <p class="text-xs text-slate-400 font-medium"><span>📅</span> ${date}</p>
+                                </div>
                             </div>
                         </div>
                         <div class="flex gap-1">
-                            <button onclick="app.shareProject('${id}')" class="p-2 text-slate-400 hover:text-blue-400 transition bg-white/5 rounded-lg border border-white/10">🔗</button>
                             <button onclick="app.deleteProject('${id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
                         </div>
                     </div>
                     <div class="flex gap-2 mt-2">
                         <button onclick="app.openProject('${id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
+                        ${isLocal ? 
+                            `<button onclick="app.publishProject('${id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` 
+                            : 
+                            `<button onclick="app.shareProject('${id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>`
+                        }
                     </div>
                 `;
                 container.appendChild(el);
+            }
+
+            // --- RESET Y LIMPIEZA ---
+            resetCreationState() {
+                state.tempFile = null;
+                state.localBlobUrl = null;
+                state.draftData = { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } };
+                state.modelOrientation = { roll: 0, pitch: 0, yaw: 0 };
+                document.getElementById('project-name').value = "";
+                document.getElementById('file-name').textContent = "Máx 50MB";
+                document.getElementById('model-viewer-surface').src = "";
+                
+                const arBtn = document.getElementById('force-ar-btn');
+                if(arBtn) {
+                    arBtn.classList.remove('minimized', 'hidden');
+                    arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
+                }
+                document.getElementById('save-container').classList.add('hidden');
+                document.querySelector('.tools-panel').classList.remove('hidden');
             }
 
             // --- FLUJO DE CREACIÓN ---
@@ -323,24 +349,9 @@
                 state.localBlobUrl = URL.createObjectURL(state.tempFile);
                 this.toggleModal('new-project', false);
                 
-                // RESETEAR UI
-                document.getElementById('save-container').classList.add('hidden'); 
-                const arBtn = document.getElementById('force-ar-btn');
-                if(arBtn) {
-                    arBtn.classList.remove('minimized', 'hidden');
-                    arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
-                }
-
-                // RESET ORIENTATION
-                state.modelOrientation = { roll: 0, pitch: 0, yaw: 0 };
-                this.updateModelOrientation();
-
-                // IR A PASO 1
                 this.navTo('surface');
-                
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
-                
                 this.toast("Usa los botones laterales para girar si está acostada.", "info");
             }
 
@@ -361,26 +372,21 @@
 
             activateAR() {
                 const viewer = document.getElementById('model-viewer-surface');
-                if(viewer) {
-                    viewer.activateAR(); 
-                    this.onARStarted(); 
-                }
+                if(viewer) { viewer.activateAR(); this.onARStarted(); }
             }
 
             onARStarted() {
                 setTimeout(() => {
-                    const saveContainer = document.getElementById('save-container');
-                    saveContainer.classList.remove('hidden');
-                    saveContainer.classList.add('slide-up-enter');
-                    
+                    document.getElementById('save-container').classList.remove('hidden');
+                    document.getElementById('save-container').classList.add('slide-up-enter');
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) arBtn.classList.add('minimized');
                 }, 2000); 
             }
 
+            // BOTÓN: GUARDAR POSICIÓN (AHORA GUARDA DRAFT LOCAL Y SALE)
             captureDataAndGoMap() {
-                this.loader(true, "Procesando Ubicación...");
-                
+                this.loader(true, "Capturando GPS...");
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) {
                     const scaleStr = viewer.scale; 
@@ -390,82 +396,98 @@
                     }
                 }
 
-                const geoOptions = { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 };
-
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    this.loader(false);
-                    this.navTo('editor');
-                    setTimeout(() => this.initMap(state.draftData.coords), 300);
-                    this.toast("Posición OK. Confirma en mapa.", "success");
-
+                    // GUARDAR LOCALMENTE AHORA
+                    this.saveLocalDraft(); 
                 }, err => {
                     this.loader(false);
                     this.toast("Error GPS: " + err.message, "error");
-                }, geoOptions);
+                }, { enableHighAccuracy: true, timeout: 10000 });
             }
 
-            initMap(coords) {
-                const mapEl = document.getElementById('map');
-                if(state.map) { state.map.remove(); state.map = null; }
-                
-                state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
-                
-                // MAPA HÍBRIDO (Google Satélite + Calles)
-                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
-                    maxZoom: 20,
-                    subdomains:['mt0','mt1','mt2','mt3'],
-                    attribution: 'Google Maps'
-                }).addTo(state.map);
-                
-                const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
-                const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
-                
-                marker.on('dragend', e => {
-                    const ll = e.target.getLatLng();
-                    state.draftData.coords = { lat: ll.lat, lon: ll.lng };
-                });
-                setTimeout(() => state.map.invalidateSize(), 500);
-            }
-
-            async saveFinalProject() {
-                if(!state.user) return;
-                this.loader(true, "Subiendo y Cacheando...");
-
+            async saveLocalDraft() {
+                this.loader(true, "Guardando Borrador Local...");
                 try {
-                    let cloudUrl = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
-                    if(state.tempFile) {
-                        const fileRef = ref(storage, `users/${state.user.uid}/${Date.now()}_${state.tempFile.name}`);
-                        const snap = await uploadBytes(fileRef, state.tempFile);
-                        cloudUrl = await getDownloadURL(snap.ref);
-                        
-                        // Cachear para uso propio offline inmediato
-                        await cacheModel(cloudUrl);
-                    }
-
+                    // 1. Generar ID único
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
+                    const docRef = await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
                         name: state.draftData.name,
-                        modelUrl: cloudUrl,
+                        modelUrl: "local_pending", // Marca temporal
                         coords: state.draftData.coords,
                         calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
                         orientation: state.modelOrientation,
+                        status: 'local', // ESTADO LOCAL
                         createdAt: new Date().toISOString()
                     });
 
-                    this.toast("¡Proyecto Guardado y Disponible Offline!", "success");
+                    // 2. Guardar BLOB en IndexedDB usando el ID del documento como clave
+                    if(state.tempFile) {
+                        await saveToCache(docRef.id, state.tempFile);
+                    }
+
+                    this.loader(false);
+                    this.toast("Guardado como Borrador Local", "success");
+                    this.resetCreationState(); // Limpiar para permitir nuevo
                     this.navTo('dashboard');
-                    state.tempFile = null;
 
                 } catch(e) {
-                    this.toast("Error: " + e.message, "error");
-                } finally {
                     this.loader(false);
+                    this.toast("Error guardando local: " + e.message, "error");
                 }
             }
 
+            // BOTÓN: PUBLICAR (SUBIR A NUBE REAL CON BARRA)
+            async publishProject(id) {
+                // 1. Recuperar el blob de IndexedDB
+                const blob = await getFromCache(id);
+                if(!blob) return this.toast("Error: No se encuentra el archivo local", "error");
+
+                this.loader(true, "Preparando subida...");
+                document.getElementById('progress-wrapper').classList.remove('hidden');
+                
+                try {
+                    const fileName = `${Date.now()}_model.glb`;
+                    const fileRef = ref(storage, `users/${state.user.uid}/${fileName}`);
+                    const uploadTask = uploadBytesResumable(fileRef, blob);
+
+                    uploadTask.on('state_changed', 
+                        (snapshot) => {
+                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                            document.getElementById('upload-progress').style.width = progress + '%';
+                            document.getElementById('loader-text').textContent = `SUBIENDO: ${Math.round(progress)}%`;
+                        }, 
+                        (error) => {
+                            this.loader(false);
+                            document.getElementById('progress-wrapper').classList.add('hidden');
+                            this.toast("Error subida: " + error.message, "error");
+                        }, 
+                        async () => {
+                            // Subida completada
+                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+                            
+                            // Actualizar Firestore
+                            const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                            await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), {
+                                modelUrl: downloadURL,
+                                status: 'global' // CAMBIAR A GLOBAL
+                            });
+
+                            this.loader(false);
+                            document.getElementById('progress-wrapper').classList.add('hidden');
+                            this.toast("¡Publicado Exitosamente!", "success");
+                        }
+                    );
+
+                } catch(e) {
+                    this.loader(false);
+                    this.toast("Error: " + e.message, "error");
+                }
+            }
+
+            // ABRIR PROYECTO (LOCAL O GLOBAL)
             async openProject(id, mode) {
-                this.loader(true, "Cargando Proyecto...");
+                this.loader(true, "Cargando...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
@@ -475,19 +497,31 @@
                     this.navTo('surface'); 
                     const viewer = document.getElementById('model-viewer-surface');
 
-                    // CACHÉ CHECK
-                    const cachedBlob = await cacheModel(state.currentProject.data.modelUrl);
-                    viewer.src = cachedBlob;
+                    // INTENTAR CARGAR: 1. LOCAL DB (ID), 2. LOCAL DB (URL), 3. NUBE
+                    let blob = await getFromCache(id); // Buscar por ID primero (drafts)
+                    if(!blob && state.currentProject.data.status === 'global') {
+                        // Si es global y no está por ID, buscar por URL o descargar
+                        blob = await this.fetchAndCache(state.currentProject.data.modelUrl);
+                    }
+
+                    if(blob) {
+                        viewer.src = (blob instanceof Blob) ? URL.createObjectURL(blob) : blob;
+                    } else {
+                        // Fallback raro
+                        viewer.src = state.currentProject.data.modelUrl; 
+                    }
                     
                     if(state.currentProject.data.orientation) {
                         state.modelOrientation = state.currentProject.data.orientation;
                         this.updateModelOrientation();
                     }
                     
+                    // UI LECTURA
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) arBtn.classList.add('hidden');
                     document.querySelector('.tools-panel').classList.add('hidden'); 
 
+                    // MOSTRAR MAPA DIRECTO
                     const saveContainer = document.getElementById('save-container');
                     saveContainer.classList.remove('hidden');
                     const btn = document.getElementById('btn-capture-location');
@@ -499,9 +533,20 @@
                 } catch(e) { this.toast(e.message, "error"); }
                 this.loader(false);
             }
+
+            async fetchAndCache(url) {
+                // Verifica cache por URL
+                let blob = await getFromCache(url);
+                if(blob) return URL.createObjectURL(blob);
+                // Descarga con barra de progreso (simulada para download, o fetch streams)
+                const response = await fetch(url);
+                blob = await response.blob();
+                await saveToCache(url, blob);
+                return URL.createObjectURL(blob);
+            }
             
             async openSharedProject(id, ownerUid) {
-                this.loader(true, "Descargando Proyecto...");
+                this.loader(true, "Descargando...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
@@ -511,29 +556,22 @@
                     this.navTo('surface');
                     const viewer = document.getElementById('model-viewer-surface');
 
-                    // CACHÉ CHECK FOR VISITOR
-                    const cachedBlob = await cacheModel(data.modelUrl);
-                    viewer.src = cachedBlob;
+                    const url = await this.fetchAndCache(data.modelUrl);
+                    viewer.src = url;
 
-                    // RESTAURAR ORIENTACIÓN GUARDADA
                     if(data.orientation) {
                         state.modelOrientation = data.orientation;
                         this.updateModelOrientation();
                     }
 
-                    // UI MODO SOLO LECTURA
                     document.getElementById('save-container').classList.add('hidden');
-                    document.querySelector('.tools-panel').classList.add('hidden'); // Ocultar edición
+                    document.querySelector('.tools-panel').classList.add('hidden'); 
                     
-                    // Visitante solo ve el botón de iniciar AR para caminar
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) {
                         arBtn.classList.remove('hidden', 'minimized');
                         arBtn.innerHTML = "👓 ENTRAR AL MODELO";
-                        arBtn.onclick = () => {
-                             app.activateAR();
-                             // Al ser visitante, no mostramos el botón de guardar ubicación después
-                        };
+                        arBtn.onclick = () => { app.activateAR(); };
                     }
                     
                 } catch(e) { this.toast("Error: " + e.message, "error"); }
@@ -601,8 +639,11 @@
             }
             toggleModal(id, show) {
                 const m = document.getElementById(`modal-${id}`);
+                if(id === 'new-project' && show) {
+                    // Si abrimos el modal, asegurarnos de que el estado esté limpio
+                    this.resetCreationState();
+                }
                 show ? m.classList.remove('hidden') : m.classList.add('hidden');
-                if(id==='new-project' && show) { document.getElementById('project-name').value = ""; state.tempFile = null; document.getElementById('file-name').textContent = "Máx 50MB"; }
             }
             handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
             shareProject(id) {
@@ -630,6 +671,12 @@
     <div id="loader" class="hidden fixed inset-0 bg-black/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
         <div class="loader-spin mb-4"></div>
         <p id="loader-text" class="font-bold tracking-widest text-sm animate-pulse">PROCESANDO...</p>
+        <!-- BARRA DE PROGRESO -->
+        <div id="progress-wrapper" class="hidden w-64 mt-4">
+            <div class="progress-container">
+                <div id="upload-progress" class="progress-bar"></div>
+            </div>
+        </div>
     </div>
 
     <!-- VISTA 1: LOGIN -->
@@ -643,14 +690,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.26</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.27</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.26</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.27</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -743,7 +790,7 @@
             </button>
         </div>
 
-        <!-- CONTENEDOR DE GUARDADO (OCULTO INICIALMENTE) -->
+        <!-- CONTENEDOR DE GUARDADO -->
         <div id="save-container" class="hidden absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pointer-events-none">
             <div class="pointer-events-auto">
                 <div class="bg-emerald-900/30 border border-emerald-500/30 p-3 rounded-xl mb-3 backdrop-blur-sm">
@@ -752,7 +799,7 @@
                 <button id="btn-capture-location" onclick="app.captureDataAndGoMap()" class="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-emerald-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20">
                     <span>📍</span> GUARDAR POSICIÓN Y GPS AQUÍ
                 </button>
-                <p class="text-center text-slate-500 text-[10px]">Esto guardará las coordenadas actuales y la escala del modelo.</p>
+                <p class="text-center text-slate-500 text-[10px]">Se guardará como BORRADOR LOCAL hasta que lo publiques.</p>
             </div>
         </div>
     </div>
@@ -760,15 +807,9 @@
     <!-- VISTA 4: MAPA CONFIRMACIÓN -->
     <div id="view-editor" class="view">
         <div id="map" class="flex-1 bg-slate-900 relative z-0"></div>
-        <div class="dark-card p-6 rounded-t-3xl shadow-2xl relative z-10 border-t border-white/20">
-            <div class="flex justify-between items-center mb-6">
-                <h3 class="font-bold text-white text-xl">Ubicación Final</h3>
-                <p class="text-xs text-slate-400">Confirma el punto GPS</p>
-            </div>
-            <div class="flex gap-3">
-                <button onclick="app.navTo('surface')" class="flex-1 bg-white/10 text-slate-300 font-bold py-4 rounded-xl hover:bg-white/20 border border-white/10">Atrás</button>
-                <button onclick="app.saveFinalProject()" class="flex-[2] bg-indigo-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-indigo-500">☁️ SUBIR A LA NUBE</button>
-            </div>
+        <!-- Solo para confirmar vista, ya no para subir -->
+        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-50">
+             <p class="bg-black/50 text-white px-4 py-2 rounded-full text-xs">Ubicación Capturada. Vuelve al Dashboard para Publicar.</p>
         </div>
     </div>
 
@@ -802,5 +843,6 @@
     </div>
 </body>
 </html>
+
 
 
