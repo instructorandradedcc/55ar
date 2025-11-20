@@ -1,4 +1,4 @@
-
+<!DOCTYPE html>
 <html lang="es">
 <head>
     <meta charset="UTF-8">
@@ -96,7 +96,7 @@
 <body>
 
     <!-- VERSIÓN GLOBAL -->
-    <div id="app-version-tag">v9.06 - Forzando actualización...</div>
+    <div id="app-version-tag">v9.07 - Cargando...</div>
 
     <!-- UI GLOBAL -->
     <div id="toast"><span>ℹ️</span><span id="toast-msg"></span></div>
@@ -268,7 +268,7 @@
         import { getAnalytics } from 'firebase/analytics';
 
         // --- VERSIÓN DE LA APP ---
-        const APP_VERSION = "9.06"; 
+        const APP_VERSION = "9.07"; 
 
         // --- CONFIGURACIÓN ---
         const firebaseConfig = {
@@ -321,7 +321,7 @@
                 if ('serviceWorker' in navigator) {
                     const swCode = `
                         // CAMBIAMOS EL NOMBRE PARA FORZAR LIMPIEZA DE CACHE
-                        const CACHE_NAME = 'ar-models-v2-force';
+                        const CACHE_NAME = 'ar-models-v3-force-clean';
                         
                         self.addEventListener('install', (event) => {
                             // Borrar caches viejos
