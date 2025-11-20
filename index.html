@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.28 (Fail-Safe)</title>
+    <title>AR Constructor Pro v3.30 (Admin Control)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -108,6 +108,10 @@
 
         .slide-up-enter { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        /* Admin Styles */
+        .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
+        .log-card { border-left: 4px solid #6366f1; background: #111; }
     </style>
 
     <!-- LÓGICA FIREBASE & DB -->
@@ -127,7 +131,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.28 FAIL-SAFE";
+        const APP_VERSION = "3.30 ADMIN CONTROL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -200,7 +204,8 @@
             draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
             map: null,
             modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
-            localProjects: []
+            localProjects: [],
+            currentDraftId: null
         };
 
         class ARSystem {
@@ -221,7 +226,7 @@
                             this.openSharedProject(params.get('id'), params.get('uid'));
                         } else {
                             this.navTo('dashboard');
-                            this.loadProjects(); // Carga mixta
+                            this.loadProjects();
                         }
                     } else {
                         if (params.get('id')) signInAnonymously(auth); 
@@ -231,7 +236,11 @@
             }
 
             async handleUserLogin(user) {
-                if (user.email === ADMIN_EMAIL) state.role = 'admin';
+                if (user.email === ADMIN_EMAIL) {
+                    state.role = 'admin';
+                    document.getElementById('dashboard-header-title').textContent = "PANEL DE CONTROL (ADMIN)";
+                    document.querySelector('.hero-bg-dark').classList.add('admin-header');
+                }
                 else if (user.isAnonymous) state.role = 'guest';
                 else state.role = 'architect';
                 this.updateUserProfile(user);
@@ -239,8 +248,6 @@
 
             async loginGoogle() { 
                 this.loader(true, "Conectando..."); 
-                
-                // Timeout de seguridad por si se pega
                 const timeout = setTimeout(() => {
                     this.loader(false);
                     this.toast("Google tarda mucho. Intenta 'Modo Invitado'", "warning");
@@ -269,7 +276,6 @@
             updateUserProfile(user) {
                 const nameEl = document.getElementById('user-name-display');
                 if (nameEl) nameEl.textContent = user.displayName || "Invitado";
-                
                 const avatar = document.getElementById('user-avatar-img');
                 if (avatar && user.photoURL) {
                     avatar.src = user.photoURL;
@@ -279,35 +285,70 @@
             }
 
             async loadProjects() {
-                if (state.role === 'client') return;
                 const list = document.getElementById('projects-list');
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 
-                // 1. Cargar Locales (IndexedDB)
+                const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+
+                // --- LOGICA DE ADMINISTRADOR ---
+                if (state.role === 'admin') {
+                    // Cargar LOGS públicos de todos los usuarios
+                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
+                    onSnapshot(logsRef, (snap) => {
+                        list.innerHTML = '';
+                        if (snap.empty) {
+                            list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-500"><p>Sin actividad reciente</p></div>`;
+                            return;
+                        }
+                        
+                        const logs = [];
+                        snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
+                        logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Más reciente primero
+
+                        logs.forEach(log => {
+                            const date = new Date(log.createdAt).toLocaleString();
+                            const statusClass = log.status === 'Borrador Local' ? 'text-yellow-500' : 'text-green-400';
+                            const item = document.createElement('div');
+                            item.className = 'log-card p-4 mb-3 rounded-lg shadow-md text-white';
+                            item.innerHTML = `
+                                <div class="flex justify-between items-start">
+                                    <div>
+                                        <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
+                                        <h4 class="font-bold text-lg">${log.projectName}</h4>
+                                        <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
+                                        <p class="text-[10px] text-slate-500 mt-2">${date}</p>
+                                    </div>
+                                </div>
+                            `;
+                            list.appendChild(item);
+                        });
+                    });
+                    return;
+                }
+
+                // --- LOGICA DE USUARIO NORMAL ---
                 const localProjs = await getAllLocalProjects();
                 state.localProjects = localProjs;
 
-                // 2. Cargar Nube (Firestore)
-                const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
 
-                onSnapshot(projectsRef, (snap) => {
+                onSnapshot(projectsRef, async (snap) => {
+                    const localProjs = await getAllLocalProjects(); // Refresh local
+                    state.localProjects = localProjs;
                     list.innerHTML = '';
                     
-                    // Combinar Listas: Preferir Nube sobre Local si tienen el mismo ID
                     const cloudMap = new Map();
                     snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
 
                     const merged = [...cloudMap.values()];
                     
-                    // Agregar locales que NO están en la nube
                     localProjs.forEach(lp => {
-                        if(!cloudMap.has(lp.id)) {
-                            merged.push(lp);
-                        }
+                        if(!cloudMap.has(lp.id)) merged.push(lp);
                     });
 
-                    // Ordenar por fecha
                     merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
                     if (merged.length === 0) { 
@@ -324,12 +365,9 @@
                 let statusLabel = 'GLOBAL (NUBE)';
                 let statusClass = 'status-global';
                 
-                if (data.status === 'local') {
+                if (data.status === 'local' || data.status === 'unsynced') {
                     statusLabel = 'BORRADOR LOCAL';
                     statusClass = 'status-local';
-                } else if (data.status === 'unsynced') {
-                    statusLabel = 'SOLO DISPOSITIVO';
-                    statusClass = 'status-unsynced';
                 }
                 
                 const el = document.createElement('div');
@@ -365,6 +403,7 @@
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
+                state.currentDraftId = null;
                 state.draftData = { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } };
                 state.modelOrientation = { roll: 0, pitch: 0, yaw: 0 };
                 document.getElementById('project-name').value = "";
@@ -378,10 +417,11 @@
                 }
                 document.getElementById('save-container').classList.add('hidden');
                 document.querySelector('.tools-panel').classList.remove('hidden');
+                
+                const fileInput = document.querySelector('input[type="file"]');
+                if(fileInput) fileInput.value = '';
             }
 
-            // --- FLUJO DE CREACIÓN ---
-            
             async startCreationFlow() {
                 const name = document.getElementById('project-name').value;
                 if(!name) return this.toast("Falta el nombre", "warning");
@@ -426,7 +466,6 @@
                 }, 2000); 
             }
 
-            // GUARDADO ROBUSTO (Offline First)
             captureDataAndGoMap() {
                 this.loader(true, "Guardando...");
                 const viewer = document.getElementById('model-viewer-surface');
@@ -440,81 +479,107 @@
 
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    this.saveLocalDraft(); // Guardar inmediatamente
+                    this.saveLocalDraft(); 
                 }, err => {
                     this.loader(false);
-                    this.toast("No se pudo obtener GPS, usando 0,0", "warning");
+                    this.toast("No GPS, usando 0,0", "warning");
                     state.draftData.coords = { lat: 0, lon: 0 };
                     this.saveLocalDraft();
                 }, { enableHighAccuracy: true, timeout: 8000 });
             }
 
             async saveLocalDraft() {
-                this.loader(true, "Protegiendo Datos...");
+                this.loader(true, "Guardando Localmente...");
                 
-                // 1. Generar ID local
                 const projectId = `loc_${Date.now()}`;
+                state.currentDraftId = projectId;
                 
                 const projectData = {
                     id: projectId,
                     name: state.draftData.name,
-                    modelUrl: projectId, // Referencia para cache local
+                    modelUrl: projectId, 
                     coords: state.draftData.coords,
                     calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
                     orientation: state.modelOrientation,
-                    status: 'unsynced', // Asumimos fallo primero
+                    status: 'local', 
                     createdAt: new Date().toISOString()
                 };
 
                 try {
-                    // 2. GUARDADO BLINDADO EN DISPOSITIVO (IndexedDB)
                     if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
                     await saveProjectToLocalDB(projectData);
 
-                    // 3. Intentar Sincronizar con Nube (Si falla, no importa, ya está en local)
-                    if (state.user) {
+                    // ENVIAR AVISO AL ADMIN (PROJECT LOGS)
+                    if(state.user) {
+                        const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
-                            const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                            const docRef = await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
-                                ...projectData,
-                                status: 'local' // Si sube, es local pero conocido por el admin
+                            await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
+                                userName: state.user.displayName || "Anónimo",
+                                userId: state.user.uid,
+                                projectName: state.draftData.name,
+                                status: "Borrador Local",
+                                createdAt: new Date().toISOString()
                             });
-                            
-                            // Actualizar ID local con el de la nube si tuvo éxito
-                            // (Esto es complejo, por simplicidad mantenemos ambos o recargamos)
-                            this.toast("Guardado y Sincronizado", "success");
-                        } catch (errCloud) {
-                            console.warn("Sin conexión a nube, guardado local:", errCloud);
-                            this.toast("Guardado Localmente (Sin Internet)", "warning");
-                        }
-                    } else {
-                        this.toast("Guardado en Dispositivo (Invitado)", "success");
+                        } catch(e) { console.warn("No se pudo enviar log al admin (offline?)"); }
                     }
 
                     this.loader(false);
-                    this.resetCreationState(); 
-                    this.navTo('dashboard');
-                    this.loadProjects(); // Recargar lista mixta
+                    this.toast("Guardado Local. Vamos al Mapa...", "success");
+                    this.navTo('editor');
+                    setTimeout(() => this.initMap(state.draftData.coords), 300);
 
                 } catch(e) {
                     this.loader(false);
-                    this.toast("Error Crítico de Memoria: " + e.message, "error");
+                    this.toast("Error Memoria: " + e.message, "error");
                 }
             }
 
+            initMap(coords) {
+                const mapEl = document.getElementById('map');
+                if(state.map) { state.map.remove(); state.map = null; }
+                
+                state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
+                
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
+                    maxZoom: 20,
+                    subdomains:['mt0','mt1','mt2','mt3'],
+                    attribution: 'Google Maps'
+                }).addTo(state.map);
+                
+                const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+                const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
+                
+                marker.on('dragend', e => {
+                    const ll = e.target.getLatLng();
+                    state.draftData.coords = { lat: ll.lat, lon: ll.lng };
+                });
+                setTimeout(() => state.map.invalidateSize(), 500);
+            }
+
+            async confirmAndPublishFromMap() {
+                if(!state.currentDraftId) return this.toast("Error: No hay borrador activo", "error");
+                
+                // Update coords locally first
+                const localProjs = await getAllLocalProjects();
+                const current = localProjs.find(p => p.id === state.currentDraftId);
+                if(current) {
+                    current.coords = state.draftData.coords;
+                    await saveProjectToLocalDB(current);
+                }
+
+                this.publishProject(state.currentDraftId);
+            }
+
             async publishProject(id) {
-                // Lógica para subir de Local a Global
-                // Busca por ID en Cache primero
                 let blob = await getModelFromCache(id);
-                // Si no está por ID (quizás es un doc de firebase con status 'local'), busca por URL
                 if (!blob) {
                     const proj = state.localProjects.find(p => p.id === id) || (state.currentProject && state.currentProject.data);
                     if(proj) blob = await getModelFromCache(proj.modelUrl);
                 }
 
-                if(!blob) return this.toast("Error: Archivo original no encontrado en dispositivo", "error");
+                if(!blob) return this.toast("Falta archivo local", "error");
 
-                this.loader(true, "Iniciando subida...");
+                this.loader(true, "Subiendo a la Nube...");
                 document.getElementById('progress-wrapper').classList.remove('hidden');
                 
                 try {
@@ -535,31 +600,46 @@
                         }, 
                         async () => {
                             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                            
-                            // Actualizar en Firebase
                             const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                             
-                            // Si el ID empieza con "loc_", es puramente local, hay que CREARLO en firebase
+                            // Obtener datos para publicar
+                            let projData = state.localProjects.find(p => p.id === id);
+                            if(!projData) projData = await getModelFromCache(id);
+
                             if (id.startsWith('loc_')) {
-                                const projData = state.localProjects.find(p => p.id === id);
                                 await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
-                                    ...projData,
+                                    name: projData.name,
+                                    coords: state.draftData.coords,
+                                    calibration: projData.calibration,
+                                    orientation: projData.orientation,
                                     modelUrl: downloadURL,
                                     status: 'global',
-                                    id: undefined // Firestore pone su propio ID
+                                    createdAt: new Date().toISOString()
                                 });
-                                // Borrar local viejo opcionalmente
                             } else {
-                                // Es un doc existente marcado como 'local'
                                 await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), {
                                     modelUrl: downloadURL,
-                                    status: 'global'
+                                    status: 'global',
+                                    coords: state.draftData.coords
                                 });
                             }
 
+                            // ACTUALIZAR LOG DEL ADMIN
+                            try {
+                                await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
+                                    userName: state.user.displayName || "Anónimo",
+                                    userId: state.user.uid,
+                                    projectName: projData.name,
+                                    status: "Global (Publicado)",
+                                    createdAt: new Date().toISOString()
+                                });
+                            } catch(e){}
+
                             this.loader(false);
                             document.getElementById('progress-wrapper').classList.add('hidden');
-                            this.toast("¡Publicado al Mundo!", "success");
+                            this.toast("¡Publicado! Visible para Admin.", "success");
+                            this.resetCreationState();
+                            this.navTo('dashboard');
                             this.loadProjects();
                         }
                     );
@@ -570,10 +650,16 @@
                 }
             }
 
+            exitMapToDashboard() {
+                this.toast("Guardado como Borrador Local", "info");
+                this.resetCreationState();
+                this.navTo('dashboard');
+                this.loadProjects();
+            }
+
             async openProject(id, mode) {
                 this.loader(true, "Abriendo...");
                 try {
-                    // Buscar en local o nube
                     let data = state.localProjects.find(p => p.id === id);
                     
                     if (!data) {
@@ -588,13 +674,11 @@
                     this.navTo('surface'); 
                     const viewer = document.getElementById('model-viewer-surface');
 
-                    // Intentar cargar de caché
                     let blob = await getModelFromCache(data.id) || await getModelFromCache(data.modelUrl);
                     
                     if(blob) {
                         viewer.src = URL.createObjectURL(blob);
                     } else if (data.status === 'global') {
-                        // Si no está en cache, descargar y cachear
                         blob = await this.fetchAndCache(data.modelUrl);
                         viewer.src = blob;
                     } else {
@@ -606,7 +690,6 @@
                         this.updateModelOrientation();
                     }
                     
-                    // UI LECTURA
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) arBtn.classList.add('hidden');
                     document.querySelector('.tools-panel').classList.add('hidden'); 
@@ -631,7 +714,7 @@
             }
             
             async openSharedProject(id, ownerUid) {
-                this.loader(true, "Descargando Proyecto...");
+                this.loader(true, "Descargando...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
@@ -737,13 +820,11 @@
             }
             async deleteProject(id) {
                 if(!confirm("¿Eliminar?")) return;
-                // Borrar local también
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
                 
-                // Borrar nube si es global
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
@@ -783,14 +864,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.28</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.30</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.28</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.30</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -799,7 +880,7 @@
                     </div>
                     <div>
                         <h2 id="user-name-display" class="text-2xl font-black text-white leading-none mb-1">Hola!</h2>
-                        <p class="text-slate-400 text-xs">Bienvenido al futuro</p>
+                        <p id="dashboard-header-title" class="text-slate-400 text-xs">Bienvenido al futuro</p>
                     </div>
                 </div>
                 <button onclick="app.logout()" class="bg-white/10 hover:bg-red-500/20 text-white p-3 rounded-2xl backdrop-blur transition border border-white/10">
@@ -900,9 +981,15 @@
     <!-- VISTA 4: MAPA CONFIRMACIÓN -->
     <div id="view-editor" class="view">
         <div id="map" class="flex-1 bg-slate-900 relative z-0"></div>
-        <!-- Solo para confirmar vista, ya no para subir -->
-        <div class="absolute bottom-10 left-1/2 transform -translate-x-1/2 z-50">
-             <p class="bg-black/50 text-white px-4 py-2 rounded-full text-xs">Ubicación Capturada. Vuelve al Dashboard para Publicar.</p>
+        
+        <!-- NUEVO: BOTÓN PARA CONFIRMAR Y SUBIR A LA NUBE DESDE EL MAPA -->
+        <div class="absolute bottom-0 left-0 w-full p-6 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 flex flex-col gap-2">
+            <button onclick="app.confirmAndPublishFromMap()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 border border-white/20">
+                <span>☁️</span> CONFIRMAR Y PUBLICAR (GLOBAL)
+            </button>
+            <button onclick="app.exitMapToDashboard()" class="w-full bg-white/10 text-slate-300 py-3 rounded-xl font-bold hover:bg-white/20 backdrop-blur transition">
+                💾 Guardar solo en celular (Salir)
+            </button>
         </div>
     </div>
 
