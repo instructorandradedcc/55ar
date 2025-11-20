@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#1e293b">
-    <title>AR Constructor Pro v3.5 (Mobile Fix)</title>
+    <title>AR Constructor Pro v3.6 (Final)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -30,7 +30,7 @@
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/11.0.2/firebase-analytics.js";
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
         // --- CONFIGURACIÓN ---
@@ -44,12 +44,13 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.5 MOBILE";
-        const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
+        const APP_VERSION = "3.6 FINAL";
+        const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com"; // TU CUENTA MAESTRA
 
         let app, auth, db, storage, analytics;
         let isPreviewEnv = false;
 
+        // Detección de Entorno
         try {
             let configToUse = firebaseConfig;
             if (typeof __firebase_config !== 'undefined') {
@@ -63,9 +64,10 @@
             storage = getStorage(app);
         } catch (e) { console.error("Init Error:", e); }
 
+        // --- ESTADO ---
         const state = {
             user: null,
-            role: 'guest',
+            role: 'guest', // roles: 'admin', 'architect', 'client'
             currentProject: null,
             tempFile: null,
             calibration: { x:0, y:0, z:0, r:0, s:1, opacity: 1.0 },
@@ -75,21 +77,20 @@
 
         class ARSystem {
             constructor() {
-                console.log(`%c AR System ${APP_VERSION} `, 'background: #ec4899; color: #fff; padding: 2px 5px; border-radius: 3px;');
+                console.log(`%c AR System ${APP_VERSION} `, 'background: #059669; color: #fff; padding: 2px 5px; border-radius: 3px;');
                 this.initAuth();
                 this.initServiceWorker();
                 this.updateVersionUI();
             }
 
+            // 1. AUTENTICACIÓN Y REGISTRO DE USUARIOS
             initAuth() {
-                // Manejo de redirección (Mobile)
+                // Recuperar sesión tras redirección (móviles)
                 getRedirectResult(auth).then((result) => {
-                    if (result) {
-                        this.toast("Sesión Google recuperada", "success");
+                    if (result && result.user) {
+                        this.handleUserLogin(result.user);
                     }
-                }).catch((error) => {
-                    this.handleAuthError(error);
-                });
+                }).catch((error) => this.handleAuthError(error));
 
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
@@ -98,26 +99,76 @@
                     const sharedUid = params.get('uid');
 
                     if (user) {
-                        if (user.email === ADMIN_EMAIL) state.role = 'admin';
-                        else state.role = 'architect';
+                        this.handleUserLogin(user);
 
+                        // Lógica de visualización compartida
                         if (sharedId && sharedUid) {
-                            state.role = 'client';
+                            state.role = 'client'; // Forzar rol cliente
                             this.openSharedProject(sharedId, sharedUid);
                         } else {
                             this.navTo('dashboard');
                             this.loadProjects();
                         }
-                        this.updateUserProfile(user);
                     } else {
+                        // Si no hay usuario pero hay link compartido -> Login anónimo
                         if (sharedId && sharedUid) signInAnonymously(auth);
                         else this.navTo('auth');
                     }
                 });
             }
 
+            async handleUserLogin(user) {
+                // 1. Determinar Rol Local
+                if (user.email === ADMIN_EMAIL) {
+                    state.role = 'admin';
+                } else if (user.isAnonymous) {
+                    state.role = 'guest';
+                } else {
+                    state.role = 'architect';
+                }
+
+                this.updateUserProfile(user);
+
+                // 2. REGISTRO EN BASE DE DATOS (PERSISTENCIA)
+                if (!user.isAnonymous) {
+                    await this.saveUserData(user);
+                }
+            }
+
+            async saveUserData(user) {
+                try {
+                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    const userRef = doc(db, 'artifacts', namespace, 'users_registry', user.uid);
+                    
+                    // Verificar si existe para no sobrescribir fecha de creación
+                    const userSnap = await getDoc(userRef);
+                    
+                    if (!userSnap.exists()) {
+                        // NUEVO USUARIO REGISTRADO
+                        await setDoc(userRef, {
+                            uid: user.uid,
+                            email: user.email,
+                            displayName: user.displayName || 'Usuario Google',
+                            photoURL: user.photoURL,
+                            role: state.role, // 'admin' o 'architect'
+                            createdAt: serverTimestamp(),
+                            lastLogin: serverTimestamp()
+                        });
+                        this.toast("¡Bienvenido! Registro exitoso.", "success");
+                    } else {
+                        // USUARIO EXISTENTE
+                        await updateDoc(userRef, {
+                            lastLogin: serverTimestamp(),
+                            role: state.role // Actualizar rol por si acaso
+                        });
+                    }
+                } catch (e) {
+                    console.warn("Error guardando perfil (puede ser permisos Firestore):", e);
+                }
+            }
+
             async login() {
-                this.loader(true, "Entrando...");
+                this.loader(true, "Entrando como invitado...");
                 try { await signInAnonymously(auth); } catch (e) { this.handleAuthError(e); }
                 this.loader(false);
             }
@@ -126,10 +177,9 @@
                  this.loader(true, "Conectando Google...");
                  try {
                      const provider = new GoogleAuthProvider();
-                     // Detección Inteligente: Popup en PC, Redirect en Celular
+                     // IMPORTANTE: Redirect en celular, Popup en PC
                      if (state.isMobile) {
                          await signInWithRedirect(auth, provider);
-                         // El código se detiene aquí y recarga la página al volver
                      } else {
                          await signInWithPopup(auth, provider);
                      }
@@ -142,11 +192,13 @@
             handleAuthError(error) {
                 console.error("Auth Error:", error);
                 if (error.code === 'auth/api-key-not-valid' || error.message.includes('api-key-not-valid')) {
-                    this.showErrorModal("Dominio No Autorizado", "Google bloqueó el acceso por seguridad.", "Ve a Firebase Console > Authentication > Settings > Authorized Domains y agrega: instructorandradedcc.github.io");
+                    this.showErrorModal(
+                        "Dominio No Autorizado", 
+                        `Google bloqueó el acceso desde: ${window.location.hostname}`, 
+                        "SOLUCIÓN: Ve a Firebase Console > Authentication > Settings > Authorized Domains y agrega este dominio."
+                    );
                 } else if (error.code === 'auth/popup-blocked') {
-                    this.toast("El navegador bloqueó la ventana emergente. Intenta de nuevo.", "warning");
-                } else if (error.code === 'auth/operation-not-allowed') {
-                    this.showErrorModal("Google Sign-In Apagado", "El proveedor 'Google' está deshabilitado.", "Actívalo en Firebase Console > Authentication > Sign-in method.");
+                    this.toast("Ventana emergente bloqueada. Permítela e intenta de nuevo.", "warning");
                 } else {
                     this.toast(`Error: ${error.message}`, "error");
                 }
@@ -164,22 +216,42 @@
 
                 let roleText = "INVITADO";
                 let roleClass = "text-slate-500 bg-slate-100";
-                if (state.role === 'admin') { roleText = "👑 ADMIN"; roleClass = "text-amber-700 bg-amber-100 border-amber-200"; }
-                else if (state.role === 'client') { roleText = "👀 CLIENTE"; roleClass = "text-purple-600 bg-purple-50 border-purple-200"; }
-                else if (state.role === 'architect') { roleText = "👷 ARQUITECTO"; roleClass = "text-blue-600 bg-blue-50 border-blue-200"; }
+
+                if (state.role === 'admin') { 
+                    roleText = "👑 ADMIN"; 
+                    roleClass = "text-amber-700 bg-amber-100 border-amber-200 shadow-sm"; 
+                } else if (state.role === 'architect') { 
+                    roleText = "👷 ARQUITECTO"; 
+                    roleClass = "text-blue-600 bg-blue-50 border-blue-200"; 
+                } else if (state.role === 'client') {
+                     roleText = "👀 VISOR"; 
+                     roleClass = "text-purple-600 bg-purple-50 border-purple-200";
+                }
 
                 if(roleEl) {
                     roleEl.textContent = roleText;
                     roleEl.className = `text-[10px] font-bold px-2 py-0.5 rounded inline-block mt-1 border ${roleClass}`;
                 }
+                
+                // Mostrar foto si existe
+                const avatar = document.getElementById('user-avatar');
+                if (avatar && user.photoURL) {
+                    avatar.src = user.photoURL;
+                    avatar.classList.remove('hidden');
+                    document.getElementById('default-avatar').classList.add('hidden');
+                }
             }
 
-            // GESTIÓN PROYECTOS
+            // 2. GESTIÓN DE PROYECTOS
             loadProjects() {
                 if (state.role === 'client') return;
                 const list = document.getElementById('projects-list');
-                list.innerHTML = '<div class="p-4 text-center text-slate-400 animate-pulse">Cargando...</div>';
+                list.innerHTML = '<div class="p-4 text-center text-slate-400 animate-pulse">Cargando proyectos...</div>';
+                
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                
+                // Si es Admin podría ver todo, pero por ahora mantenemos la lógica de ver "Mis Proyectos"
+                // para evitar cargar la BD entera.
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
 
                 onSnapshot(projectsRef, (snap) => {
@@ -199,7 +271,7 @@
                             <p class="text-xs text-slate-500 font-mono mt-1">📍 ${data.coords?.lat.toFixed(4)}, ${data.coords?.lon.toFixed(4)}</p>
                         </div>
                         <div class="flex gap-2">
-                            <button onclick="app.shareProject('${id}')" class="text-blue-400 hover:text-blue-600 p-1" title="Compartir">🔗</button>
+                            <button onclick="app.shareProject('${id}')" class="text-blue-400 hover:text-blue-600 p-1" title="Copiar Enlace Cliente">🔗</button>
                             <button onclick="app.deleteProject('${id}')" class="text-slate-300 hover:text-red-500 p-1" title="Eliminar">🗑️</button>
                         </div>
                     </div>
@@ -213,7 +285,7 @@
 
             shareProject(id) {
                 const url = `${window.location.origin}${window.location.pathname}?id=${id}&uid=${state.user.uid}`;
-                navigator.clipboard.writeText(url).then(() => this.toast("🔗 Link copiado", "success"));
+                navigator.clipboard.writeText(url).then(() => this.toast("🔗 Enlace de Cliente copiado", "success"));
             }
 
             async createProject() {
@@ -245,8 +317,9 @@
                 this.toast("Proyecto Creado");
             }
 
+            // Lógica de Apertura
             async openSharedProject(id, ownerUid) {
-                this.loader(true, "Cargando...");
+                this.loader(true, "Cargando Proyecto Cliente...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
@@ -257,7 +330,7 @@
 
                     this.navTo('ar');
                     this.startAR(state.currentProject.data);
-                    this.toast("Modo Cliente: Solo Lectura", "info");
+                    this.toast("Modo Visor: Solo Lectura", "info");
                     document.getElementById('btn-save-calibration').classList.add('hidden');
                 } catch(e) {
                     this.toast(e.message, "error");
@@ -359,7 +432,7 @@
             }
 
             async saveCalibration() {
-                if (state.role === 'client') return this.toast("Cliente: No puedes guardar", "error");
+                if (state.role === 'client') return this.toast("Cliente: Solo Lectura", "error");
                 this.loader(true, "Guardando...");
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', state.currentProject.id), { calibration: state.calibration });
@@ -433,8 +506,8 @@
     <!-- UI Global Elements -->
     <div id="toast" class="-translate-y-24 fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] bg-slate-800 transition-all"></div>
     <div id="loader" class="hidden fixed inset-0 bg-slate-900/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
-        <div class="w-12 h-12 border-4 border-pink-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-        <p id="loader-text" class="font-bold tracking-widest text-sm text-pink-400 animate-pulse">CARGANDO...</p>
+        <div class="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p id="loader-text" class="font-bold tracking-widest text-sm text-indigo-400 animate-pulse">CARGANDO...</p>
     </div>
 
     <div id="modal-error" class="hidden fixed inset-0 bg-red-950/90 backdrop-blur z-[11000] flex items-center justify-center p-6">
@@ -453,9 +526,9 @@
     <!-- VISTA 1: LOGIN -->
     <div id="view-auth" class="view justify-center items-center p-6 bg-slate-900 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-800 via-slate-900 to-black">
         <div class="w-full max-w-sm bg-white/5 backdrop-blur-lg border border-white/10 p-8 rounded-3xl shadow-2xl text-center">
-            <div class="w-20 h-20 bg-gradient-to-br from-pink-500 to-pink-700 rounded-2xl mx-auto mb-6 flex items-center justify-center text-4xl shadow-lg shadow-pink-500/30">🏗️</div>
+            <div class="w-20 h-20 bg-gradient-to-br from-indigo-500 to-indigo-700 rounded-2xl mx-auto mb-6 flex items-center justify-center text-4xl shadow-lg shadow-indigo-500/30">🏗️</div>
             <h1 class="text-3xl font-bold text-white mb-2">AR Cloud Pro</h1>
-            <p class="text-slate-400 text-sm mb-8">Versión Móvil Optimizada</p>
+            <p class="text-slate-400 text-sm mb-8">Registro Google + Persistencia</p>
             
             <button onclick="app.login()" class="w-full bg-white text-slate-900 font-bold py-4 rounded-xl shadow-lg hover:bg-slate-200 transition mb-3 transform active:scale-95">
                 ENTRAR COMO INVITADO
@@ -463,7 +536,7 @@
             <button onclick="app.loginGoogle()" class="w-full bg-slate-800 border border-slate-700 text-white font-bold py-4 rounded-xl hover:bg-slate-700 transition flex items-center justify-center gap-3 transform active:scale-95">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-5 h-5"> <span>ACCEDER CON GOOGLE</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono">V3.5 MOBILE</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono">V3.6 FINAL</p>
         </div>
     </div>
 
@@ -474,7 +547,14 @@
                 <h2 class="text-xl font-bold text-slate-800">Proyectos</h2>
                 <div id="user-role-badge" class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded inline-block mt-1">CARGANDO...</div>
             </div>
-            <button onclick="app.logout()" class="text-xs font-bold text-red-500 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">SALIR</button>
+            <!-- Avatar Usuario -->
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-full bg-slate-200 overflow-hidden border border-slate-300">
+                    <img id="user-avatar" src="" class="w-full h-full object-cover hidden">
+                    <div id="default-avatar" class="w-full h-full flex items-center justify-center text-xs font-bold text-slate-500">👤</div>
+                </div>
+                <button onclick="app.logout()" class="text-xs font-bold text-red-500 border border-red-200 px-3 py-1.5 rounded-lg hover:bg-red-50 transition">SALIR</button>
+            </div>
         </div>
         <div id="projects-list" class="flex-1 overflow-y-auto p-4 pb-24"></div>
         <button onclick="app.toggleModal('new-project', true)" class="fixed bottom-8 right-8 w-16 h-16 bg-blue-600 text-white rounded-full shadow-2xl shadow-blue-600/40 text-3xl flex items-center justify-center hover:scale-110 hover:bg-blue-700 transition z-30">+</button>
@@ -556,4 +636,3 @@
     </div>
 </body>
 </html>
-
