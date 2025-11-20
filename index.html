@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.30 (Admin Control)</title>
+    <title>AR Constructor Pro v3.31 (Final Flow Fix)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -131,7 +131,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.30 ADMIN CONTROL";
+        const APP_VERSION = "3.31 FINAL FLOW FIX";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -292,7 +292,6 @@
 
                 // --- LOGICA DE ADMINISTRADOR ---
                 if (state.role === 'admin') {
-                    // Cargar LOGS públicos de todos los usuarios
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
                         list.innerHTML = '';
@@ -303,7 +302,7 @@
                         
                         const logs = [];
                         snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
-                        logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)); // Más reciente primero
+                        logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
                         logs.forEach(log => {
                             const date = new Date(log.createdAt).toLocaleString();
@@ -336,7 +335,7 @@
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
 
                 onSnapshot(projectsRef, async (snap) => {
-                    const localProjs = await getAllLocalProjects(); // Refresh local
+                    const localProjs = await getAllLocalProjects();
                     state.localProjects = localProjs;
                     list.innerHTML = '';
                     
@@ -513,18 +512,23 @@
                     if(state.user) {
                         const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
+                            // Sanitizar nombre para log
+                            const userName = state.user.displayName || (state.user.isAnonymous ? `Invitado-${state.user.uid.substring(0, 4)}` : 'Usuario Registrado');
+
                             await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                userName: state.user.displayName || "Anónimo",
+                                userName: userName,
                                 userId: state.user.uid,
                                 projectName: state.draftData.name,
                                 status: "Borrador Local",
                                 createdAt: new Date().toISOString()
                             });
-                        } catch(e) { console.warn("No se pudo enviar log al admin (offline?)"); }
+                        } catch(e) { console.warn("No se pudo enviar log al admin (offline/permisos?):", e); }
                     }
 
                     this.loader(false);
                     this.toast("Guardado Local. Vamos al Mapa...", "success");
+                    
+                    // --- FLUJO CONTINUO: MAPA ---
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
 
@@ -559,7 +563,6 @@
             async confirmAndPublishFromMap() {
                 if(!state.currentDraftId) return this.toast("Error: No hay borrador activo", "error");
                 
-                // Update coords locally first
                 const localProjs = await getAllLocalProjects();
                 const current = localProjs.find(p => p.id === state.currentDraftId);
                 if(current) {
@@ -602,7 +605,6 @@
                             const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
                             const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                             
-                            // Obtener datos para publicar
                             let projData = state.localProjects.find(p => p.id === id);
                             if(!projData) projData = await getModelFromCache(id);
 
@@ -626,8 +628,9 @@
 
                             // ACTUALIZAR LOG DEL ADMIN
                             try {
+                                const userName = state.user.displayName || (state.user.isAnonymous ? `Invitado-${state.user.uid.substring(0, 4)}` : 'Usuario Registrado');
                                 await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                    userName: state.user.displayName || "Anónimo",
+                                    userName: userName,
                                     userId: state.user.uid,
                                     projectName: projData.name,
                                     status: "Global (Publicado)",
@@ -864,14 +867,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.30</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.31</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.30</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.31</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -1023,6 +1026,5 @@
     </div>
 </body>
 </html>
-
 
 
