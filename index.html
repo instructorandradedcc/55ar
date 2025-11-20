@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <title>AR Constructor Pro v1.3</title>
+    <title>AR Constructor Pro v1.4</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
@@ -37,7 +37,7 @@
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #ffffff; border: 2px solid #2563eb; margin-top: -10px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
         input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px; }
         
-        /* LOGS DE DEPURACIÓN (Visible para usuario) */
+        /* LOGS DE DEPURACIÓN */
         #debug-log {
             position: fixed; bottom: 0; left: 0; width: 100%; max-height: 100px;
             background: rgba(0,0,0,0.8); color: #00ff00; font-family: monospace; font-size: 10px;
@@ -70,25 +70,29 @@
     <!-- CONSOLA DE ESTADO -->
     <div id="debug-log">Sistema iniciado...</div>
 
-    <!-- 0. PANTALLA DE PERMISOS (Landing Page) -->
+    <!-- 0. PANTALLA DE PERMISOS (Landing Page) CON LOGO -->
     <div id="permission-screen">
-        <div class="text-6xl mb-6">📡</div>
+        <!-- LOGO AGREGADO -->
+        <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-24 mb-6 object-contain bg-white p-2 rounded-xl shadow-lg">
+        
         <h1 class="text-2xl font-bold mb-2">AR Constructor Pro</h1>
-        <p class="text-gray-400 mb-8 max-w-xs">Para colocar modelos 3D en el mundo real, necesitamos acceso a tu GPS y Cámara.</p>
+        <p class="text-gray-400 mb-8 max-w-xs text-sm">Para visualizar modelos en el mundo real, la aplicación requiere acceso a GPS y Cámara.</p>
         
         <div class="space-y-4 w-full max-w-xs">
             <div id="perm-status-gps" class="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
-                <span>📍 GPS</span> <span class="text-yellow-500 font-bold">Pendiente</span>
+                <span class="flex items-center gap-2">📍 GPS</span> <span id="txt-gps" class="text-yellow-500 font-bold text-xs">PENDIENTE</span>
             </div>
             <div id="perm-status-cam" class="flex justify-between items-center bg-slate-800 p-3 rounded-lg border border-slate-700">
-                <span>📸 Cámara</span> <span class="text-yellow-500 font-bold">Pendiente</span>
+                <span class="flex items-center gap-2">📸 Cámara</span> <span id="txt-cam" class="text-yellow-500 font-bold text-xs">PENDIENTE</span>
             </div>
             
-            <button id="btn-start-app" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition transform active:scale-95 mt-4">
-                CONCEDER Y CONTINUAR
+            <button id="btn-start-app" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl text-lg shadow-lg transition transform active:scale-95 mt-4 ring-2 ring-blue-400 ring-offset-2 ring-offset-slate-900">
+                CONCEDER PERMISOS
             </button>
+            
+            <p id="secure-warning" class="text-red-400 text-[10px] hidden mt-2">⚠️ No seguro (HTTP). El GPS podría fallar.</p>
         </div>
-        <p class="text-[10px] text-gray-600 mt-8">v1.3 - Build Secure</p>
+        <p class="text-[10px] text-gray-600 mt-8">v1.4 - Permission Fix</p>
     </div>
 
     <!-- 1. PÁGINA DE CARGA (UPLOAD) -->
@@ -226,30 +230,44 @@
                 const d = $('debug-log');
                 d.style.display = 'block';
                 d.textContent = `> ${msg}`;
-                setTimeout(() => d.style.display = 'none', 4000);
+                setTimeout(() => d.style.display = 'none', 5000);
             },
 
-            // 1. PANTALLA DE PERMISOS (CRÍTICO)
+            // 1. PANTALLA DE PERMISOS (CRÍTICO - FIX)
             checkPermissions: async () => {
                 const btn = $('btn-start-app');
-                btn.innerHTML = "⏳ Solicitando...";
+                const txtGps = $('txt-gps');
+                const txtCam = $('txt-cam');
+                
+                // Verificación de seguridad HTTP vs HTTPS
+                if (!window.isSecureContext) {
+                    $('secure-warning').classList.remove('hidden');
+                }
+
+                btn.innerHTML = "⏳ Procesando...";
                 btn.disabled = true;
+                btn.classList.add('opacity-50');
 
                 try {
-                    // A. GPS
+                    // A. GPS (Con timeout para evitar bloqueo eterno)
+                    txtGps.textContent = "⏳";
                     await new Promise((res, rej) => {
-                        navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true });
+                        navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 8000 });
                     });
-                    $('perm-status-gps').querySelector('span:last-child').textContent = "✅ OK";
-                    $('perm-status-gps').querySelector('span:last-child').className = "text-emerald-400 font-bold";
+                    txtGps.textContent = "✅ OK";
+                    txtGps.className = "text-emerald-400 font-bold text-xs";
 
                     // B. CÁMARA
+                    txtCam.textContent = "⏳";
                     const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    stream.getTracks().forEach(t => t.stop()); // Cerrar stream
-                    $('perm-status-cam').querySelector('span:last-child').textContent = "✅ OK";
-                    $('perm-status-cam').querySelector('span:last-child').className = "text-emerald-400 font-bold";
+                    stream.getTracks().forEach(t => t.stop()); // Cerrar stream de prueba
+                    txtCam.textContent = "✅ OK";
+                    txtCam.className = "text-emerald-400 font-bold text-xs";
 
                     // Éxito
+                    btn.innerHTML = "¡LISTO!";
+                    btn.classList.replace('bg-blue-600', 'bg-emerald-600');
+                    
                     setTimeout(() => {
                         $('permission-screen').style.display = 'none';
                         $('upload-page').style.display = 'flex'; // Mostrar página carga
@@ -257,9 +275,14 @@
                     }, 800);
 
                 } catch (e) {
-                    alert("❌ ERROR CRÍTICO: Debes conceder permisos de GPS y Cámara. " + e.message);
-                    btn.innerHTML = "REINTENTAR";
+                    alert("❌ ATENCIÓN: " + e.message + "\n\nDebes activar el GPS y permitir la cámara en la configuración del navegador para usar esta app.");
+                    btn.innerHTML = "REINTENTAR PERMISOS";
                     btn.disabled = false;
+                    btn.classList.remove('opacity-50');
+                    
+                    // Marcar fallos
+                    if(txtGps.textContent !== "✅ OK") txtGps.textContent = "❌ ERROR";
+                    if(txtCam.textContent !== "✅ OK") txtCam.textContent = "❌ ERROR";
                 }
             },
 
@@ -285,21 +308,25 @@
             // 3. GPS MANUAL
             getCurrentLocation: () => {
                 const btn = $('btn-get-gps');
+                const originalText = btn.innerHTML;
                 btn.textContent = "⏳...";
+                btn.disabled = true;
                 
                 navigator.geolocation.getCurrentPosition(
                     (pos) => {
                         $('in-lat').value = pos.coords.latitude.toFixed(6);
                         $('in-lng').value = pos.coords.longitude.toFixed(6);
                         btn.textContent = "✅ Detectado";
+                        btn.disabled = false;
                         app.log("GPS detectado con éxito");
-                        setTimeout(() => btn.textContent = "📍 Detectar mi ubicación", 2000);
+                        setTimeout(() => btn.innerHTML = originalText, 2000);
                     },
                     (err) => {
                         alert("Error GPS: " + err.message);
                         btn.textContent = "❌ Error";
+                        btn.disabled = false;
                     },
-                    { enableHighAccuracy: true }
+                    { enableHighAccuracy: true, timeout: 5000 }
                 );
             },
 
@@ -308,10 +335,12 @@
                 st.lat = parseFloat($('in-lat').value);
                 st.lng = parseFloat($('in-lng').value);
 
-                if (isNaN(st.lat) || isNaN(st.lng)) return alert("Faltan coordenadas");
-                if (!selectedFile && !st.url) return alert("Falta archivo 3D");
+                if (isNaN(st.lat) || isNaN(st.lng)) return alert("Faltan coordenadas válidas (Lat/Lng)");
+                if (!selectedFile && !st.url) return alert("Falta seleccionar un archivo 3D (.glb)");
 
                 app.log("Guardando en caché...");
+                const btn = $('btn-save');
+                btn.textContent = "⏳ Guardando...";
                 
                 try {
                     const cache = await caches.open(CACHE_NAME);
@@ -327,11 +356,14 @@
 
                     // Habilitar Mapa
                     $('nav-map').disabled = false;
-                    alert("✅ Proyecto Guardado Correctamente");
+                    
+                    btn.textContent = "✅ ¡Guardado!";
+                    setTimeout(() => btn.textContent = "💾 Guardar Proyecto", 2000);
                     
                 } catch (e) {
                     console.error(e);
                     alert("Error guardando: " + e.message);
+                    btn.textContent = "❌ Error";
                 }
             },
 
@@ -353,7 +385,7 @@
                         // Llenar UI
                         $('in-lat').value = st.lat;
                         $('in-lng').value = st.lng;
-                        $('file-name-display').textContent = "✅ Modelo Cargado de Memoria";
+                        $('file-name-display').textContent = "✅ Modelo Recuperado";
                         $('file-name-display').className = "text-sm font-bold text-blue-600 truncate";
                         $('nav-map').disabled = false;
                         app.log("Datos restaurados de caché");
@@ -439,19 +471,28 @@
 
         // --- EVENTOS ---
         window.addEventListener('DOMContentLoaded', () => {
-            // Inicio
-            $('btn-start-app').addEventListener('click', app.checkPermissions);
+            // Aseguramos que app sea global para acceso inline
+            window.app = app;
+
+            // Eventos de botones con verificación
+            const btnStart = $('btn-start-app');
+            if(btnStart) btnStart.addEventListener('click', app.checkPermissions);
+
+            const btnSelect = $('btn-select-file');
+            if(btnSelect) btnSelect.addEventListener('click', app.selectFile);
+
+            const inpFile = $('real-file-input');
+            if(inpFile) inpFile.addEventListener('change', app.handleFileSelect);
             
-            // Archivos
-            $('btn-select-file').addEventListener('click', app.selectFile);
-            $('real-file-input').addEventListener('change', app.handleFileSelect);
-            
-            // GPS & Guardado
-            $('btn-get-gps').addEventListener('click', app.getCurrentLocation);
-            $('btn-save').addEventListener('click', app.saveData);
+            const btnGps = $('btn-get-gps');
+            if(btnGps) btnGps.addEventListener('click', app.getCurrentLocation);
+
+            const btnSave = $('btn-save');
+            if(btnSave) btnSave.addEventListener('click', app.saveData);
             
             // Mapa Set
-            $('btn-map-fix').addEventListener('click', () => {
+            const btnMapFix = $('btn-map-fix');
+            if(btnMapFix) btnMapFix.addEventListener('click', () => {
                 const c = map.getCenter();
                 st.lat = c.lat; st.lng = c.lng;
                 $('in-lat').value = st.lat.toFixed(6);
@@ -461,7 +502,8 @@
             });
 
             // Reset
-            $('btn-reset').addEventListener('click', async () => {
+            const btnReset = $('btn-reset');
+            if(btnReset) btnReset.addEventListener('click', async () => {
                 if (confirm("¿Borrar todo?")) {
                     await caches.delete(CACHE_NAME);
                     location.reload();
