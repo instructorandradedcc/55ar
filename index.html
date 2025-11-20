@@ -2,14 +2,11 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <!-- Habilita modo pantalla completa al guardar como App -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    
-    <title>AR Constructor Pro v0.08</title>
+    <title>AR Constructor Pro v1.0</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
@@ -21,641 +18,459 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Sistema de Carga Diferida (Optimización Crítica) -->
-    <script>
-        // Cargamos A-Frame y AR.js solo cuando se necesitan para ahorrar batería y memoria
-        let arLibrariesLoaded = false;
-        function loadARLibraries() {
-            if (arLibrariesLoaded) return Promise.resolve();
-            return new Promise((resolve, reject) => {
-                console.log("Cargando motor A-Frame...");
-                const aframeScript = document.createElement('script');
-                aframeScript.src = 'https://aframe.io/releases/1.3.0/aframe.min.js'; 
-                aframeScript.onload = () => {
-                    console.log("Cargando motor AR.js...");
-                    const arjsScript = document.createElement('script');
-                    arjsScript.src = 'https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js';
-                    arjsScript.onload = () => {
-                        // Extras para animaciones GLTF
-                        const extrasScript = document.createElement('script');
-                        extrasScript.src = 'https://raw.githack.com/donmccurdy/aframe-extras/master/dist/aframe-extras.loaders.min.js';
-                        extrasScript.onload = () => {
-                            arLibrariesLoaded = true;
-                            resolve();
-                        };
-                    };
-                    arjsScript.onerror = reject;
-                };
-                aframeScript.onerror = reject;
-                document.head.appendChild(aframeScript);
-            });
-        }
-    </script>
-
     <style>
-        /* OPTIMIZACIONES DE INTERFAZ */
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+        /* CORE STYLES */
+        * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; touch-action: manipulation; }
+        body { background-color: #f3f4f6; font-family: ui-sans-serif, system-ui, sans-serif; overflow: hidden; position: fixed; width: 100%; height: 100%; }
         
-        html, body {
-            margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; font-family: ui-sans-serif, system-ui, sans-serif;
-            background-color: #f3f4f6;
-            overscroll-behavior: none;
-        }
+        /* PAGES SYSTEM */
+        .page { display: none; width: 100%; height: 100%; position: absolute; top: 0; left: 0; overflow-y: auto; z-index: 10; background: #f3f4f6; }
+        .page.active { display: flex; flex-direction: column; }
+        .ui-layer { z-index: 50; position: relative; }
         
-        /* Páginas SPA (Single Page Application) */
-        .page {
-            display: none; height: 100%; width: 100%; position: absolute; top: 0; left: 0;
-            overflow-y: auto;
-            animation: fade 0.3s ease-in-out;
-        }
-        .page.active { display: block; }
-        @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
-
-        /* Mapa a pantalla completa */
-        #map-container { width: 100%; height: 100%; z-index: 1; }
-
-        /* AR Layer */
-        video { position: fixed !important; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; z-index: -2; }
-        a-scene { position: fixed !important; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; }
-
-        /* UI Flotante en AR */
-        .ar-ui { position: fixed; pointer-events: none; z-index: 1000; width: 100%; height: 100%; top: 0; left: 0; }
-        .pointer-auto { pointer-events: auto; }
-
-        /* Panel Lateral Pro */
-        .glass-panel {
-            background: rgba(15, 23, 42, 0.85);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border: 1px solid rgba(255,255,255,0.1);
-        }
-
-        /* Sliders personalizados */
-        input[type=range] { -webkit-appearance: none; background: transparent; }
-        input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%;
-            background: #fff; border: 2px solid #2563eb; margin-top: -8px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-        }
-        input[type=range]::-webkit-slider-runnable-track {
-            width: 100%; height: 4px; background: rgba(255,255,255,0.3); border-radius: 2px;
-        }
-
-        /* Botón Start iOS */
-        .ios-overlay {
-            position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 9999;
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-        }
+        /* SLIDERS */
+        input[type=range] { -webkit-appearance: none; background: transparent; width: 100%; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 24px; width: 24px; border-radius: 50%; background: #fff; border: 2px solid #2563eb; margin-top: -10px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; background: rgba(200,200,200,0.5); border-radius: 2px; }
+        
+        /* NOTIFICATIONS */
+        .toast { position: fixed; top: 20px; left: 50%; transform: translateX(-50%) translateY(-100px); background: rgba(15,23,42,0.95); color: white; padding: 12px 24px; border-radius: 50px; font-size: 14px; font-weight: 600; z-index: 10000; transition: 0.3s; pointer-events: none; box-shadow: 0 10px 25px -5px rgba(0,0,0,0.3); white-space: nowrap; }
+        .toast.show { transform: translateX(-50%) translateY(0); }
+        
+        /* PERMISSION MODAL */
+        .perm-overlay { position: fixed; inset: 0; background: rgba(15,23,42,0.98); z-index: 20000; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; text-align: center; color: white; transition: opacity 0.3s; }
+        .perm-overlay.hidden { opacity: 0; pointer-events: none; }
+        
+        /* AR FIXES */
+        video { position: fixed !important; top: 0 !important; left: 0 !important; width: 100% !important; height: 100% !important; object-fit: cover !important; z-index: -2 !important; }
+        a-scene { display: block; position: relative; height: 100%; width: 100%; z-index: 1; }
     </style>
+
+    <script>
+        // MOTOR DE CARGA INTELIGENTE
+        let arLoaded = false;
+        const loadAR = () => {
+            if(arLoaded) return Promise.resolve();
+            return new Promise((resolve, reject) => {
+                console.log("Cargando motor AR...");
+                const s1 = document.createElement('script'); 
+                s1.src = 'https://aframe.io/releases/1.3.0/aframe.min.js';
+                s1.onload = () => {
+                    const s2 = document.createElement('script'); 
+                    s2.src = 'https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js';
+                    s2.onload = () => { 
+                        // Cargar extras para animaciones si es necesario
+                        const s3 = document.createElement('script');
+                        s3.src = 'https://raw.githack.com/donmccurdy/aframe-extras/master/dist/aframe-extras.loaders.min.js';
+                        s3.onload = () => {
+                            arLoaded = true; 
+                            resolve(); 
+                        };
+                        document.head.appendChild(s3);
+                    };
+                    s2.onerror = reject; 
+                    document.head.appendChild(s2);
+                };
+                s1.onerror = reject; 
+                document.head.appendChild(s1);
+            });
+        };
+    </script>
 </head>
 <body>
 
-    <!-- TOAST DE NOTIFICACIÓN -->
-    <div id="toast" class="fixed top-5 left-1/2 -translate-x-1/2 bg-gray-900/90 text-white px-6 py-3 rounded-full text-sm font-semibold shadow-xl z-[5000] transition-opacity duration-300 opacity-0 pointer-events-none">
-        Mensaje del sistema
+    <!-- UI GLOBAL -->
+    <div id="toast" class="toast">Notificación</div>
+
+    <!-- MODAL DE PERMISOS (GATEKEEPER) -->
+    <div id="perm-modal" class="perm-overlay hidden">
+        <div class="bg-white text-slate-800 p-6 rounded-2xl max-w-sm w-full shadow-2xl transform transition-all">
+            <div class="text-5xl mb-4 text-center">🔐</div>
+            <h2 class="text-xl font-bold mb-2 text-center">Acceso Requerido</h2>
+            <p class="text-sm text-slate-600 mb-6 text-center">Para anclar el modelo 3D en el mundo real, necesitamos acceso a:</p>
+            <div class="space-y-3">
+                <div class="flex justify-between bg-slate-50 p-3 rounded-lg border border-slate-100"><span class="text-sm font-bold">📍 GPS Preciso</span><span id="st-gps" class="text-xs font-bold text-orange-500">Pendiente</span></div>
+                <div class="flex justify-between bg-slate-50 p-3 rounded-lg border border-slate-100"><span class="text-sm font-bold">📸 Cámara AR</span><span id="st-cam" class="text-xs font-bold text-orange-500">Pendiente</span></div>
+            </div>
+            <button id="btn-grant" class="mt-6 w-full bg-blue-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-blue-700 active:scale-95 transition">CONTINUAR</button>
+            <button onclick="app.modal(false)" class="mt-3 w-full text-slate-400 text-xs font-bold py-2">CANCELAR</button>
+        </div>
     </div>
 
-    <!-- PÁGINA 1: INICIO Y CARGA -->
-    <div id="upload-page" class="page active">
-        <div class="min-h-full flex flex-col justify-center p-6 max-w-md mx-auto">
-            <div class="text-center mb-8">
-                <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" alt="Logo" class="h-20 mx-auto mb-4 object-contain drop-shadow-md">
-                <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">AR Constructor <span class="text-blue-600">Pro</span></h1>
-                <p class="text-slate-500 text-sm mt-2 font-medium">v0.08 - Stable Edition</p>
+    <!-- 1. UPLOAD PAGE -->
+    <div id="upload-page" class="page active items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-2xl shadow-xl overflow-hidden ui-layer">
+            <div class="bg-slate-50 p-6 text-center border-b border-slate-100">
+                <img src="https://github.com/instructorandradedcc/55ar/raw/main/logofundaciontrasparencia.png" class="h-14 mx-auto mb-2 object-contain">
+                <h1 class="text-lg font-bold text-slate-800">AR Constructor <span class="text-blue-600">Pro</span></h1>
+                <p class="text-[10px] text-slate-400 uppercase font-bold tracking-widest">v1.0 Final</p>
             </div>
-
-            <div class="bg-white p-6 rounded-2xl shadow-xl border border-slate-100 space-y-5">
-                
-                <!-- Selector de Archivo -->
-                <div class="group">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-2">1. Archivo GLB (Modelo 3D)</label>
-                    <div class="relative">
-                        <input type="file" id="model-upload" accept=".glb" class="hidden">
-                        <label for="model-upload" class="flex items-center justify-center w-full h-14 px-4 transition bg-slate-50 border-2 border-slate-200 border-dashed rounded-xl cursor-pointer hover:border-blue-500 hover:bg-blue-50 group-hover:border-blue-400">
-                            <div class="flex items-center space-x-2">
-                                <svg class="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path></svg>
-                                <span id="file-label" class="text-sm font-medium text-slate-600 truncate max-w-[200px]">Toca para subir modelo</span>
-                            </div>
-                        </label>
-                    </div>
-                </div>
-
-                <!-- Coordenadas -->
+            <div class="p-6 space-y-5">
+                <!-- File Input -->
                 <div>
-                    <div class="flex justify-between items-end mb-2">
-                        <label class="block text-xs font-bold text-slate-500 uppercase">2. Coordenadas GPS</label>
-                        <button id="gps-btn" class="text-xs bg-blue-100 text-blue-700 px-3 py-1.5 rounded-lg font-bold hover:bg-blue-200 transition">
-                            📍 Usar mi ubicación
-                        </button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-3">
-                        <input type="number" id="lat-in" placeholder="Latitud" step="any" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none">
-                        <input type="number" id="lng-in" placeholder="Longitud" step="any" class="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-mono focus:ring-2 focus:ring-blue-500 outline-none">
+                    <label class="text-xs font-bold text-slate-500 uppercase">1. Modelo 3D (.glb)</label>
+                    <div class="relative mt-1 group">
+                        <input type="file" id="model-in" accept=".glb" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        <div id="drop-zone" class="border-2 border-dashed border-slate-300 rounded-xl p-4 text-center bg-slate-50 transition group-hover:border-blue-400">
+                            <p id="file-lbl" class="text-sm font-medium text-slate-600 truncate">Toca para subir archivo</p>
+                        </div>
                     </div>
                 </div>
-
-                <!-- Botones Principales -->
-                <div class="pt-2 space-y-3">
-                    <button id="save-btn" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white p-4 rounded-xl font-bold text-lg shadow-lg shadow-emerald-200 transition transform active:scale-95">
-                        Guardar Datos
-                    </button>
-                    
-                    <div class="grid grid-cols-2 gap-3">
-                        <button id="map-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-bold text-sm transition" disabled>
-                            🗺️ Ver Mapa
-                        </button>
-                        <button id="scale-btn" class="bg-slate-100 hover:bg-slate-200 text-slate-700 p-3 rounded-xl font-bold text-sm transition">
-                            📏 Escala
-                        </button>
+                <!-- Coordinates -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs font-bold text-slate-500 uppercase">2. Coordenadas</label>
+                        <button id="gps-btn" class="text-[10px] bg-blue-100 text-blue-700 px-2 py-1 rounded-full font-bold hover:bg-blue-200 flex gap-1">📍 Mi Ubicación</button>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <input type="number" id="lat-in" placeholder="Latitud" class="w-full p-3 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
+                        <input type="number" id="lng-in" placeholder="Longitud" class="w-full p-3 bg-slate-50 border rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>
-                
-                <div class="text-center pt-4">
-                    <button onclick="localStorage.clear(); location.reload();" class="text-xs text-red-400 hover:text-red-600 font-medium">⚠ Reiniciar Aplicación</button>
+                <!-- Buttons -->
+                <button id="save-btn" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:bg-emerald-700 active:scale-95 transition">💾 Guardar Datos</button>
+                <div class="grid grid-cols-2 gap-3">
+                    <button id="btn-goto-map" class="bg-white border text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition">🗺️ Mapa</button>
+                    <button id="btn-goto-scale" class="bg-white border text-slate-700 py-3 rounded-xl font-bold text-sm hover:bg-slate-50 active:scale-95 transition">📏 Escala</button>
                 </div>
+                <div class="text-center pt-2"><button onclick="if(confirm('¿Reset?')) location.reload()" class="text-xs text-red-300 underline">Resetear App</button></div>
             </div>
         </div>
     </div>
 
-    <!-- PÁGINA 2: MAPA SATELITAL -->
+    <!-- 2. MAP PAGE -->
     <div id="map-page" class="page">
-        <div id="map-container"></div>
-        
-        <!-- Controles Mapa -->
-        <div class="absolute top-4 left-4 z-[500]">
-            <button onclick="nav('upload')" class="bg-white/90 backdrop-blur shadow-md px-4 py-2 rounded-xl font-bold text-slate-700 text-sm">
-                ← Volver
-            </button>
+        <div id="map-c" class="w-full h-full z-0"></div>
+        <div class="absolute top-4 left-4 z-20">
+            <button onclick="app.nav('upload')" class="bg-white/90 backdrop-blur px-4 py-2 rounded-lg shadow font-bold text-xs text-slate-700 active:scale-95 transition">← Volver</button>
         </div>
-
-        <div class="absolute bottom-8 inset-x-4 z-[500] flex justify-center">
-            <div class="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl w-full max-w-sm">
-                <div class="text-center mb-3">
-                    <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">Ubicación Objetivo</p>
-                    <p class="text-xs text-slate-400">Mueve el mapa para ajustar</p>
-                </div>
-                <div class="flex gap-3">
-                    <button id="set-loc-btn" class="flex-1 bg-orange-500 hover:bg-orange-600 text-white py-3 rounded-xl font-bold shadow-lg shadow-orange-200 text-sm">
-                        FIJAR AQUÍ
-                    </button>
-                    <button id="ar-start-btn" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold shadow-lg shadow-blue-200 text-sm">
-                        INICIAR AR
-                    </button>
+        <div class="absolute bottom-8 left-0 w-full px-6 z-20 pointer-events-none">
+            <div class="bg-white/95 backdrop-blur p-4 rounded-2xl shadow-2xl pointer-events-auto text-center max-w-sm mx-auto">
+                <p class="text-xs text-slate-500 mb-3 font-medium">Mueve el mapa para ajustar el objetivo</p>
+                <div class="flex gap-2">
+                    <button id="map-set" class="flex-1 bg-orange-500 text-white py-3 rounded-xl font-bold text-xs shadow active:scale-95 transition">FIJAR AQUÍ</button>
+                    <button onclick="app.preStartAR()" class="flex-1 bg-blue-600 text-white py-3 rounded-xl font-bold text-xs shadow active:scale-95 transition">INICIAR AR 🚀</button>
                 </div>
             </div>
         </div>
-
-        <!-- Cruz Central -->
-        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-[400] drop-shadow-lg">
-            <svg width="40" height="40" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <circle cx="20" cy="20" r="15" stroke="white" stroke-width="3"/>
-                <line x1="20" y1="0" x2="20" y2="40" stroke="white" stroke-width="2"/>
-                <line x1="0" y1="20" x2="40" y2="20" stroke="white" stroke-width="2"/>
-                <circle cx="20" cy="20" r="3" fill="#ef4444"/>
-            </svg>
+        <!-- Crosshair -->
+        <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none z-10">
+            <div class="w-8 h-8 border-2 border-white rounded-full shadow-lg"></div>
+            <div class="w-1 h-1 bg-red-500 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"></div>
         </div>
     </div>
 
-    <!-- PÁGINA 3: ESCALA -->
-    <div id="scale-page" class="page">
-        <div class="flex flex-col h-full p-6 max-w-md mx-auto justify-center bg-white">
-            <h2 class="text-2xl font-bold text-slate-800 mb-2">Dimensiones</h2>
-            <p class="text-sm text-slate-500 mb-8">Configura el tamaño real para asegurar escala 1:1</p>
-            
-            <div class="space-y-6">
-                <div class="grid grid-cols-3 gap-4">
-                    <div class="space-y-2">
-                        <label class="text-xs font-bold text-slate-400">ANCHO (X)</label>
-                        <input id="dim-w" type="number" class="w-full bg-slate-50 border p-3 rounded-xl text-center font-mono font-bold" value="10">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-xs font-bold text-slate-400">ALTO (Y)</label>
-                        <input id="dim-h" type="number" class="w-full bg-slate-50 border p-3 rounded-xl text-center font-mono font-bold" value="3">
-                    </div>
-                    <div class="space-y-2">
-                        <label class="text-xs font-bold text-slate-400">FONDO (Z)</label>
-                        <input id="dim-d" type="number" class="w-full bg-slate-50 border p-3 rounded-xl text-center font-mono font-bold" value="10">
-                    </div>
+    <!-- 3. SCALE PAGE -->
+    <div id="scale-page" class="page items-center justify-center p-4 bg-white">
+        <div class="w-full max-w-md space-y-5">
+            <h2 class="text-xl font-bold text-center text-slate-800">Dimensiones Reales (m)</h2>
+            <div class="space-y-3">
+                <div><label class="text-[10px] font-bold text-slate-400">ANCHO (X)</label><input id="d-w" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="10"></div>
+                <div><label class="text-[10px] font-bold text-slate-400">ALTO (Y)</label><input id="d-h" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="3"></div>
+                <div><label class="text-[10px] font-bold text-slate-400">FONDO (Z)</label><input id="d-d" type="number" class="w-full bg-slate-50 border p-3 rounded-xl font-mono font-bold" value="10"></div>
+                <div class="pt-4 border-t">
+                    <label class="text-[10px] font-bold text-slate-400 flex justify-between"><span>DISTANCIA VISIBLE</span><span id="dist-txt" class="text-blue-600">100m</span></label>
+                    <input id="d-dist" type="range" min="10" max="500" value="100" class="w-full mt-2">
                 </div>
-                
-                <div class="pt-6 border-t border-slate-100">
-                    <div class="flex justify-between mb-2">
-                        <label class="text-xs font-bold text-slate-500 uppercase">Distancia de Visión</label>
-                        <span id="dist-lbl" class="text-xs font-bold text-blue-600 font-mono">100m</span>
-                    </div>
-                    <input id="dim-dist" type="range" min="10" max="1000" value="100" class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer">
-                </div>
-
-                <div class="flex gap-3 pt-4">
-                    <button onclick="nav('upload')" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold">Cancelar</button>
-                    <button id="save-dims-btn" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-200">Guardar</button>
-                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="app.nav('upload')" class="flex-1 py-3 bg-slate-100 text-slate-600 rounded-xl font-bold active:scale-95 transition">Cancelar</button>
+                <button id="save-dims" class="flex-1 py-3 bg-blue-600 text-white rounded-xl font-bold shadow active:scale-95 transition">Guardar</button>
             </div>
         </div>
     </div>
 
-    <!-- PÁGINA 4: EXPERIENCIA AR (ARJS + AFRAME) -->
+    <!-- 4. AR PAGE -->
     <div id="ar-page" class="page bg-black">
+        <div id="ar-c"></div>
         
-        <!-- Contenedor 3D -->
-        <div id="ar-scene-container"></div>
-
-        <!-- Overlay de Inicio iOS (Seguridad Crítica) -->
-        <div id="ios-start-overlay" class="ios-overlay hidden">
-            <div class="text-center p-6">
-                <div class="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse">
-                    <svg class="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+        <!-- AR UI Layer -->
+        <div class="absolute inset-0 pointer-events-none z-50 flex flex-col justify-between p-4">
+            <!-- Top Bar -->
+            <div class="flex justify-between items-start pointer-events-auto">
+                <div class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full text-xs font-mono border border-white/10 shadow-lg">
+                    GPS: <span id="ar-gps" class="text-yellow-400">...</span>
                 </div>
-                <h3 class="text-white text-xl font-bold mb-2">Habilitar Cámara</h3>
-                <p class="text-gray-400 text-sm mb-6">iOS requiere permiso manual para iniciar video</p>
-                <button id="ios-go-btn" class="bg-white text-black px-8 py-3 rounded-full font-bold text-lg hover:bg-gray-200 transition">
-                    INICIAR EXPERIENCIA
-                </button>
+                <button onclick="$('adj-p').classList.toggle('hidden')" class="bg-black/60 backdrop-blur p-2 rounded-lg text-white border border-white/10 shadow-lg active:scale-95 transition">⚙️ Ajustes</button>
             </div>
-        </div>
-
-        <!-- Interfaz AR -->
-        <div class="ar-ui flex flex-col justify-between p-4">
             
-            <!-- Cabecera -->
-            <div class="flex justify-between items-start">
-                <div class="bg-black/60 backdrop-blur px-4 py-2 rounded-full border border-white/10">
-                    <span class="text-xs font-bold text-gray-400 mr-2">GPS</span>
-                    <span id="gps-status-ar" class="text-xs font-mono font-bold text-red-500">Buscando...</span>
-                </div>
-                <button id="panel-toggle" class="pointer-auto bg-black/60 backdrop-blur p-3 rounded-xl border border-white/10 text-white">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
-                </button>
-            </div>
-
-            <!-- Panel de Ajustes (Lado Derecho) -->
-            <div id="adjust-panel" class="pointer-auto glass-panel absolute right-4 top-16 w-64 rounded-2xl p-5 text-white transform transition-transform duration-300 origin-top-right scale-100">
-                <h4 class="text-xs font-bold text-gray-400 uppercase mb-4 tracking-wider border-b border-white/10 pb-2">Calibración en Obra</h4>
-                
-                <div class="space-y-5">
-                    <!-- Opacidad -->
-                    <div>
-                        <div class="flex justify-between text-xs mb-1">
-                            <span>👁️ Rayos X</span>
-                            <span id="op-val" class="font-mono text-blue-400">100%</span>
-                        </div>
-                        <input type="range" id="opacity-slider" min="0" max="1" step="0.1" value="1">
-                    </div>
-
-                    <!-- Altura -->
-                    <div>
-                        <div class="flex justify-between text-xs mb-1">
-                            <span>↕️ Altura Suelo</span>
-                            <span id="h-val" class="font-mono text-blue-400">0.0m</span>
-                        </div>
-                        <input type="range" id="height-slider" min="-10" max="10" step="0.1" value="0">
-                    </div>
-
-                    <!-- Escala -->
-                    <div>
-                        <div class="flex justify-between text-xs mb-1">
-                            <span>📐 Escala</span>
-                            <span id="s-val" class="font-mono text-blue-400">1.0x</span>
-                        </div>
-                        <input type="range" id="scale-slider" min="0.1" max="3.0" step="0.05" value="1.0">
-                    </div>
-
-                    <!-- Rotación -->
-                    <div>
-                        <div class="flex justify-between text-xs mb-1">
-                            <span>↻ Rotación</span>
-                            <span id="r-val" class="font-mono text-blue-400">0°</span>
-                        </div>
-                        <input type="range" id="rot-slider" min="0" max="360" step="1" value="0">
-                    </div>
+            <!-- Adjustment Panel -->
+            <div id="adj-p" class="absolute top-14 right-4 w-64 bg-black/80 backdrop-blur p-4 rounded-2xl border border-white/10 text-white pointer-events-auto hidden transition-all">
+                <h4 class="text-[10px] font-bold text-slate-400 uppercase mb-3 border-b border-white/10 pb-2">Calibración en Sitio</h4>
+                <div class="space-y-4">
+                    <div><div class="flex justify-between text-[10px] mb-1"><span>Rayos X (Opacidad)</span><span id="l-op" class="text-blue-400">100%</span></div><input type="range" id="s-op" min="0" max="1" step="0.1" value="1"></div>
+                    <div><div class="flex justify-between text-[10px] mb-1"><span>Altura Suelo</span><span id="l-h" class="text-blue-400">0m</span></div><input type="range" id="s-h" min="-10" max="10" step="0.5" value="0"></div>
+                    <div><div class="flex justify-between text-[10px] mb-1"><span>Escala</span><span id="l-s" class="text-blue-400">1.0x</span></div><input type="range" id="s-s" min="0.1" max="3" step="0.05" value="1"></div>
+                    <div><div class="flex justify-between text-[10px] mb-1"><span>Rotación</span><span id="l-r" class="text-blue-400">0°</span></div><input type="range" id="s-r" min="0" max="360" step="5" value="0"></div>
                 </div>
             </div>
 
-            <!-- Botones Inferiores -->
-            <div class="pointer-auto flex justify-center gap-4 pb-6">
-                <button onclick="window.location.reload()" class="glass-panel px-6 py-3 rounded-full text-red-400 font-bold text-sm hover:bg-red-900/30 transition">
-                    ✕ SALIR
+            <!-- Bottom Buttons -->
+            <div class="flex justify-center pointer-events-auto pb-8">
+                <button onclick="location.reload()" class="bg-red-500/90 backdrop-blur text-white px-8 py-3 rounded-full font-bold shadow-xl hover:bg-red-600 active:scale-95 transition text-sm flex items-center gap-2">
+                    ❌ SALIR
                 </button>
             </div>
         </div>
 
-        <!-- Loading Spinner -->
-        <div id="ar-loader" class="ios-overlay">
-            <div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
-            <p class="text-white font-bold tracking-wide">Construyendo Entorno 3D...</p>
+        <!-- Loader -->
+        <div id="ar-load" class="perm-overlay hidden">
+            <div class="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+            <p class="text-lg font-bold">Iniciando Motor AR...</p>
+            <p class="text-xs text-slate-400 mt-2">Esto puede tomar unos segundos</p>
         </div>
     </div>
 
     <script type="module">
         import * as THREE from 'three';
         
-        // CONFIGURACIÓN ESTADO
-        const CACHE_KEY = "ar-pro-v08";
-        
-        let state = {
-            modelUrl: null,
-            coords: { lat: 0, lng: 0 },
-            dims: { w: 10, h: 3, d: 10, dist: 100 },
-            adj: { h: 0, s: 1.0, r: 0, op: 1.0 }
-        };
-
-        let mapInst, marker;
-        let arEl = { scene: null, model: null };
-
-        // --- UTILIDADES ---
+        // UTILIDADES DOM
         const $ = id => document.getElementById(id);
-        const showToast = (msg, type='info') => {
-            const t = $('toast');
-            t.textContent = msg;
-            t.classList.remove('opacity-0');
-            t.style.transform = "translate(-50%, 0)";
-            setTimeout(() => {
-                t.classList.add('opacity-0');
-                t.style.transform = "translate(-50%, -20px)";
-            }, 3000);
+        const toast = msg => { 
+            const t = $('toast'); 
+            t.textContent = msg; 
+            t.classList.add('show'); 
+            setTimeout(() => t.classList.remove('show'), 3000); 
         };
 
-        window.nav = (pageId) => {
-            document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-            $(pageId + '-page').classList.add('active');
-            if(pageId === 'map') setTimeout(initMap, 100); // Pequeño delay para render correcto de Leaflet
+        // ESTADO GLOBAL
+        const st = { 
+            url: null, 
+            lat: 0, 
+            lng: 0, 
+            adj: { h: 0, s: 1, r: 0, op: 1 } 
         };
+        
+        let map, mk, arEnt;
 
-        // --- INICIO ---
-        window.onload = () => {
-            const saved = localStorage.getItem(CACHE_KEY);
-            if(saved) {
+        // --- LOGICA DE PERMISOS ---
+        const perms = {
+            req: async () => {
+                // 1. GPS
+                $('st-gps').textContent = "Solicitando...";
                 try {
-                    const data = JSON.parse(saved);
-                    state.coords = data.coords;
-                    state.dims = data.dims || state.dims;
-                    state.adj = data.adj || state.adj;
-                    
-                    $('lat-in').value = state.coords.lat;
-                    $('lng-in').value = state.coords.lng;
-                    $('map-btn').disabled = false;
-                    
-                    // Restaurar sliders AR
-                    $('height-slider').value = state.adj.h;
-                    $('scale-slider').value = state.adj.s;
-                    $('rot-slider').value = state.adj.r;
-                    $('opacity-slider').value = state.adj.op;
-                    updateLabels();
-                    
-                    console.log("Datos recuperados");
-                } catch(e) { console.error("Error cache", e); }
+                    await new Promise((res, rej) => navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 10000 }));
+                    $('st-gps').innerHTML = "✅ OK"; $('st-gps').className = "text-xs font-bold text-emerald-500";
+                } catch(e) { 
+                    alert("GPS Requerido. Por favor actívalo."); 
+                    $('st-gps').textContent = "❌ Error";
+                    return; 
+                }
+
+                // 2. CAMARA
+                $('st-cam').textContent = "Solicitando...";
+                try {
+                    const s = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+                    s.getTracks().forEach(t => t.stop()); // Liberar inmediatamente
+                    $('st-cam').innerHTML = "✅ OK"; $('st-cam').className = "text-xs font-bold text-emerald-500";
+                } catch(e) { 
+                    alert("Cámara Requerida."); 
+                    $('st-cam').textContent = "❌ Error";
+                    return; 
+                }
+
+                // 3. LANZAR
+                setTimeout(() => { 
+                    app.modal(false); 
+                    app.runAR(); 
+                }, 800);
             }
         };
 
-        function saveData() {
-            state.coords.lat = parseFloat($('lat-in').value) || 0;
-            state.coords.lng = parseFloat($('lng-in').value) || 0;
-            state.dims.w = parseFloat($('dim-w').value) || 10;
-            state.dims.h = parseFloat($('dim-h').value) || 3;
-            state.dims.d = parseFloat($('dim-d').value) || 10;
+        // --- LOGICA APP ---
+        const app = {
+            nav: p => { 
+                document.querySelectorAll('.page').forEach(x => x.classList.remove('active')); 
+                $(p + '-page').classList.add('active'); 
+                if(p === 'map') initMap(); 
+            },
             
-            localStorage.setItem(CACHE_KEY, JSON.stringify({
-                coords: state.coords,
-                dims: state.dims,
-                adj: state.adj
-            }));
-        }
+            modal: show => {
+                const m = $('perm-modal');
+                if(show) m.classList.remove('hidden');
+                else m.classList.add('hidden');
+            },
+
+            file: e => { 
+                const f = e.target.files[0]; 
+                if(f){ 
+                    st.url = URL.createObjectURL(f); 
+                    $('file-lbl').textContent = "✅ " + f.name; 
+                    $('drop-zone').classList.add('bg-blue-50','border-blue-500'); 
+                    toast("Modelo cargado en memoria");
+                } 
+            },
+            
+            gps: () => {
+                toast("Obteniendo GPS...");
+                navigator.geolocation.getCurrentPosition(p => {
+                    $('lat-in').value = p.coords.latitude.toFixed(6); 
+                    $('lng-in').value = p.coords.longitude.toFixed(6); 
+                    toast("Ubicación actualizada");
+                }, e => alert("Error GPS: " + e.message), { enableHighAccuracy: true });
+            },
+            
+            save: () => {
+                st.lat = parseFloat($('lat-in').value); 
+                st.lng = parseFloat($('lng-in').value);
+                if(!st.url) return toast("⚠️ Falta subir el Modelo 3D"); 
+                if(isNaN(st.lat)) return toast("⚠️ Faltan Coordenadas");
+                
+                // Persistencia simple
+                localStorage.setItem('ardata', JSON.stringify({lat:st.lat, lng:st.lng})); 
+                toast("Datos Guardados Correctamente"); 
+                app.nav('map');
+            },
+            
+            preStartAR: () => { 
+                if(!st.url) return toast("⚠️ No hay modelo cargado"); 
+                app.modal(true); 
+            },
+            
+            runAR: async () => {
+                app.nav('ar'); 
+                $('ar-load').classList.remove('hidden');
+                try { 
+                    await loadAR(); 
+                    initScene(); 
+                } catch(e) { 
+                    alert("Error Fatal: " + e); 
+                    location.reload(); 
+                }
+            }
+        };
 
         // --- MAPA ---
         function initMap() {
-            if(mapInst) { mapInst.invalidateSize(); return; }
-            
-            const lat = state.coords.lat || 0;
-            const lng = state.coords.lng || 0;
-            
-            // Usamos capas de Esri para imagen satelital gratuita de alta calidad
-            mapInst = L.map('map-container', { zoomControl: false }).setView([lat, lng], 18);
-            L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-                attribution: 'Esri', maxZoom: 20
-            }).addTo(mapInst);
-            
-            if(lat !== 0) {
-                marker = L.marker([lat, lng]).addTo(mapInst);
-            }
-        }
-
-        // --- REALIDAD AUMENTADA (CORE) ---
-        async function startAR() {
-            const fileInput = $('model-upload');
-            
-            // Verificación de seguridad
-            if(!fileInput.files[0] && !state.modelUrl) {
-                showToast("⚠️ Error: Debes subir el archivo .GLB primero");
-                return;
-            }
-
-            if(fileInput.files[0]) {
-                state.modelUrl = URL.createObjectURL(fileInput.files[0]);
-            }
-
-            nav('ar');
-            
-            try {
-                await loadARLibraries();
+            setTimeout(() => {
+                if(!map) {
+                    map = L.map('map-c').setView([st.lat||0, st.lng||0], 18);
+                    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{attribution:'Esri'}).addTo(map);
+                } else map.invalidateSize();
                 
-                // Si es iOS, mostrar botón de inicio explícito
-                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-                if(isIOS) {
-                    $('ar-loader').classList.add('hidden');
-                    $('ios-start-overlay').classList.remove('hidden');
-                    
-                    $('ios-go-btn').onclick = () => {
-                        $('ios-start-overlay').classList.add('hidden');
-                        $('ar-loader').classList.remove('hidden');
-                        buildScene();
-                    };
-                } else {
-                    buildScene();
+                const pos = [parseFloat($('lat-in').value)||0, parseFloat($('lng-in').value)||0];
+                if(pos[0] !== 0){ 
+                    if(mk) mk.setLatLng(pos); 
+                    else mk = L.marker(pos).addTo(map); 
+                    map.setView(pos, 18); 
                 }
-            } catch(e) {
-                alert("Error cargando librerías AR: " + e);
-                nav('upload');
-            }
+            }, 200);
         }
 
-        function buildScene() {
-            const container = $('ar-scene-container');
-            container.innerHTML = ''; // Limpieza
-
-            // Generación dinámica de la escena A-Frame
-            // Se usan flags específicos para mejorar rendimiento y estabilidad en móviles
-            const sceneHTML = `
-                <a-scene
-                    embedded
-                    vr-mode-ui="enabled: false"
-                    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false; sourceWidth:1280; sourceHeight:720; displayWidth: 1280; displayHeight: 720;"
-                    renderer="logarithmicDepthBuffer: true; colorManagement: true; sortObjects: true;"
-                    id="scene-root">
+        // --- AR SCENE ---
+        function initScene() {
+            // Limpieza
+            $('ar-c').innerHTML = '';
+            
+            // Inyección HTML A-Frame
+            const html = `
+                <a-scene 
+                    embedded 
+                    vr-mode-ui="enabled: false" 
+                    arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;" 
+                    renderer="logarithmicDepthBuffer: true; colorManagement: true; antialias: true;">
                     
-                    <!-- Cámara GPS con filtro de movimiento suave -->
-                    <a-camera 
-                        gps-camera="minDistance: 1; gpsTimeInterval: 500;" 
-                        rotation-reader 
-                        near="0.1" 
-                        far="10000"
-                    ></a-camera>
-
-                    <!-- Iluminación simulada de obra -->
-                    <a-light type="ambient" color="#ffffff" intensity="1.0"></a-light>
-                    <a-light type="directional" color="#ffffff" intensity="1.5" position="-1 1 0"></a-light>
-
-                    <!-- El Modelo -->
-                    <a-entity
-                        id="ar-model"
-                        gps-entity-place="latitude: ${state.coords.lat}; longitude: ${state.coords.lng};"
-                        position="0 ${state.adj.h} 0"
-                        scale="${state.adj.s} ${state.adj.s} ${state.adj.s}"
-                        rotation="0 ${state.adj.r} 0"
-                        gltf-model="${state.modelUrl}"
-                        visible="false"
-                        animation-mixer
-                    ></a-entity>
+                    <a-camera gps-camera="minDistance: 2;" rotation-reader near="0.1" far="10000"></a-camera>
+                    
+                    <a-light type="ambient" intensity="1"></a-light>
+                    <a-light type="directional" intensity="1.5" position="-1 1 0"></a-light>
+                    
+                    <a-entity 
+                        id="ent" 
+                        gps-entity-place="latitude: ${st.lat}; longitude: ${st.lng};" 
+                        position="0 0 0" 
+                        scale="1 1 1" 
+                        gltf-model="${st.url}" 
+                        visible="false">
+                    </a-entity>
                 </a-scene>
             `;
+            $('ar-c').innerHTML = html;
             
-            container.innerHTML = sceneHTML;
+            const el = document.querySelector('#ent'); 
+            arEnt = el;
 
-            const model = document.querySelector('#ar-model');
-
-            // Evento: Modelo Cargado
-            model.addEventListener('model-loaded', () => {
-                const mesh = model.getObject3D('mesh');
+            // Evento Carga Exitosa
+            el.addEventListener('model-loaded', () => {
+                // Truco Doble Cara (Ver Interiores)
+                const mesh = el.getObject3D('mesh');
                 if(mesh) {
-                    mesh.traverse(node => {
-                        if(node.isMesh) {
-                            // CLAVE: DoubleSide permite ver el interior de las paredes
-                            node.material.side = THREE.DoubleSide; 
-                            node.material.transparent = true;
-                            node.material.needsUpdate = true;
+                    mesh.traverse(n => { 
+                        if(n.isMesh){ 
+                            n.material.side = THREE.DoubleSide; 
+                            n.material.transparent = true; 
+                            n.material.needsUpdate = true; 
                         }
                     });
                 }
-                // Aplicar ajustes guardados
-                updateModelTransform();
-                
-                model.setAttribute('visible', 'true');
-                $('ar-loader').classList.add('hidden');
-                showToast("✅ Modelo Anclado en GPS");
-                arEl.model = model;
-            });
-
-            // Evento: Error Modelo
-            model.addEventListener('model-error', (e) => {
-                console.error(e);
-                alert("Error: El archivo GLB está corrupto o es demasiado complejo para este dispositivo.");
-                $('ar-loader').classList.add('hidden');
-                nav('upload');
+                el.setAttribute('visible', 'true'); 
+                $('ar-load').classList.add('hidden'); 
+                toast("✅ Modelo Anclado en el Mundo Real");
             });
             
-            setupGPSMonitor();
-        }
-
-        function setupGPSMonitor() {
-            if('geolocation' in navigator) {
-                navigator.geolocation.watchPosition(pos => {
-                    const acc = Math.round(pos.coords.accuracy);
-                    const el = $('gps-status-ar');
-                    el.textContent = `±${acc}m`;
-                    
-                    if(acc <= 5) el.className = "text-xs font-mono font-bold text-emerald-400";
-                    else if(acc <= 15) el.className = "text-xs font-mono font-bold text-yellow-400";
-                    else el.className = "text-xs font-mono font-bold text-red-500";
-                    
-                }, err => {}, { enableHighAccuracy: true });
-            }
-        }
-
-        // --- LOGICA INTERFAZ ---
-        
-        // File Input
-        $('model-upload').onchange = (e) => {
-            if(e.target.files[0]) {
-                $('file-label').textContent = e.target.files[0].name;
-                showToast("Archivo seleccionado");
-            }
-        };
-
-        // GPS Actual
-        $('gps-btn').onclick = () => {
-            if(!navigator.geolocation) return alert("GPS no disponible");
-            navigator.geolocation.getCurrentPosition(p => {
-                $('lat-in').value = p.coords.latitude.toFixed(6);
-                $('lng-in').value = p.coords.longitude.toFixed(6);
-                showToast("Ubicación actualizada");
+            // Evento Error
+            el.addEventListener('model-error', (e) => {
+                $('ar-load').classList.add('hidden');
+                alert("Error en el archivo GLB: " + e.detail);
+                app.nav('upload');
             });
-        };
 
-        // Navegación
-        $('save-btn').onclick = () => { saveData(); $('map-btn').disabled = false; showToast("Guardado ✓", "success"); };
-        $('map-btn').onclick = () => nav('map');
-        $('scale-btn').onclick = () => nav('scale');
-        $('save-dims-btn').onclick = () => { saveData(); nav('upload'); };
-        
-        // Fijar Mapa
-        $('set-loc-btn').onclick = () => {
-            const c = mapInst.getCenter();
-            $('lat-in').value = c.lat.toFixed(6);
-            $('lng-in').value = c.lng.toFixed(6);
-            saveData();
-            if(marker) marker.setLatLng(c);
-            else marker = L.marker(c).addTo(mapInst);
-            showToast("Ubicación fijada");
-        };
-        
-        $('ar-start-btn').onclick = startAR;
-
-        // Toggle Panel
-        let panelVisible = true;
-        $('panel-toggle').onclick = () => {
-            panelVisible = !panelVisible;
-            const p = $('adjust-panel');
-            p.style.transform = panelVisible ? 'scale(1)' : 'scale(0)';
-            p.style.opacity = panelVisible ? '1' : '0';
-        };
-
-        // Sliders Logic
-        function updateLabels() {
-            $('h-val').textContent = state.adj.h + 'm';
-            $('s-val').textContent = state.adj.s + 'x';
-            $('r-val').textContent = state.adj.r + '°';
-            $('op-val').textContent = Math.round(state.adj.op * 100) + '%';
+            // GPS Monitor
+            window.addEventListener('gps-camera-update-position', e => {
+                const acc = Math.round(e.detail.position.accuracy);
+                const txt = $('ar-gps');
+                txt.textContent = `±${acc}m`; 
+                txt.className = acc < 10 ? "text-emerald-400 font-bold" : "text-red-400 font-bold";
+            });
         }
 
-        function updateModelTransform() {
-            if(!arEl.model) return;
-            arEl.model.setAttribute('position', `0 ${state.adj.h} 0`);
-            arEl.model.setAttribute('scale', `${state.adj.s} ${state.adj.s} ${state.adj.s}`);
-            arEl.model.setAttribute('rotation', `0 ${state.adj.r} 0`);
+        // --- INICIALIZACIÓN ---
+        window.addEventListener('DOMContentLoaded', () => {
+            // Listeners Botones Principales
+            $('model-in').addEventListener('change', app.file);
+            $('gps-btn').addEventListener('click', app.gps);
+            $('save-btn').addEventListener('click', app.save);
+            $('btn-goto-map').addEventListener('click', () => app.nav('map'));
+            $('btn-goto-scale').addEventListener('click', () => app.nav('scale'));
             
-            // Rayos X Opacidad
-            const mesh = arEl.model.getObject3D('mesh');
-            if(mesh) {
-                mesh.traverse(n => {
-                    if(n.isMesh && n.material) n.material.opacity = state.adj.op;
-                });
-            }
-        }
+            // Mapa
+            $('map-set').addEventListener('click', () => { 
+                const c = map.getCenter(); 
+                $('lat-in').value = c.lat.toFixed(6); 
+                $('lng-in').value = c.lng.toFixed(6); 
+                st.lat = c.lat; st.lng = c.lng; 
+                if(mk) mk.setLatLng(c); else mk = L.marker(c).addTo(map); 
+                toast("📍 Ubicación Fijada"); 
+            });
 
-        ['height', 'scale', 'rot', 'opacity'].forEach(key => {
-            $(`${key}-slider`).oninput = (e) => {
-                const val = parseFloat(e.target.value);
-                if(key === 'height') state.adj.h = val;
-                if(key === 'scale') state.adj.s = val;
-                if(key === 'rot') state.adj.r = val;
-                if(key === 'opacity') state.adj.op = val;
-                updateLabels();
-                updateModelTransform();
+            // Escala
+            $('save-dims').addEventListener('click', () => { 
+                toast("Dimensiones Guardadas"); 
+                app.nav('upload'); 
+            });
+            
+            // Permisos
+            $('btn-grant').addEventListener('click', perms.req);
+            
+            // Sliders Tiempo Real
+            const upd = () => {
+                if(!arEnt) return;
+                arEnt.setAttribute('position', `0 ${st.adj.h} 0`); 
+                arEnt.setAttribute('scale', `${st.adj.s} ${st.adj.s} ${st.adj.s}`); 
+                arEnt.setAttribute('rotation', `0 ${st.adj.r} 0`);
+                const m = arEnt.getObject3D('mesh');
+                if(m) m.traverse(n => { if(n.isMesh) n.material.opacity = st.adj.op; });
             };
-        });
-        
-        $('dim-dist').oninput = (e) => $('dist-lbl').textContent = e.target.value + 'm';
+            
+            $('s-op').oninput = e => { st.adj.op = parseFloat(e.target.value); $('l-op').textContent=Math.round(st.adj.op*100)+'%'; upd(); };
+            $('s-h').oninput = e => { st.adj.h = parseFloat(e.target.value); $('l-h').textContent=st.adj.h+'m'; upd(); };
+            $('s-s').oninput = e => { st.adj.s = parseFloat(e.target.value); $('l-s').textContent=st.adj.s+'x'; upd(); };
+            $('s-r').oninput = e => { st.adj.r = parseFloat(e.target.value); $('l-r').textContent=st.adj.r+'°'; upd(); };
+            $('d-dist').oninput = e => $('dist-txt').textContent = e.target.value+'m';
 
+            // Exponer app globalmente
+            window.app = app;
+        });
     </script>
 </body>
 </html>
