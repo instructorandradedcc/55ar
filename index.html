@@ -51,7 +51,7 @@
         /* Map & AR */
         #map-canvas { flex: 1; width: 100%; z-index: 1; }
         a-scene { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 50; }
-        model-viewer { width: 100%; height: 100%; background-color: #222; }
+        model-viewer { width: 100%; height: 100%; background-color: #222; --poster-color: #222; }
 
         /* Loader */
         #loader { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; color: white; transition: opacity 0.3s; }
@@ -69,23 +69,40 @@
         .pad-btn { width: 45px; height: 45px; background: rgba(255,255,255,0.15); color: white; border-radius: 8px; font-size: 20px; display: flex; align-items: center; justify-content: center; }
         .pad-btn:active { background: #2563eb; }
 
-        /* Version Display (MEJORADO) */
-        .version-tag { 
-            position: absolute; bottom: 15px; right: 15px; 
-            font-size: 11px; color: #4b5563; /* Gris más oscuro */
+        /* Version Display (MEJORADO - COLOR ROJO PARA VERLO CLARO) */
+        #app-version-tag { 
+            position: fixed; bottom: 5px; right: 5px; 
+            font-size: 12px; color: #dc2626; /* Rojo para debugging */
             font-family: monospace; font-weight: bold;
-            pointer-events: none; 
-            background: rgba(0,0,0,0.05); padding: 2px 6px; border-radius: 4px;
+            z-index: 99999; pointer-events: none; 
+            background: rgba(255,255,255,0.9); padding: 4px 8px; border-radius: 6px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
         }
+
+        /* Controles Pre-AR (Interior) */
+        .pre-ar-controls {
+            position: absolute; top: 20px; right: 20px; z-index: 50;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+        .circle-btn {
+            width: 40px; height: 40px; border-radius: 50%; background: rgba(255,255,255,0.2);
+            backdrop-filter: blur(5px); border: 1px solid rgba(255,255,255,0.3);
+            color: white; display: flex; align-items: center; justify-content: center;
+            font-size: 20px; cursor: pointer;
+        }
+        .circle-btn:active { background: white; color: black; }
     </style>
 </head>
 <body>
+
+    <!-- VERSIÓN GLOBAL -->
+    <div id="app-version-tag">Cargando...</div>
 
     <!-- UI GLOBAL -->
     <div id="toast"><span>ℹ️</span><span id="toast-msg"></span></div>
     <div id="loader" class="hidden"><div class="spinner mb-4"></div><p id="loader-text">Cargando...</p></div>
 
-    <!-- VISTA 1: AUTH (Login/Registro) -->
+    <!-- VISTA 1: AUTH -->
     <div id="view-auth" class="view-section justify-center items-center p-6">
         <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl relative">
             <div class="text-center mb-8">
@@ -111,13 +128,10 @@
                  <p class="text-xs text-gray-400">¿Tienes un código de proyecto?</p>
                  <button id="guest-btn" class="text-blue-600 text-sm font-bold mt-1">Entrar como Espectador</button>
             </div>
-            
-            <!-- Etiqueta de Versión -->
-            <div class="version-tag" id="auth-version">v...</div>
         </div>
     </div>
 
-    <!-- VISTA 2: DASHBOARD (Lista de Proyectos) -->
+    <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view-section bg-gray-50">
         <div class="bg-white px-6 py-4 shadow-sm flex justify-between items-center z-20 sticky top-0">
             <div>
@@ -128,19 +142,17 @@
         </div>
 
         <div class="p-4 overflow-y-auto flex-1" id="projects-list">
-            <!-- Los proyectos se inyectan aquí -->
+            <!-- Lista -->
         </div>
 
         <div class="p-4 bg-white border-t border-gray-100 text-center">
             <button onclick="app.newProject()" class="btn-primary shadow-xl mb-2">
                 <span>+</span> Nuevo Proyecto AR
             </button>
-            <!-- Etiqueta de Versión Dashboard (Color oscuro) -->
-            <span class="text-xs text-gray-500 font-mono font-bold" id="dash-version">v...</span>
         </div>
     </div>
 
-    <!-- VISTA 3: EDITOR (Subida y Mapa) -->
+    <!-- VISTA 3: EDITOR -->
     <div id="view-editor" class="view-section">
         <div class="absolute top-4 left-4 z-[500]">
             <button onclick="app.navTo('dashboard')" class="bg-white w-10 h-10 rounded-full shadow-lg flex items-center justify-center font-bold text-gray-600">←</button>
@@ -198,15 +210,26 @@
     <div id="view-ar" class="view-section bg-black">
         <div id="ar-gps-container" class="w-full h-full absolute top-0 left-0"></div>
         
-        <div id="ar-surface-container" class="w-full h-full absolute top-0 left-0 hidden bg-gray-900">
+        <!-- Contenedor Surface (Interior) con Controles -->
+        <div id="ar-surface-container" class="w-full h-full absolute top-0 left-0 hidden bg-gray-900 z-[600]">
+            <div class="pre-ar-controls">
+                <button onclick="app.zoomViewer(0.1)" class="circle-btn">+</button>
+                <button onclick="app.zoomViewer(-0.1)" class="circle-btn">-</button>
+            </div>
+            
             <model-viewer id="viewer" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate touch-action="pan-y" ar-scale="fixed" ar-placement="floor" class="w-full h-full">
                 <button slot="ar-button" class="absolute bottom-8 left-1/2 transform -translate-x-1/2 bg-white text-black px-6 py-3 rounded-full font-bold shadow-lg flex items-center gap-2 z-50">
-                    📷 ABRIR CÁMARA
+                    📷 INICIAR CÁMARA AR
                 </button>
             </model-viewer>
             <button onclick="app.closeSurface()" class="absolute top-4 left-4 z-50 bg-white w-10 h-10 rounded-full shadow flex items-center justify-center">✕</button>
+            
+            <div class="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/50 text-white px-3 py-1 rounded-full text-xs backdrop-blur pointer-events-none text-center w-max">
+                Acomoda el modelo aquí antes de abrir la cámara
+            </div>
         </div>
 
+        <!-- UI GPS -->
         <div class="absolute top-4 left-4 flex gap-2 pointer-events-none z-50">
             <div id="gps-badge" class="bg-black/60 backdrop-blur text-white px-3 py-1 rounded-full border border-white/10">
                 <span class="text-xs font-mono">GPS: <span id="gps-acc">--</span>m</span>
@@ -245,9 +268,10 @@
         import { getAnalytics } from 'firebase/analytics';
 
         // --- VERSIÓN DE LA APP ---
-        const APP_VERSION = "9.02"; // Versión actualizada
+        const APP_VERSION = "9.05"; 
 
         // --- CONFIGURACIÓN ---
+        // VERIFICADA CON IMAGEN IMAGE_56555d.png
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWwwD72sPod5cOWmq0SYPIp6I",
             authDomain: "ar-constructor-v2.firebaseapp.com",
@@ -290,10 +314,8 @@
 
             displayVersion() {
                 const vText = `v${APP_VERSION}`;
-                const authEl = document.getElementById('auth-version');
-                const dashEl = document.getElementById('dash-version');
-                if(authEl) authEl.textContent = vText;
-                if(dashEl) dashEl.textContent = vText;
+                const tag = document.getElementById('app-version-tag');
+                if(tag) tag.textContent = vText;
                 console.log("AR System Init - Version:", APP_VERSION);
             }
 
@@ -603,6 +625,13 @@
                 document.getElementById('ar-surface-container').classList.remove('hidden');
             }
             closeSurface() { document.getElementById('ar-surface-container').classList.add('hidden'); }
+
+            zoomViewer(val) {
+                const viewer = document.getElementById('viewer');
+                const currentOrbit = viewer.getCameraOrbit();
+                const newRadius = currentOrbit.radius + val;
+                viewer.cameraOrbit = `${currentOrbit.theta}rad ${currentOrbit.phi}rad ${newRadius}m`;
+            }
             
             exitAR() {
                 if (window.location.search.includes('id')) window.location.reload();
