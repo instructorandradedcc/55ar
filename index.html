@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="theme-color" content="#0f172a">
-    <title>AR Constructor Pro v1.6</title>
+    <title>AR Constructor Pro v1.7</title>
     
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
@@ -95,7 +95,7 @@
             
             <p id="secure-warning" class="text-red-400 text-[10px] hidden mt-2">⚠️ Error: Sitio no seguro (HTTP). El GPS fallará.</p>
         </div>
-        <p class="text-[10px] text-gray-600 mt-8">v1.6 - Bulletproof</p>
+        <p class="text-[10px] text-gray-600 mt-8">v1.7 - Permission Fix</p>
     </div>
 
     <!-- 1. PÁGINA DE CARGA (UPLOAD) -->
@@ -235,60 +235,100 @@
 
         // --- LÓGICA DE LA APP ---
         const app = {
-            // 1. PERMISOS (VERIFICACIÓN ROBUSTA)
+            // 1. PERMISOS (VERIFICACIÓN ROBUSTA CON TIMEOUTS)
             checkPermissions: async () => {
-                const btn = getEl('btn-start-app');
-                const txtGps = getEl('txt-gps');
-                const txtCam = getEl('txt-cam');
+                const btn = document.getElementById('btn-start-app');
+                const txtGps = document.getElementById('txt-gps');
+                const txtCam = document.getElementById('txt-cam');
                 
-                // Verificar contexto seguro (HTTPS o localhost)
-                if (!window.isSecureContext) {
-                    if(getEl('secure-warning')) getEl('secure-warning').classList.remove('hidden');
+                if(!btn) {
+                    console.error("❌ Botón btn-start-app no encontrado");
+                    return;
                 }
-
-                if(btn) {
-                    btn.innerHTML = "⏳ Solicitando...";
-                    btn.disabled = true;
-                    btn.classList.add('opacity-50');
-                }
-
+                
+                console.log("🔔 Iniciando solicitud de permisos...");
+                btn.disabled = true;
+                btn.textContent = "⏳ Solicitando permisos...";
+                
                 try {
-                    // GPS
-                    await new Promise((resolve, reject) => {
-                        navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 12000 });
+                    // PASO 1: GPS
+                    console.log("📍 Solicitando acceso a GPS...");
+                    await new Promise((resolve) => {
+                        const timeout = setTimeout(() => {
+                            console.warn("⚠️ GPS: Tiempo de espera agotado o denegado");
+                            if(txtGps) {
+                                txtGps.textContent = "⚠️ Denegado";
+                                txtGps.className = "text-yellow-400 font-bold text-xs";
+                            }
+                            resolve(); // Continuar aunque falle
+                        }, 8000);
+                        
+                        navigator.geolocation.getCurrentPosition(
+                            (pos) => {
+                                clearTimeout(timeout);
+                                console.log("✅ GPS permitido:", pos.coords);
+                                if(txtGps) {
+                                    txtGps.textContent = "✅ Permitido";
+                                    txtGps.className = "text-emerald-400 font-bold text-xs";
+                                }
+                                resolve();
+                            },
+                            (err) => {
+                                clearTimeout(timeout);
+                                console.warn("⚠️ GPS error:", err.message);
+                                if(txtGps) {
+                                    txtGps.textContent = "⚠️ Denegado";
+                                    txtGps.className = "text-yellow-400 font-bold text-xs";
+                                }
+                                resolve();
+                            },
+                            { enableHighAccuracy: true, timeout: 7000, maximumAge: 0 }
+                        );
                     });
-                    if(txtGps) {
-                        txtGps.textContent = "✅ OK";
-                        txtGps.className = "text-emerald-400 font-bold text-xs";
-                    }
-
-                    // CÁMARA
-                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-                    stream.getTracks().forEach(t => t.stop());
-                    if(txtCam) {
-                        txtCam.textContent = "✅ OK";
-                        txtCam.className = "text-emerald-400 font-bold text-xs";
-                    }
-
-                    // ÉXITO
-                    if(btn) {
-                        btn.innerHTML = "¡LISTO!";
-                        btn.classList.replace('bg-blue-600', 'bg-emerald-600');
+                    
+                    // PASO 2: Cámara
+                    console.log("📷 Solicitando acceso a Cámara...");
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ 
+                            video: { facingMode: 'environment' },
+                            audio: false 
+                        });
+                        console.log("✅ Cámara permitida");
+                        if(txtCam) {
+                            txtCam.textContent = "✅ Permitido";
+                            txtCam.className = "text-emerald-400 font-bold text-xs";
+                        }
+                        stream.getTracks().forEach(track => track.stop());
+                    } catch(camErr) {
+                        console.error("❌ Cámara error:", camErr.message);
+                        if(txtCam) {
+                            txtCam.textContent = "❌ Error";
+                            txtCam.className = "text-red-400 font-bold text-xs";
+                        }
+                        throw camErr;
                     }
                     
+                    // ÉXITO
+                    console.log("✅ TODOS LOS PERMISOS CONCEDIDOS");
+                    btn.textContent = "✅ ¡LISTO!";
+                    btn.classList.replace('bg-blue-600', 'bg-emerald-500');
+                    
                     setTimeout(() => {
-                        if(getEl('permission-screen')) getEl('permission-screen').style.display = 'none';
-                        if(getEl('upload-page')) getEl('upload-page').style.display = 'flex';
-                        app.loadCache();
-                    }, 1000);
+                        const permScreen = document.getElementById('permission-screen');
+                        const uploadPage = document.getElementById('upload-page');
+                        if(permScreen && uploadPage) {
+                            permScreen.style.display = 'none';
+                            uploadPage.style.display = 'flex';
+                            app.loadCache();
+                        }
+                    }, 1500);
 
-                } catch (e) {
-                    alert("ERROR DE PERMISOS: \n" + e.message + "\n\n1. Verifica que el sitio tenga candado (HTTPS).\n2. Activa el GPS del celular.\n3. Permite la cámara en la configuración del navegador.");
-                    if(btn) {
-                        btn.innerHTML = "REINTENTAR";
-                        btn.disabled = false;
-                        btn.classList.remove('opacity-50');
-                    }
+                } catch (error) {
+                    console.error("❌ ERROR EN PERMISOS:", error.name, error.message);
+                    btn.textContent = "❌ ERROR - Reintentar";
+                    btn.classList.add('bg-red-500');
+                    btn.disabled = false;
+                    alert("ERROR: " + error.message + "\n\nPor favor asegúrate de permitir cámara y ubicación en tu navegador.");
                 }
             },
 
@@ -508,18 +548,7 @@
             window.app = app; // Exponer globalmente
 
             // Pantalla 0: Permisos
-            // Pantalla 0: Permisos - Con verificación de elemento
-            const btnStart = document.getElementById('btn-start-app');
-            if(btnStart) {
-                btnStart.addEventListener('click', function(e) {
-                    e.preventDefault();
-                    console.log('🔔 Click en botón de permisos detectado');
-                    app.checkPermissions();
-                });
-                console.log('✅ Evento btn-start-app vinculado correctamente');
-            } else {
-                console.error('❌ CRÍTICO: Botón btn-start-app NO encontrado en el DOM');
-            }
+            bind('btn-start-app', 'click', app.checkPermissions);
 
             // Pantalla 1: Upload
             bind('btn-select-file', 'click', app.selectFile);
