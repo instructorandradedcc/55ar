@@ -91,12 +91,20 @@
             font-size: 20px; cursor: pointer;
         }
         .circle-btn:active { background: white; color: black; }
+
+        /* Botón Google Estilo */
+        .btn-google {
+            background-color: white; color: #757575; border: 1px solid #ddd; width: 100%;
+            padding: 12px; border-radius: 8px; display: flex; align-items: center; justify-content: center; gap: 10px;
+            font-weight: 600; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: 0.2s;
+        }
+        .btn-google:active { background-color: #f1f1f1; }
     </style>
 </head>
 <body>
 
     <!-- VERSIÓN GLOBAL -->
-    <div id="app-version-tag">v9.07 - Cargando...</div>
+    <div id="app-version-tag">v9.09 - Google Auth Fix</div>
 
     <!-- UI GLOBAL -->
     <div id="toast"><span>ℹ️</span><span id="toast-msg"></span></div>
@@ -104,28 +112,39 @@
 
     <!-- VISTA 1: AUTH -->
     <div id="view-auth" class="view-section justify-center items-center p-6">
-        <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl relative">
-            <div class="text-center mb-8">
-                <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg shadow-blue-200">🏗️</div>
-                <h1 class="text-2xl font-bold text-gray-900">AR Cloud Pro</h1>
-                <p class="text-sm text-gray-500">Plataforma de Gestión AR</p>
+        <div class="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl relative text-center">
+            <div class="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4 text-3xl shadow-lg shadow-blue-200">🏗️</div>
+            <h1 class="text-2xl font-bold text-gray-900">AR Cloud Pro</h1>
+            <p class="text-sm text-gray-500 mb-6">Plataforma de Gestión AR</p>
+
+            <!-- BOTÓN GOOGLE -->
+            <button onclick="app.loginGoogle()" class="btn-google mb-4">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="20" alt="Google">
+                <span>Continuar con Google</span>
+            </button>
+
+            <div class="flex items-center my-4">
+                <div class="flex-1 border-t border-gray-200"></div>
+                <span class="px-3 text-gray-400 text-xs">O usa correo</span>
+                <div class="flex-1 border-t border-gray-200"></div>
             </div>
 
-            <form id="auth-form" class="space-y-4">
+            <form id="auth-form" class="space-y-3 text-left">
                 <div>
-                    <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">CORREO ELECTRÓNICO</label>
-                    <input type="email" id="email" class="input-field" placeholder="ejemplo@empresa.com" required>
+                    <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">CORREO</label>
+                    <input type="email" id="email" class="input-field" placeholder="ejemplo@empresa.com">
                 </div>
                 <div>
                     <label class="block text-xs font-bold text-gray-500 mb-1 ml-1">CONTRASEÑA</label>
-                    <input type="password" id="password" class="input-field" placeholder="••••••••" required>
+                    <input type="password" id="password" class="input-field" placeholder="••••••••">
                 </div>
-                
-                <button type="submit" id="login-btn" class="btn-primary">Iniciar Sesión</button>
-                <button type="button" id="register-btn" class="btn-secondary">Crear Cuenta Nueva</button>
+                <div class="flex gap-2 pt-2">
+                    <button type="submit" id="login-btn" class="btn-primary flex-1">Entrar</button>
+                    <button type="button" id="register-btn" class="btn-secondary flex-1">Registrar</button>
+                </div>
             </form>
+            
             <div id="guest-link-container" class="mt-6 text-center border-t pt-4">
-                 <p class="text-xs text-gray-400">¿Tienes un código de proyecto?</p>
                  <button id="guest-btn" class="text-blue-600 text-sm font-bold mt-1">Entrar como Espectador</button>
             </div>
         </div>
@@ -262,15 +281,15 @@
     <!-- LOGICA -->
     <script type="module">
         import { initializeApp } from 'firebase/app';
-        import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
+        import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from 'firebase/auth';
         import { getFirestore, collection, doc, setDoc, getDoc, getDocs, query, where, updateDoc } from 'firebase/firestore';
         import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
         import { getAnalytics } from 'firebase/analytics';
 
         // --- VERSIÓN DE LA APP ---
-        const APP_VERSION = "9.07"; 
+        const APP_VERSION = "9.09"; 
 
-        // --- CONFIGURACIÓN ---
+        // --- CONFIGURACIÓN CORRECTA (TOMADA DE TU FOTO) ---
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWwwD72sPod5cOWmq0SYPIp6I",
             authDomain: "ar-constructor-v2.firebaseapp.com",
@@ -321,7 +340,7 @@
                 if ('serviceWorker' in navigator) {
                     const swCode = `
                         // CAMBIAMOS EL NOMBRE PARA FORZAR LIMPIEZA DE CACHE
-                        const CACHE_NAME = 'ar-models-v3-force-clean';
+                        const CACHE_NAME = 'ar-models-v5-force-clean';
                         
                         self.addEventListener('install', (event) => {
                             // Borrar caches viejos
@@ -381,6 +400,17 @@
                     const id = prompt("Ingresa el ID del Proyecto:");
                     if(id) window.location.href = `?id=${id}`;
                 });
+            }
+
+            async loginGoogle() {
+                const provider = new GoogleAuthProvider();
+                this.loader(true, "Conectando con Google...");
+                try { 
+                    await signInWithPopup(this.auth, provider); 
+                } catch (err) { 
+                    this.toast("Error Google: " + err.message, "error"); 
+                }
+                this.loader(false);
             }
 
             async handleLogin() {
@@ -683,3 +713,4 @@
     </script>
 </body>
 </html>
+
