@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.44</title>
+    <title>AR Constructor Pro v3.45</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -40,7 +40,7 @@
             background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); 
         }
         
-        /* Botón AR Verde - Estilos Base */
+        /* Botón AR Verde */
         .ar-green-btn {
             background-color: #4CAF50; 
             color: white;
@@ -52,7 +52,7 @@
             letter-spacing: 0.5px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             position: absolute;
-            bottom: 40px; /* Posición por defecto para CREAR */
+            bottom: 40px;
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -67,20 +67,18 @@
         }
         .ar-green-btn:active { transform: translateX(-50%) scale(0.95); }
         
-        /* Estado Minimizado (durante AR activo) */
         .ar-green-btn.minimized {
-            bottom: 180px;
-            transform: translateX(-50%) scale(0.8);
-            opacity: 0.8; 
+            bottom: 160px;
+            transform: translateX(-50%) scale(0.9);
+            opacity: 0.95; 
         }
 
-        /* NUEVO: Estado Flotante para VISUALIZAR (Evita solapamiento con panel inferior) */
         .ar-green-btn.floating-action {
-            bottom: 160px; /* Más arriba para dejar espacio al panel de GPS/Compartir */
-            background-color: #10B981; /* Un verde un poco más esmeralda */
+            bottom: 160px; 
+            background-color: #10B981; 
             box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4);
             border: 2px solid rgba(255,255,255,0.2);
-            z-index: 110; /* Encima de todo */
+            z-index: 110; 
         }
 
         /* Barra de Progreso */
@@ -141,9 +139,8 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.44 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.45 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
-        // URL pública base para generar los links de compartir
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
         let app, auth, db, storage;
@@ -222,7 +219,8 @@
             map: null,
             modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
             localProjects: [],
-            currentDraftId: null
+            currentDraftId: null,
+            pendingShareId: null // Para guardar ID mientras se pone la clave
         };
 
         class ARSystem {
@@ -233,7 +231,7 @@
             }
 
             initAuth() {
-                const self = this; // Capturamos contexto para evitar errores 'this' en APK
+                const self = this;
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
                     const params = new URLSearchParams(window.location.search);
@@ -269,13 +267,11 @@
                 this.loader(true, "Conectando..."); 
                 const provider = new GoogleAuthProvider();
                 provider.setCustomParameters({ prompt: 'select_account' });
-
-                try { 
-                    await signInWithPopup(auth, provider); 
-                } catch (e) { 
+                try { await signInWithPopup(auth, provider); } 
+                catch (e) { 
                     this.loader(false); 
                     if (e.message.includes("disallowed_useragent") || e.code === 'auth/operation-not-supported-in-this-environment') {
-                        alert("⚠️ ERROR DE GOOGLE (403): Detecta esta App como navegador simple.\n\nSOLUCIÓN: En tu 'Generador de APK', cambia el 'User Agent' por:\n\nMozilla/5.0 (Linux; Android 10; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0");
+                        alert("⚠️ ERROR 403: Configure 'User Agent' en su generador APK a: Mozilla/5.0 (Linux; Android 10; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0");
                     } else {
                         this.toast("Error Login: " + e.message, "error"); 
                     }
@@ -317,16 +313,11 @@
                             list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-500"><p>Sin actividad reciente</p></div>`;
                             return;
                         }
-                        
                         const logs = [];
                         snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
                         logs.forEach(log => this.renderAdminCard(log, list));
-
-                    }, (error) => {
-                        console.error("Error al cargar logs (Admin):", error);
-                    });
+                    }, (error) => { console.error("Error al cargar logs (Admin):", error); });
                     return;
                 }
 
@@ -334,35 +325,24 @@
                 state.localProjects = localProjs;
 
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
-
                 onSnapshot(projectsRef, async (snap) => {
                     const localProjs = await getAllLocalProjects();
                     state.localProjects = localProjs;
                     list.innerHTML = '';
-                    
                     const cloudMap = new Map();
                     snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
-
                     const merged = [...cloudMap.values()];
                     localProjs.forEach(lp => { if(!cloudMap.has(lp.id)) merged.push(lp); });
-
                     merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
                     if (merged.length === 0) { 
                         list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`; 
                         return; 
                     }
-                    
                     merged.forEach(p => this.renderUserProjectCard(p, list));
                 }, (error) => {
-                    console.error("Error al cargar proyectos (Usuario):", error);
                     list.innerHTML = '';
                     state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
-                    if (state.localProjects.length === 0) {
-                         list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube. Mostrando caché local.</p></div>`; 
-                    } else {
-                         this.toast("Error de conexión a la Nube. Mostrando caché local.", "warning");
-                    }
+                    if (state.localProjects.length === 0) list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube.</p></div>`;
                 });
             }
             
@@ -370,17 +350,23 @@
                 const date = new Date(log.createdAt).toLocaleString();
                 const isGlobal = log.status === 'Global (Publicado)';
                 const statusClass = isGlobal ? 'status-global' : 'status-local';
-                const buttonDisabled = !isGlobal;
                 
                 const item = document.createElement('div');
-                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity ${buttonDisabled ? 'admin-card-disabled' : ''}`;
+                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity`;
                 
+                // Mostrar Clave si existe
+                let passwordHtml = '';
+                if (log.password) {
+                    passwordHtml = `<div class="mt-2 bg-yellow-900/30 border border-yellow-600/50 p-2 rounded flex items-center gap-2"><span class="text-yellow-500">🔑 Clave:</span> <span class="font-mono font-bold">${log.password}</span></div>`;
+                }
+
                 item.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div>
                             <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
                             <h4 class="font-bold text-lg">${log.projectName}</h4>
                             <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
+                            ${passwordHtml}
                         </div>
                         <div class="text-right">
                             <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
@@ -388,9 +374,7 @@
                         </div>
                     </div>
                     <div class="mt-4">
-                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" 
-                                class="w-full text-black text-sm font-bold py-2 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed'}" 
-                                ${buttonDisabled ? 'disabled' : ''}>
+                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="w-full text-black text-sm font-bold py-2 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed'}" ${!isGlobal ? 'disabled' : ''}>
                             <span>${isGlobal ? '👀 Ver Modelo' : '🔒 Archivo en Móvil'}</span>
                         </button>
                     </div>
@@ -407,6 +391,12 @@
                     statusLabel = 'BORRADOR LOCAL';
                     statusClass = 'status-local';
                 }
+
+                // Badge de Observador
+                let observerBadge = '';
+                if (data.role === 'observer') {
+                    observerBadge = `<span class="ml-2 bg-blue-900/80 text-blue-200 text-[9px] px-2 py-0.5 rounded border border-blue-500/30">OBSERVADOR</span>`;
+                }
                 
                 const el = document.createElement('div');
                 el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
@@ -415,7 +405,7 @@
                         <div class="flex items-center gap-3">
                             <div class="w-12 h-12 rounded-xl bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl font-bold shadow-sm">${data.name.charAt(0).toUpperCase()}</div>
                             <div>
-                                <h3 class="font-bold text-white text-lg leading-tight">${data.name}</h3>
+                                <h3 class="font-bold text-white text-lg leading-tight flex items-center">${data.name} ${observerBadge}</h3>
                                 <div class="flex items-center gap-2 mt-1">
                                     <span class="status-badge ${statusClass}">${statusLabel}</span>
                                     <p class="text-xs text-slate-400 font-medium"><span>📅</span> ${date}</p>
@@ -428,10 +418,13 @@
                     </div>
                     <div class="flex gap-2 mt-2">
                         <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
-                        ${data.status !== 'global' ? 
+                        ${data.status !== 'global' && data.role !== 'observer' ? 
                             `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` 
-                            : 
-                            `<button onclick="app.shareProject('${data.id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>`
+                            : ''
+                        }
+                        ${data.status === 'global' ? 
+                            `<button onclick="app.initShareFlow('${data.id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>`
+                            : ''
                         }
                     </div>
                 `;
@@ -444,10 +437,8 @@
                 try {
                     const data = state.currentProject.data;
                     const newId = `imp_${Date.now()}`;
-                    
                     let blobUrl = document.getElementById('model-viewer-surface').src;
                     let blob = await fetch(blobUrl).then(r => r.blob());
-                    
                     await saveModelToCache(newId, blob);
                     
                     const newProject = {
@@ -458,45 +449,71 @@
                         calibration: data.calibration || { x:0, y:0, z:0, r:0, s:1 },
                         orientation: data.orientation || { roll: 0, pitch: 0, yaw: 0 },
                         status: 'local', 
+                        role: 'observer', // Marca como solo lectura
                         createdAt: new Date().toISOString()
                     };
-                    
                     await saveProjectToLocalDB(newProject);
-                    
-                    // Actualizamos la lista
                     state.localProjects.push(newProject);
-                    
                     this.loader(false);
-                    this.toast("✅ ¡Proyecto guardado! Abriendo...", "success");
-                    
-                    // Abrir directamente
-                    setTimeout(() => {
-                        this.openProject(newId, 'view');
-                    }, 1000);
-
+                    this.toast("✅ ¡Proyecto guardado!", "success");
+                    setTimeout(() => { this.openProject(newId, 'view'); }, 1000);
                 } catch(e) {
                     this.loader(false);
                     this.toast("Error al importar: " + e.message, "error");
                 }
             }
 
-            shareProject(id) {
-                let baseUrl = window.location.href.split('?')[0];
-                if (window.location.protocol === 'file:') {
-                    baseUrl = PUBLIC_HOST; 
+            // --- FLUJO DE COMPARTIR CON CONTRASEÑA ---
+            initShareFlow(id) {
+                state.pendingShareId = id;
+                this.toggleModal('password-protect', true);
+            }
+
+            async confirmShare() {
+                const id = state.pendingShareId;
+                const password = document.getElementById('share-password').value;
+                this.toggleModal('password-protect', false);
+                document.getElementById('share-password').value = ''; // Limpiar
+
+                if (password) {
+                    // Actualizar proyecto con la contraseña (y el log para admin)
+                    this.loader(true, "Generando link seguro...");
+                    try {
+                        const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                        
+                        // 1. Actualizar el documento del proyecto
+                        await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), { password: password });
+
+                        // 2. Actualizar o crear Log para Admin para que vea la clave
+                        // Buscar el log existente o crear uno nuevo es complejo, simplemente añadimos uno nuevo de actualización
+                        // O idealmente, actualizar el log existente si tuviéramos su ID. Simplifiquemos:
+                        // El admin verá el último estado si consultamos logs.
+                         await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
+                                userName: state.user.displayName || "Anónimo",
+                                userId: state.user.uid,
+                                projectName: "Actualización de Clave",
+                                status: "Clave Generada",
+                                createdAt: new Date().toISOString(),
+                                projectId: id,
+                                password: password // GUARDAMOS LA CLAVE PARA EL ADMIN
+                        });
+
+                    } catch(e) { console.error("Error guardando clave", e); }
+                    this.loader(false);
                 }
+                
+                this.shareLinkGenerado(id);
+            }
+
+            shareLinkGenerado(id) {
+                let baseUrl = window.location.href.split('?')[0];
+                if (window.location.protocol === 'file:') baseUrl = PUBLIC_HOST; 
                 const url = `${baseUrl}?id=${id}&uid=${state.user.uid}`;
                 
                 if (navigator.share) {
-                    navigator.share({
-                        title: 'AR Constructor Pro',
-                        text: 'Mira este modelo en AR:',
-                        url: url,
-                    })
-                    .then(() => console.log('Link compartido exitosamente'))
-                    .catch((error) => console.log('Error compartiendo:', error));
+                    navigator.share({ title: 'AR Constructor Pro', text: 'Te comparto este modelo:', url: url }).catch(console.error);
                 } else {
-                    navigator.clipboard.writeText(url).then(() => this.toast("🔗 Link copiado al portapapeles", "success"));
+                    navigator.clipboard.writeText(url).then(() => this.toast("🔗 Link copiado", "success"));
                 }
             }
 
@@ -504,83 +521,14 @@
                 this.loader(true, "Abriendo...");
                 try {
                     let data = state.localProjects.find(p => p.id === id);
-                    
                     if (!data) {
                         const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
                         if(snap.exists()) data = { id: snap.id, ...snap.data() };
                     }
-
                     if(!data) throw new Error("No encontrado");
                     state.currentProject = { id, data };
-                    
-                    this.navTo('surface'); 
-                    const viewer = document.getElementById('model-viewer-surface');
-
-                    let blob = await getModelFromCache(data.id) || await getModelFromCache(data.modelUrl);
-                    
-                    if(blob) {
-                        viewer.src = URL.createObjectURL(blob);
-                    } else if (data.status === 'global') {
-                        blob = await this.fetchAndCache(data.modelUrl);
-                        viewer.src = blob;
-                    } else {
-                        viewer.src = data.modelUrl;
-                    }
-                    
-                    // --- RESTAURAR METADATOS (Rotación y Escala) ---
-                    if(data.orientation) {
-                        state.modelOrientation = data.orientation;
-                        this.updateModelOrientation();
-                    }
-                    if (data.calibration && data.calibration.s) {
-                        const s = data.calibration.s;
-                        // Aplicar escala al modelo
-                        viewer.scale = `${s} ${s} ${s}`;
-                    }
-                    
-                    // --- CONFIGURAR BOTONES ---
-                    const arBtn = document.getElementById('force-ar-btn');
-                    if(arBtn) {
-                        arBtn.classList.remove('hidden', 'minimized');
-                        // Aplicar estilo flotante para que se vea encima del panel
-                        arBtn.classList.add('floating-action'); 
-                        arBtn.innerHTML = "👓 VER EN AR (MESA/PISO)";
-                        arBtn.onclick = () => { this.activateAR(); };
-                    }
-                    
-                    document.querySelector('.tools-panel').classList.add('hidden'); 
-
-                    const saveContainer = document.getElementById('save-container');
-                    saveContainer.classList.remove('hidden');
-                    
-                    const containerBtns = saveContainer.querySelector('.pointer-events-auto');
-                    
-                    // Limpiar botones extras previos
-                    const oldImpBtn = document.getElementById('btn-import-project');
-                    if(oldImpBtn) oldImpBtn.remove();
-                    const oldShareBtn = document.getElementById('btn-share-view');
-                    if(oldShareBtn) oldShareBtn.remove();
-
-                    // Añadir botón Compartir si el proyecto es global
-                    if (data.status === 'global') {
-                        let shareBtn = document.createElement('button');
-                        shareBtn.id = 'btn-share-view';
-                        shareBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
-                        shareBtn.innerHTML = "<span>🔗</span> COMPARTIR ESTE PROYECTO";
-                        shareBtn.onclick = () => { this.shareProject(data.id); };
-                        
-                        const helpText = containerBtns.querySelector('p');
-                        if(helpText) containerBtns.insertBefore(shareBtn, helpText);
-                    }
-
-                    const btn = document.getElementById('btn-capture-location');
-                    btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS GUARDADA";
-                    btn.onclick = () => { 
-                        this.navTo('ar'); 
-                        this.startARGPS(data); 
-                    };
-
+                    this.setupViewer(data);
                 } catch(e) { this.toast(e.message, "error"); }
                 this.loader(false);
             }
@@ -593,67 +541,118 @@
             }
             
             async openSharedProject(id, ownerUid) {
-                this.loader(true, "Descargando...");
+                this.loader(true, "Cargando...");
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
                     if(!snap.exists()) throw new Error("No encontrado");
                     
                     const data = snap.data();
-                    state.currentProject = { id, data, ownerUid };
-                    
-                    this.navTo('surface');
-                    const viewer = document.getElementById('model-viewer-surface');
+                    state.currentProject = { id, data, ownerUid }; // Guardar contexto temporal
 
-                    const url = await this.fetchAndCache(data.modelUrl);
-                    viewer.src = url;
-
-                    if(data.orientation) {
-                        state.modelOrientation = data.orientation;
-                        this.updateModelOrientation();
+                    // VERIFICAR CONTRASEÑA
+                    if (data.password) {
+                        this.loader(false);
+                        this.toggleModal('password-entry', true); // Pedir clave
+                        return;
                     }
-                    if (data.calibration && data.calibration.s) {
-                        const s = data.calibration.s;
-                        viewer.scale = `${s} ${s} ${s}`;
-                    }
+                    
+                    // Si no hay clave, abrir directamente
+                    this.loadSharedView(data);
+                    
+                } catch(e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
+            }
 
-                    document.getElementById('save-container').classList.add('hidden');
-                    document.querySelector('.tools-panel').classList.add('hidden'); 
-                    
-                    const arBtn = document.getElementById('force-ar-btn');
-                    if(arBtn) {
-                        arBtn.classList.remove('hidden', 'minimized');
-                        arBtn.classList.add('floating-action');
-                        arBtn.innerHTML = "👓 ENTRAR AL MODELO";
-                        arBtn.onclick = () => { this.activateAR(); };
-                    }
+            async checkSharePassword() {
+                const input = document.getElementById('access-password').value;
+                const realPassword = state.currentProject.data.password;
+                
+                if (input === realPassword) {
+                    this.toggleModal('password-entry', false);
+                    this.loadSharedView(state.currentProject.data);
+                } else {
+                    this.toast("❌ Contraseña Incorrecta", "error");
+                }
+            }
 
-                    const saveContainer = document.getElementById('save-container');
-                    saveContainer.classList.remove('hidden');
-                    
-                    const containerBtns = saveContainer.querySelector('.pointer-events-auto');
-                    
-                    // Limpiar botones previos
-                    const oldImpBtn = document.getElementById('btn-import-project');
-                    if(oldImpBtn) oldImpBtn.remove();
-                    
+            async loadSharedView(data) {
+                this.loader(true, "Descargando Modelo...");
+                await this.setupViewer(data, true);
+                this.loader(false);
+            }
+
+            async setupViewer(data, isShared = false) {
+                this.navTo('surface'); 
+                const viewer = document.getElementById('model-viewer-surface');
+                
+                let blob = await getModelFromCache(data.id) || await getModelFromCache(data.modelUrl);
+                if(blob) viewer.src = URL.createObjectURL(blob);
+                else if (data.status === 'global' || isShared) {
+                    blob = await this.fetchAndCache(data.modelUrl);
+                    viewer.src = blob;
+                } else viewer.src = data.modelUrl;
+                
+                if(data.orientation) {
+                    state.modelOrientation = data.orientation;
+                    this.updateModelOrientation();
+                }
+                if (data.calibration && data.calibration.s) {
+                    const s = data.calibration.s;
+                    viewer.scale = `${s} ${s} ${s}`;
+                }
+                
+                const arBtn = document.getElementById('force-ar-btn');
+                if(arBtn) {
+                    arBtn.classList.remove('hidden', 'minimized');
+                    arBtn.classList.add('floating-action');
+                    arBtn.innerHTML = "👓 VER EN AR (MESA/PISO)";
+                    arBtn.onclick = () => { this.activateAR(); };
+                }
+                
+                document.querySelector('.tools-panel').classList.add('hidden'); 
+                const saveContainer = document.getElementById('save-container');
+                saveContainer.classList.remove('hidden');
+                const containerBtns = saveContainer.querySelector('.pointer-events-auto');
+                
+                // Limpieza de botones
+                ['btn-import-project', 'btn-share-view'].forEach(bid => {
+                    const el = document.getElementById(bid);
+                    if(el) el.remove();
+                });
+
+                if (isShared) {
                     let impBtn = document.createElement('button');
                     impBtn.id = 'btn-import-project';
                     impBtn.className = "w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
-                    impBtn.innerHTML = "<span>💾</span> DESCARGAR A MI APP (IMPORTAR)";
+                    impBtn.innerHTML = "<span>💾</span> DESCARGAR A MI APP (OBSERVADOR)";
                     impBtn.onclick = () => { this.importSharedProject(); };
-                    
                     const helpText = containerBtns.querySelector('p');
                     if(helpText) containerBtns.insertBefore(impBtn, helpText);
-                    else containerBtns.appendChild(impBtn);
+                } else if (data.status === 'global') {
+                    let shareBtn = document.createElement('button');
+                    shareBtn.id = 'btn-share-view';
+                    shareBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
+                    shareBtn.innerHTML = "<span>🔗</span> COMPARTIR ESTE PROYECTO";
+                    shareBtn.onclick = () => { this.initShareFlow(data.id); };
+                    const helpText = containerBtns.querySelector('p');
+                    if(helpText) containerBtns.insertBefore(shareBtn, helpText);
+                }
 
-                    const mapBtn = document.getElementById('btn-capture-location');
-                    mapBtn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS ORIGINAL";
-                    mapBtn.onclick = () => { 
-                        this.navTo('ar'); 
-                        this.startARGPS(data); 
-                    };
-                    
+                const btn = document.getElementById('btn-capture-location');
+                btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS";
+                btn.onclick = () => { this.navTo('ar'); this.startARGPS(data); };
+            }
+
+            async openAdminProject(id, ownerUid) {
+                this.loader(true, "Cargando Admin...");
+                try {
+                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
+                    if(!snap.exists()) throw new Error("No encontrado");
+                    const data = snap.data();
+                    state.currentProject = { id, data, ownerUid };
+                    await this.setupViewer(data, false);
+                    this.toast(`Modo Admin: ${data.password ? 'Clave: ' + data.password : 'Sin clave'}`, "info");
                 } catch(e) { this.toast("Error: " + e.message, "error"); }
                 this.loader(false);
             }
@@ -680,7 +679,7 @@
                         viewer.activateAR(); 
                         this.onARStarted(); 
                     } catch(e) {
-                        this.toast("Error al activar Cámara AR: " + e.message, "error");
+                        this.toast("Error cámara: " + e.message, "error");
                     }
                 }
             }
@@ -689,20 +688,10 @@
                 setTimeout(() => {
                     document.getElementById('save-container').classList.remove('hidden');
                     document.getElementById('save-container').classList.add('slide-up-enter');
-                    
                     const arBtn = document.getElementById('force-ar-btn');
-                    const isCreating = !state.currentProject || state.currentProject.status === 'local'; 
-                    
-                    if(arBtn) {
-                        if(isCreating) {
-                            arBtn.classList.remove('floating-action');
-                            arBtn.classList.add('minimized'); 
-                        } else {
-                            // Si estamos viendo un proyecto, mantenemos el botón visible pero quizás ajustado
-                            arBtn.classList.add('floating-action');
-                            arBtn.classList.remove('minimized');
-                        }
-                    }
+                    const isCreating = !state.currentProject || (state.currentProject.status === 'local' && state.currentProject.role !== 'observer'); 
+                    if(arBtn && isCreating) { arBtn.classList.remove('floating-action'); arBtn.classList.add('minimized'); }
+                    else if (arBtn) { arBtn.classList.add('floating-action'); arBtn.classList.remove('minimized'); }
                 }, 2000); 
             }
 
@@ -716,7 +705,6 @@
                          state.draftData.calibration.s = s || 1;
                     }
                 }
-
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
                     this.saveLocalDraft(); 
@@ -730,10 +718,8 @@
 
             async saveLocalDraft() {
                 this.loader(true, "Guardando Localmente...");
-                
                 const projectId = `loc_${Date.now()}`;
                 state.currentDraftId = projectId;
-                
                 const projectData = {
                     id: projectId,
                     name: state.draftData.name,
@@ -744,15 +730,13 @@
                     status: 'local', 
                     createdAt: new Date().toISOString()
                 };
-
                 try {
                     if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
                     await saveProjectToLocalDB(projectData);
-
                     if(state.user) {
                         const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
-                            const userName = state.user.displayName || (state.user.isAnonymous ? `Invitado-${state.user.uid.substring(0, 4)}` : 'Usuario Registrado');
+                            const userName = state.user.displayName || "Anónimo";
                             await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                                 userName: userName,
                                 userId: state.user.uid,
@@ -761,16 +745,13 @@
                                 createdAt: new Date().toISOString(),
                                 projectId: projectId 
                             });
-                        } catch(e) { console.warn("No se pudo enviar log al admin (offline/permisos?):", e); }
+                        } catch(e) {}
                     }
-
                     this.loader(false);
                     this.toast("Guardado Local. Vamos al Mapa...", "success");
-                    
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
                     this.loadProjects(); 
-
                 } catch(e) {
                     this.loader(false);
                     this.toast("Error Memoria: " + e.message, "error");
@@ -780,18 +761,10 @@
             initMap(coords) {
                 const mapEl = document.getElementById('map');
                 if(state.map) { state.map.remove(); state.map = null; }
-                
                 state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
-                
-                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{
-                    maxZoom: 20,
-                    subdomains:['mt0','mt1','mt2','mt3'],
-                    attribution: 'Google Maps'
-                }).addTo(state.map);
-                
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Maps' }).addTo(state.map);
                 const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
                 const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
-                
                 marker.on('dragend', e => {
                     const ll = e.target.getLatLng();
                     state.draftData.coords = { lat: ll.lat, lon: ll.lng };
@@ -799,102 +772,50 @@
                 setTimeout(() => state.map.invalidateSize(), 500);
             }
 
-            async confirmAndPublishFromMap() {
-                if(!state.currentDraftId) return this.toast("Error: No hay borrador activo", "error");
-                
-                const localProjs = await getAllLocalProjects();
-                const current = localProjs.find(p => p.id === state.currentDraftId);
-                if(current) {
-                    current.coords = state.draftData.coords;
-                    await saveProjectToLocalDB(current);
-                }
-
-                this.publishProject(state.currentDraftId);
+            startARGPS(data) {
+                const container = document.getElementById('ar-container');
+                const scale = data.calibration && data.calibration.s ? data.calibration.s : state.calibration.s;
+                container.innerHTML = `
+                    <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
+                        <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
+                        <a-entity gps-entity-place="latitude: ${data.coords.lat}; longitude: ${data.coords.lon};">
+                            <a-entity id="ar-model-entity" position="${state.calibration.x} ${state.calibration.y} ${state.calibration.z}" rotation="0 ${state.calibration.r} 0" scale="${scale} ${scale} ${scale}">
+                                <a-gltf-model src="${data.modelUrl}" opacity="${state.calibration.opacity}" transparent="true"></a-gltf-model>
+                            </a-entity>
+                        </a-entity>
+                    </a-scene>`;
+                setTimeout(() => this.updateOpacity(state.calibration.opacity), 1500);
             }
 
-            async publishProject(id) {
-                let blob = await getModelFromCache(id);
-                if (!blob) {
-                    const proj = state.localProjects.find(p => p.id === id) || (state.currentProject && state.currentProject.data);
-                    if(proj) blob = await getModelFromCache(proj.modelUrl);
+            adjust(axis, val) {
+                const c = state.calibration;
+                if(axis === 'r') c.r += val;
+                else if (axis === 's') c.s = Math.max(0.1, c.s + val);
+                else c[axis] += val;
+                const el = document.getElementById('ar-model-entity');
+                if(el) {
+                    el.setAttribute('position', `${c.x} ${c.y} ${c.z}`);
+                    el.setAttribute('rotation', `0 ${c.r} 0`);
+                    el.setAttribute('scale', `${c.s} ${c.s} ${c.s}`);
                 }
-
-                if(!blob) return this.toast("Falta archivo local", "error");
-
-                this.loader(true, "Subiendo a la Nube...");
-                document.getElementById('progress-wrapper').classList.remove('hidden');
-                
-                try {
-                    const fileName = `${Date.now()}_model.glb`;
-                    const fileRef = ref(storage, `users/${state.user.uid}/${fileName}`);
-                    const uploadTask = uploadBytesResumable(fileRef, blob);
-
-                    uploadTask.on('state_changed', 
-                        (snapshot) => {
-                            const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
-                            document.getElementById('upload-progress').style.width = progress + '%';
-                            document.getElementById('loader-text').textContent = `SUBIENDO: ${Math.round(progress)}%`;
-                        }, 
-                        (error) => {
-                            this.loader(false);
-                            document.getElementById('progress-wrapper').classList.add('hidden');
-                            this.toast("Error subida: " + error.message, "error");
-                        }, 
-                        async () => {
-                            const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-                            const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                            
-                            let projData = state.localProjects.find(p => p.id === id);
-                            if(!projData) projData = await getModelFromCache(id);
-
-                            let docId = id.startsWith('loc_') ? undefined : id;
-
-                            const newDocRef = id.startsWith('loc_') ? collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects') : doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id);
-                            
-                            if (id.startsWith('loc_')) {
-                                const addedDoc = await addDoc(newDocRef, {
-                                    name: projData.name,
-                                    coords: state.draftData.coords,
-                                    calibration: projData.calibration,
-                                    orientation: projData.orientation,
-                                    modelUrl: downloadURL,
-                                    status: 'global',
-                                    createdAt: new Date().toISOString()
-                                });
-                                docId = addedDoc.id;
-                            } else {
-                                await updateDoc(newDocRef, {
-                                    modelUrl: downloadURL,
-                                    status: 'global',
-                                    coords: state.draftData.coords
-                                });
-                            }
-
-                            try {
-                                const userName = state.user.displayName || (state.user.isAnonymous ? `Invitado-${state.user.uid.substring(0, 4)}` : 'Usuario Registrado');
-                                await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                    userName: userName,
-                                    userId: state.user.uid,
-                                    projectName: projData.name,
-                                    status: "Global (Publicado)",
-                                    createdAt: new Date().toISOString(),
-                                    projectId: docId 
-                                });
-                            } catch(e){}
-
-                            this.loader(false);
-                            document.getElementById('progress-wrapper').classList.add('hidden');
-                            this.toast("¡Publicado! Visible para Admin.", "success");
-                            this.resetCreationState();
-                            this.navTo('dashboard');
-                            this.loadProjects();
-                        }
-                    );
-
-                } catch(e) {
-                    this.loader(false);
-                    this.toast("Error: " + e.message, "error");
+                this.toast(`${axis.toUpperCase()}: ${c[axis].toFixed(2)}`);
+            }
+            updateOpacity(val) {
+                state.calibration.opacity = parseFloat(val);
+                const model = document.querySelector('a-gltf-model');
+                if(model) model.setAttribute('opacity', val); 
+            }
+            async saveCalibration() {
+                // En modo observador, no guardamos cambios en la nube
+                if(state.currentProject.role === 'observer') {
+                    this.toast("Modo Observador: No se guardan cambios", "warning");
+                    return;
                 }
+                this.loader(true, "Actualizando...");
+                const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', state.currentProject.id), { calibration: state.calibration });
+                this.toast("Guardado");
+                this.loader(false);
             }
 
             toggleModal(id, show) {
@@ -910,19 +831,16 @@
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
-                
                 try {
                     const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
                 } catch(e) {}
-                
                 this.loadProjects();
             }
             updateVersionUI() { 
                 document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); 
             }
             
-            // Funciones adicionales necesarias para la vista AR
             navTo(id) {
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 document.getElementById(`view-${id}`).classList.add('active');
@@ -933,7 +851,6 @@
                 const textCol = type==='warning'?'text-black':'text-white';
                 if(type==='warning') { t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-xl z-[9999] transition-all duration-300 bg-yellow-400 ${textCol} border border-black/10`; }
                 else { t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${bg} border border-white/20`; }
-                
                 t.innerHTML = msg;
                 setTimeout(() => t.classList.add('-translate-y-24'), 3000);
                 t.classList.remove('-translate-y-24');
@@ -946,12 +863,7 @@
         }
         
         window.onload = () => { 
-            try {
-                window.app = new ARSystem(); 
-            } catch(e) {
-                console.error(e);
-                alert("Error iniciando App: " + e.message);
-            }
+            try { window.app = new ARSystem(); } catch(e) { console.error(e); alert("Error iniciando App: " + e.message); }
         };
     </script>
 </head>
@@ -968,6 +880,31 @@
         </div>
     </div>
 
+    <!-- MODAL PROTECCIÓN PASSWORD (COMPARTIR) -->
+    <div id="modal-password-protect" class="hidden fixed inset-0 z-[1000] bg-black/90 backdrop-blur-md p-6 flex items-center justify-center">
+        <div class="dark-card w-full max-w-sm p-6 rounded-2xl shadow-2xl text-center">
+            <div class="mb-4 text-4xl">🔒</div>
+            <h3 class="text-xl font-bold text-white mb-2">Proteger con Clave</h3>
+            <p class="text-xs text-slate-400 mb-4">Opcional: Agrega una contraseña para que solo quien tú quieras pueda ver y descargar este modelo.</p>
+            <input type="text" id="share-password" placeholder="Sin clave (dejar vacío)" class="w-full bg-white/10 border border-white/20 p-3 rounded-xl text-white text-center font-mono tracking-widest mb-4 focus:border-indigo-500 outline-none">
+            <div class="flex gap-2">
+                <button onclick="app.toggleModal('password-protect', false)" class="flex-1 py-3 rounded-xl font-bold text-slate-400 bg-white/5">Cancelar</button>
+                <button onclick="app.confirmShare()" class="flex-1 py-3 rounded-xl font-bold bg-indigo-600 text-white shadow-lg">Generar Link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL INGRESO PASSWORD (ACCESO) -->
+    <div id="modal-password-entry" class="hidden fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
+        <div class="dark-card w-full max-w-sm p-8 rounded-2xl shadow-2xl text-center border border-red-500/30">
+            <div class="mb-4 text-4xl animate-bounce">🔐</div>
+            <h3 class="text-2xl font-black text-white mb-1">ACCESO PRIVADO</h3>
+            <p class="text-sm text-red-400 mb-6 font-medium">Este proyecto está protegido.</p>
+            <input type="password" id="access-password" placeholder="Ingresa la clave" class="w-full bg-black border border-white/20 p-4 rounded-xl text-white text-center text-lg font-bold tracking-widest mb-6 focus:border-red-500 outline-none">
+            <button onclick="app.checkSharePassword()" class="w-full py-4 rounded-xl font-black bg-white text-black shadow-xl hover:scale-105 transition">DESBLOQUEAR</button>
+        </div>
+    </div>
+
     <!-- VISTA 1: LOGIN -->
     <div id="view-auth" class="view justify-center items-center p-6 hero-bg-dark">
         <div class="ver-badge">Ver: <span id="version-display">...</span></div>
@@ -979,14 +916,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.44</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.45</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.44</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.45</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
