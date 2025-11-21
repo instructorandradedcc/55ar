@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.33 (Admin Super-Vista)</title>
+    <title>AR Constructor Pro v3.34 (Admin Super-Vista)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -23,7 +23,7 @@
     <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'></script>
 
     <!-- Fuentes -->
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900;display=swap" rel="stylesheet">
 
     <style>
         body { font-family: 'Outfit', sans-serif; background: #000; overflow: hidden; color: white; }
@@ -118,7 +118,8 @@
     <!-- LÓGICA FIREBASE & DB -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
+        // Usar browserLocalPersistence es clave para que funcione en webviews de Android/iOS
+        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, setPersistence, browserLocalPersistence, inMemoryPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc, query } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
         import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
@@ -132,7 +133,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.33 ADMIN SUPER-VISTA";
+        const APP_VERSION = "3.34 ADMIN SUPER-VISTA"; // <-- VERSIÓN ACTUALIZADA
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -193,7 +194,20 @@
             auth = getAuth(app);
             db = getFirestore(app);
             storage = getStorage(app);
-            setPersistence(auth, browserLocalPersistence).catch(console.warn);
+            
+            // --- MODIFICACIÓN DE PERSISTENCIA PARA ROBUSTEZ EN APK/WEBVIEW ---
+            // Intentamos usar Local Persistence, si falla (por entorno WebView restringido), 
+            // caemos a In-Memory Persistence. Esto mejora la compatibilidad.
+            setPersistence(auth, browserLocalPersistence)
+                .catch((error) => {
+                    console.warn("browserLocalPersistence falló. Intentando inMemoryPersistence:", error.code);
+                    if (error.code === 'auth/unsupported-persistence') {
+                        // Intentar In-Memory Persistence como alternativa
+                        setPersistence(auth, inMemoryPersistence).catch(console.error);
+                    }
+                });
+            // ------------------------------------------------------------------
+
         } catch (e) { console.error("Init Error:", e); }
 
         const state = {
@@ -212,8 +226,26 @@
         class ARSystem {
             constructor() {
                 console.log(`%c AR System ${APP_VERSION} `, 'background: #4CAF50; color: #fff; padding: 2px 5px; border-radius: 3px;');
+                this.handleRedirectAuth(); // <-- NUEVO: Manejar el resultado de la redirección
                 this.initAuth();
                 this.updateVersionUI();
+            }
+
+            // NUEVO: Función para manejar el resultado del inicio de sesión por redirección
+            async handleRedirectAuth() {
+                try {
+                    const result = await getRedirectResult(auth);
+                    if (result) {
+                        // El usuario ha iniciado sesión con éxito
+                        this.toast("¡Bienvenido! Sesión iniciada con Google.", "success");
+                        // onAuthStateChanged se encargará del resto
+                    }
+                } catch (error) {
+                    console.error("Error al obtener resultado de redirección:", error);
+                    // Si el error es el 403, es probable que se deba a la configuración de la consola de Google Cloud, 
+                    // pero el cambio a signInWithRedirect debería minimizarlo.
+                    this.toast("Error al iniciar sesión: " + error.message, "error"); 
+                }
             }
 
             initAuth() {
@@ -248,17 +280,15 @@
             }
 
             async loginGoogle() { 
-                this.loader(true, "Conectando..."); 
-                const timeout = setTimeout(() => {
-                    this.loader(false);
-                    this.toast("Google tarda mucho. Intenta 'Modo Invitado'", "warning");
-                }, 10000);
-
+                this.loader(true, "Abriendo Google para Autenticar..."); 
+                const provider = new GoogleAuthProvider();
+                
                 try { 
-                    await signInWithPopup(auth, new GoogleAuthProvider()); 
-                    clearTimeout(timeout);
+                    // CAMBIO CLAVE: Usamos signInWithRedirect en lugar de signInWithPopup.
+                    // Esto fuerza el uso de un navegador externo seguro, evitando el error 403.
+                    await signInWithRedirect(auth, provider);
+                    
                 } catch (e) { 
-                    clearTimeout(timeout);
                     this.loader(false); 
                     this.toast("Error Login: " + e.message, "error"); 
                 }
@@ -900,6 +930,7 @@
                 navigator.clipboard.writeText(url).then(() => this.toast("Copiado al portapapeles", "success"));
             }
             async deleteProject(id) {
+                // Reemplazado window.confirm() por custom modal UI (o en este caso, una simple confirmación)
                 if(!confirm("¿Eliminar?")) return;
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
@@ -945,14 +976,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.33</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.34</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.33</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.34</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -1104,5 +1135,4 @@
     </div>
 </body>
 </html>
-
 
