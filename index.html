@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.50</title>
+    <title>AR Constructor Pro v3.51</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -88,7 +88,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.50 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.51 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -166,6 +166,9 @@
                 this.updateVersionUI();
             }
 
+            // --- FUNCIONES DE UI Y ESTADO ---
+            // IMPORTANTISIMO: Definidas al principio de la clase para que 'this' las encuentre siempre
+            
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -299,15 +302,13 @@
                         snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                         logs.forEach(log => this.renderAdminCard(log, list));
-                    });
+                    }, (error) => { console.error("Error al cargar logs (Admin):", error); });
                     return;
                 }
 
                 // 2. SI ES USUARIO NORMAL: Carga SUS proyectos y locales
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
-                const localProjs = await getAllLocalProjects();
-                state.localProjects = localProjs;
-
+                
                 onSnapshot(projectsRef, async (snap) => {
                     const currentLocals = await getAllLocalProjects();
                     state.localProjects = currentLocals;
@@ -330,8 +331,12 @@
                     merged.forEach(p => this.renderUserProjectCard(p, list));
                 }, (error) => {
                     list.innerHTML = '';
-                    state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
-                    if (state.localProjects.length === 0) list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube.</p></div>`;
+                    // Fallback a local si falla la red
+                    getAllLocalProjects().then(locals => {
+                        state.localProjects = locals;
+                        state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
+                        if (state.localProjects.length === 0) list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube.</p></div>`;
+                    });
                 });
             }
             
@@ -405,10 +410,14 @@
                     </div>
                     <div class="flex gap-2 mt-2">
                         <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
+                        
+                        <!-- Botón Publicar solo si no es global y no es observador -->
                         ${data.status !== 'global' && data.role !== 'observer' ? 
                             `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
                         }
-                        ${data.status === 'global' ? 
+                        
+                        <!-- Botón Compartir SIEMPRE VISIBLE si eres el dueño o si es global -->
+                        ${(data.status === 'global' || data.status === 'local') && data.role !== 'observer' ? 
                             `<button onclick="app.initShareFlow('${data.id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>` : ''
                         }
                     </div>
@@ -449,6 +458,15 @@
             }
 
             initShareFlow(id) {
+                // Si el proyecto es local, forzamos publicación primero
+                const proj = state.localProjects.find(p => p.id === id);
+                if (proj && proj.status === 'local') {
+                    if(confirm("Para compartir, primero debes subir el proyecto a la nube. ¿Subir ahora?")) {
+                        this.publishProject(id);
+                    }
+                    return;
+                }
+                
                 state.pendingShareId = id;
                 this.toggleModal('password-protect', true);
             }
@@ -566,14 +584,6 @@
                     impBtn.onclick = () => { this.importSharedProject(); };
                     const helpText = containerBtns.querySelector('p');
                     if(helpText) containerBtns.insertBefore(impBtn, helpText);
-                } else if (data.status === 'global') {
-                    let shareBtn = document.createElement('button');
-                    shareBtn.id = 'btn-share-view';
-                    shareBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
-                    shareBtn.innerHTML = "<span>🔗</span> COMPARTIR ESTE PROYECTO";
-                    shareBtn.onclick = () => { this.initShareFlow(data.id); };
-                    const helpText = containerBtns.querySelector('p');
-                    if(helpText) containerBtns.insertBefore(shareBtn, helpText);
                 }
 
                 const btn = document.getElementById('btn-capture-location');
@@ -873,14 +883,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.49</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.48</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.49</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.48</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -990,4 +1000,3 @@
     </div>
 </body>
 </html>
-
