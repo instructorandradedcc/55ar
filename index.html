@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.31 (Final Flow Fix)</title>
+    <title>AR Constructor Pro v3.33 (Admin Super-Vista)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -112,13 +112,14 @@
         /* Admin Styles */
         .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
         .log-card { border-left: 4px solid #6366f1; background: #111; }
+        .admin-card-disabled { opacity: 0.6; filter: grayscale(50%); cursor: not-allowed; }
     </style>
 
     <!-- LÓGICA FIREBASE & DB -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc, query } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
         import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
         const firebaseConfig = {
@@ -131,7 +132,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "3.31 FINAL FLOW FIX";
+        const APP_VERSION = "3.33 ADMIN SUPER-VISTA";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
         let app, auth, db, storage;
@@ -290,8 +291,9 @@
                 
                 const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
-                // --- LOGICA DE ADMINISTRADOR ---
+                // --- LOGICA DE ADMINISTRADOR: SUPER VISTA ---
                 if (state.role === 'admin') {
+                    // Consulta todos los logs (que contienen el resumen de todos los proyectos)
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
                         list.innerHTML = '';
@@ -304,31 +306,15 @@
                         snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-                        logs.forEach(log => {
-                            const date = new Date(log.createdAt).toLocaleString();
-                            const statusClass = log.status === 'Borrador Local' ? 'text-yellow-500' : 'text-green-400';
-                            const item = document.createElement('div');
-                            item.className = 'log-card p-4 mb-3 rounded-lg shadow-md text-white';
-                            item.innerHTML = `
-                                <div class="flex justify-between items-start">
-                                    <div>
-                                        <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
-                                        <h4 class="font-bold text-lg">${log.projectName}</h4>
-                                        <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
-                                    </div>
-                                    <div class="text-right">
-                                        <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
-                                        <p class="text-[10px] text-slate-500 mt-2">${date}</p>
-                                    </div>
-                                </div>
-                            `;
-                            list.appendChild(item);
-                        });
+                        logs.forEach(log => this.renderAdminCard(log, list));
+
+                    }, (error) => {
+                        console.error("Error al cargar logs (Admin):", error);
                     });
                     return;
                 }
 
-                // --- LOGICA DE USUARIO NORMAL ---
+                // --- LOGICA DE USUARIO NORMAL: SOLO PROYECTOS DEL USUARIO ---
                 const localProjs = await getAllLocalProjects();
                 state.localProjects = localProjs;
 
@@ -355,11 +341,54 @@
                         return; 
                     }
                     
-                    merged.forEach(p => this.renderProjectCard(p, list));
+                    merged.forEach(p => this.renderUserProjectCard(p, list));
+                }, (error) => {
+                    console.error("Error al cargar proyectos (Usuario):", error);
+                    list.innerHTML = '';
+                    state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
+                    if (state.localProjects.length === 0) {
+                         list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube. Mostrando caché local.</p></div>`; 
+                    } else {
+                         this.toast("Error de conexión a la Nube. Mostrando caché local.", "warning");
+                    }
                 });
             }
-
-            renderProjectCard(data, container) {
+            
+            // --- RENDERIZADO PARA ADMINISTRADOR ---
+            renderAdminCard(log, container) {
+                const date = new Date(log.createdAt).toLocaleString();
+                const isGlobal = log.status === 'Global (Publicado)';
+                const statusClass = isGlobal ? 'status-global' : 'status-local';
+                const buttonDisabled = !isGlobal;
+                
+                const item = document.createElement('div');
+                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity ${buttonDisabled ? 'admin-card-disabled' : ''}`;
+                
+                item.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
+                            <h4 class="font-bold text-lg">${log.projectName}</h4>
+                            <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
+                            <p class="text-[10px] text-slate-500 mt-2">${date}</p>
+                        </div>
+                    </div>
+                    <div class="mt-4">
+                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" 
+                                class="w-full text-black text-sm font-bold py-2 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed'}" 
+                                ${buttonDisabled ? 'disabled' : ''}>
+                            <span>${isGlobal ? '👀 Ver Modelo' : '🔒 Archivo en Móvil'}</span>
+                        </button>
+                    </div>
+                `;
+                container.appendChild(item);
+            }
+            
+            // --- RENDERIZADO PARA USUARIO NORMAL ---
+            renderUserProjectCard(data, container) {
                 const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
                 let statusLabel = 'GLOBAL (NUBE)';
                 let statusClass = 'status-global';
@@ -398,7 +427,47 @@
                 `;
                 container.appendChild(el);
             }
+            
+            // --- ABRIR PROYECTO ADMIN (SOLO GLOBALES) ---
+            async openAdminProject(id, ownerUid) {
+                this.loader(true, "Cargando Proyecto Admin...");
+                try {
+                    const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    // Buscamos el documento original en la colección del usuario dueño
+                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
+                    if(!snap.exists() || snap.data().status !== 'global') {
+                         throw new Error("Modelo no publicado o no encontrado.");
+                    }
+                    
+                    const data = snap.data();
+                    state.currentProject = { id, data, ownerUid }; // Guardamos el UID del dueño
+                    
+                    this.navTo('surface'); 
+                    const viewer = document.getElementById('model-viewer-surface');
 
+                    // Descargar y cachear el modelo (si no está)
+                    const url = await this.fetchAndCache(data.modelUrl);
+                    viewer.src = url;
+                    
+                    // Aplicar orientación y calibración guardada
+                    if(data.orientation) {
+                        state.modelOrientation = data.orientation;
+                        this.updateModelOrientation();
+                    }
+                    viewer.cameraControls = true; 
+
+                    // Ocultar botones de edición para el admin
+                    document.getElementById('force-ar-btn').classList.add('hidden');
+                    document.querySelector('.tools-panel').classList.add('hidden'); 
+                    document.getElementById('save-container').classList.add('hidden');
+                    
+                    this.toast(`Visualizando ${data.name} (Modo Admin)`, "info");
+
+                } catch(e) { this.toast("Error: " + e.message, "error"); }
+                this.loader(false);
+            }
+            // --- FIN LOGICA ADMIN ---
+            
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -512,15 +581,16 @@
                     if(state.user) {
                         const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
-                            // Sanitizar nombre para log
                             const userName = state.user.displayName || (state.user.isAnonymous ? `Invitado-${state.user.uid.substring(0, 4)}` : 'Usuario Registrado');
 
+                            // Guardamos un registro con el ID real del proyecto LOCAL para que el admin pueda referenciarlo (si se publica)
                             await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                                 userName: userName,
                                 userId: state.user.uid,
                                 projectName: state.draftData.name,
                                 status: "Borrador Local",
-                                createdAt: new Date().toISOString()
+                                createdAt: new Date().toISOString(),
+                                projectId: projectId // ID local para referencia futura
                             });
                         } catch(e) { console.warn("No se pudo enviar log al admin (offline/permisos?):", e); }
                     }
@@ -531,6 +601,7 @@
                     // --- FLUJO CONTINUO: MAPA ---
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
+                    this.loadProjects(); 
 
                 } catch(e) {
                     this.loader(false);
@@ -608,8 +679,13 @@
                             let projData = state.localProjects.find(p => p.id === id);
                             if(!projData) projData = await getModelFromCache(id);
 
+                            // El ID del documento en Firebase será el ID local si es un borrador nuevo
+                            let docId = id.startsWith('loc_') ? undefined : id;
+
+                            const newDocRef = id.startsWith('loc_') ? collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects') : doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id);
+                            
                             if (id.startsWith('loc_')) {
-                                await addDoc(collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects'), {
+                                const addedDoc = await addDoc(newDocRef, {
                                     name: projData.name,
                                     coords: state.draftData.coords,
                                     calibration: projData.calibration,
@@ -618,15 +694,16 @@
                                     status: 'global',
                                     createdAt: new Date().toISOString()
                                 });
+                                docId = addedDoc.id;
                             } else {
-                                await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), {
+                                await updateDoc(newDocRef, {
                                     modelUrl: downloadURL,
                                     status: 'global',
                                     coords: state.draftData.coords
                                 });
                             }
 
-                            // ACTUALIZAR LOG DEL ADMIN
+                            // ACTUALIZAR LOG DEL ADMIN para que el proyecto sea referenciable
                             try {
                                 const userName = state.user.displayName || (state.user.isAnonymous ? `Invitado-${state.user.uid.substring(0, 4)}` : 'Usuario Registrado');
                                 await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
@@ -634,7 +711,8 @@
                                     userId: state.user.uid,
                                     projectName: projData.name,
                                     status: "Global (Publicado)",
-                                    createdAt: new Date().toISOString()
+                                    createdAt: new Date().toISOString(),
+                                    projectId: docId // ID global para que el admin pueda abrirlo
                                 });
                             } catch(e){}
 
@@ -867,14 +945,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.31</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.33</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.31</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.33</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
