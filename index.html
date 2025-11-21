@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.45</title>
+    <title>AR Constructor Pro v3.46</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -139,7 +139,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.45 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.46 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -220,7 +220,7 @@
             modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
             localProjects: [],
             currentDraftId: null,
-            pendingShareId: null // Para guardar ID mientras se pone la clave
+            pendingShareId: null 
         };
 
         class ARSystem {
@@ -243,7 +243,7 @@
                             self.openSharedProject(params.get('id'), params.get('uid'));
                         } else {
                             self.navTo('dashboard');
-                            self.loadProjects();
+                            self.loadProjects(); // Esto carga los proyectos del usuario autenticado
                         }
                     } else {
                         if (params.get('id')) signInAnonymously(auth); 
@@ -321,25 +321,41 @@
                     return;
                 }
 
+                // Cargar proyectos de la nube específicos del usuario
+                const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
+                
+                // Cargar proyectos locales para fusionar (borradores no subidos)
                 const localProjs = await getAllLocalProjects();
                 state.localProjects = localProjs;
 
-                const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
                 onSnapshot(projectsRef, async (snap) => {
-                    const localProjs = await getAllLocalProjects();
-                    state.localProjects = localProjs;
+                    // Recargamos locales para asegurar consistencia
+                    const currentLocals = await getAllLocalProjects();
+                    state.localProjects = currentLocals;
+                    
                     list.innerHTML = '';
                     const cloudMap = new Map();
+                    
+                    // Prioridad: Nube. Si existe en nube, usamos ese dato.
                     snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
+                    
+                    // Fusionamos: Proyectos de la nube + Locales que NO estén en la nube (borradores)
                     const merged = [...cloudMap.values()];
-                    localProjs.forEach(lp => { if(!cloudMap.has(lp.id)) merged.push(lp); });
+                    
+                    currentLocals.forEach(lp => { 
+                        // Solo agregamos el local si NO existe ya uno con ese ID en la nube
+                        if(!cloudMap.has(lp.id)) merged.push(lp); 
+                    });
+
                     merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                    
                     if (merged.length === 0) { 
                         list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`; 
                         return; 
                     }
                     merged.forEach(p => this.renderUserProjectCard(p, list));
                 }, (error) => {
+                    // Fallback si falla la nube: mostrar solo locales
                     list.innerHTML = '';
                     state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
                     if (state.localProjects.length === 0) list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube.</p></div>`;
@@ -354,7 +370,6 @@
                 const item = document.createElement('div');
                 item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity`;
                 
-                // Mostrar Clave si existe
                 let passwordHtml = '';
                 if (log.password) {
                     passwordHtml = `<div class="mt-2 bg-yellow-900/30 border border-yellow-600/50 p-2 rounded flex items-center gap-2"><span class="text-yellow-500">🔑 Clave:</span> <span class="font-mono font-bold">${log.password}</span></div>`;
@@ -392,7 +407,6 @@
                     statusClass = 'status-local';
                 }
 
-                // Badge de Observador
                 let observerBadge = '';
                 if (data.role === 'observer') {
                     observerBadge = `<span class="ml-2 bg-blue-900/80 text-blue-200 text-[9px] px-2 py-0.5 rounded border border-blue-500/30">OBSERVADOR</span>`;
@@ -449,7 +463,7 @@
                         calibration: data.calibration || { x:0, y:0, z:0, r:0, s:1 },
                         orientation: data.orientation || { roll: 0, pitch: 0, yaw: 0 },
                         status: 'local', 
-                        role: 'observer', // Marca como solo lectura
+                        role: 'observer', 
                         createdAt: new Date().toISOString()
                     };
                     await saveProjectToLocalDB(newProject);
@@ -463,7 +477,6 @@
                 }
             }
 
-            // --- FLUJO DE COMPARTIR CON CONTRASEÑA ---
             initShareFlow(id) {
                 state.pendingShareId = id;
                 this.toggleModal('password-protect', true);
@@ -473,21 +486,13 @@
                 const id = state.pendingShareId;
                 const password = document.getElementById('share-password').value;
                 this.toggleModal('password-protect', false);
-                document.getElementById('share-password').value = ''; // Limpiar
+                document.getElementById('share-password').value = ''; 
 
                 if (password) {
-                    // Actualizar proyecto con la contraseña (y el log para admin)
                     this.loader(true, "Generando link seguro...");
                     try {
                         const namespace = isPreviewEnv && typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                        
-                        // 1. Actualizar el documento del proyecto
                         await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), { password: password });
-
-                        // 2. Actualizar o crear Log para Admin para que vea la clave
-                        // Buscar el log existente o crear uno nuevo es complejo, simplemente añadimos uno nuevo de actualización
-                        // O idealmente, actualizar el log existente si tuviéramos su ID. Simplifiquemos:
-                        // El admin verá el último estado si consultamos logs.
                          await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                                 userName: state.user.displayName || "Anónimo",
                                 userId: state.user.uid,
@@ -495,9 +500,8 @@
                                 status: "Clave Generada",
                                 createdAt: new Date().toISOString(),
                                 projectId: id,
-                                password: password // GUARDAMOS LA CLAVE PARA EL ADMIN
+                                password: password 
                         });
-
                     } catch(e) { console.error("Error guardando clave", e); }
                     this.loader(false);
                 }
@@ -548,16 +552,14 @@
                     if(!snap.exists()) throw new Error("No encontrado");
                     
                     const data = snap.data();
-                    state.currentProject = { id, data, ownerUid }; // Guardar contexto temporal
+                    state.currentProject = { id, data, ownerUid }; 
 
-                    // VERIFICAR CONTRASEÑA
                     if (data.password) {
                         this.loader(false);
-                        this.toggleModal('password-entry', true); // Pedir clave
+                        this.toggleModal('password-entry', true); 
                         return;
                     }
                     
-                    // Si no hay clave, abrir directamente
                     this.loadSharedView(data);
                     
                 } catch(e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
@@ -614,7 +616,6 @@
                 saveContainer.classList.remove('hidden');
                 const containerBtns = saveContainer.querySelector('.pointer-events-auto');
                 
-                // Limpieza de botones
                 ['btn-import-project', 'btn-share-view'].forEach(bid => {
                     const el = document.getElementById(bid);
                     if(el) el.remove();
@@ -806,7 +807,6 @@
                 if(model) model.setAttribute('opacity', val); 
             }
             async saveCalibration() {
-                // En modo observador, no guardamos cambios en la nube
                 if(state.currentProject.role === 'observer') {
                     this.toast("Modo Observador: No se guardan cambios", "warning");
                     return;
@@ -916,14 +916,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.45</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.46</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.45</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.46</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -1075,5 +1075,4 @@
     </div>
 </body>
 </html>
-
 
