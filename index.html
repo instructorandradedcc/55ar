@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.42</title>
+    <title>AR Constructor Pro v3.44</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -40,7 +40,7 @@
             background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); 
         }
         
-        /* Botón AR Verde */
+        /* Botón AR Verde - Estilos Base */
         .ar-green-btn {
             background-color: #4CAF50; 
             color: white;
@@ -52,7 +52,7 @@
             letter-spacing: 0.5px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             position: absolute;
-            bottom: 40px;
+            bottom: 40px; /* Posición por defecto para CREAR */
             left: 50%;
             transform: translateX(-50%);
             display: flex;
@@ -63,14 +63,24 @@
             cursor: pointer;
             white-space: nowrap;
             text-transform: uppercase;
-            transition: transform 0.2s, bottom 0.3s, opacity 0.3s;
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .ar-green-btn:active { transform: translateX(-50%) scale(0.95); }
         
+        /* Estado Minimizado (durante AR activo) */
         .ar-green-btn.minimized {
-            bottom: 160px;
-            transform: translateX(-50%) scale(0.9);
-            opacity: 0.95; 
+            bottom: 180px;
+            transform: translateX(-50%) scale(0.8);
+            opacity: 0.8; 
+        }
+
+        /* NUEVO: Estado Flotante para VISUALIZAR (Evita solapamiento con panel inferior) */
+        .ar-green-btn.floating-action {
+            bottom: 160px; /* Más arriba para dejar espacio al panel de GPS/Compartir */
+            background-color: #10B981; /* Un verde un poco más esmeralda */
+            box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4);
+            border: 2px solid rgba(255,255,255,0.2);
+            z-index: 110; /* Encima de todo */
         }
 
         /* Barra de Progreso */
@@ -131,9 +141,9 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.42 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.44 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
-        // URL pública de tu proyecto en GitHub Pages para compartir links universales
+        // URL pública base para generar los links de compartir
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
         let app, auth, db, storage;
@@ -223,7 +233,7 @@
             }
 
             initAuth() {
-                const self = this;
+                const self = this; // Capturamos contexto para evitar errores 'this' en APK
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
                     const params = new URLSearchParams(window.location.search);
@@ -265,7 +275,7 @@
                 } catch (e) { 
                     this.loader(false); 
                     if (e.message.includes("disallowed_useragent") || e.code === 'auth/operation-not-supported-in-this-environment') {
-                        alert("⚠️ ERROR 403 DE GOOGLE: Detecta esta App como navegador simple.\n\nSOLUCIÓN: En tu 'Generador de APK', cambia el 'User Agent' por:\n\nMozilla/5.0 (Linux; Android 10; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0");
+                        alert("⚠️ ERROR DE GOOGLE (403): Detecta esta App como navegador simple.\n\nSOLUCIÓN: En tu 'Generador de APK', cambia el 'User Agent' por:\n\nMozilla/5.0 (Linux; Android 10; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0");
                     } else {
                         this.toast("Error Login: " + e.message, "error"); 
                     }
@@ -452,13 +462,17 @@
                     };
                     
                     await saveProjectToLocalDB(newProject);
-                    this.loader(false);
-                    this.toast("✅ ¡Proyecto guardado en tu APK!", "success");
                     
+                    // Actualizamos la lista
+                    state.localProjects.push(newProject);
+                    
+                    this.loader(false);
+                    this.toast("✅ ¡Proyecto guardado! Abriendo...", "success");
+                    
+                    // Abrir directamente
                     setTimeout(() => {
-                        this.navTo('dashboard');
-                        this.loadProjects();
-                    }, 1500);
+                        this.openProject(newId, 'view');
+                    }, 1000);
 
                 } catch(e) {
                     this.loader(false);
@@ -468,32 +482,22 @@
 
             shareProject(id) {
                 let baseUrl = window.location.href.split('?')[0];
-                // Si estamos en APK (file://), forzamos la URL pública para que el link sea útil
                 if (window.location.protocol === 'file:') {
                     baseUrl = PUBLIC_HOST; 
                 }
                 const url = `${baseUrl}?id=${id}&uid=${state.user.uid}`;
                 
-                // Intentar usar la API nativa de compartir del dispositivo si está disponible
                 if (navigator.share) {
                     navigator.share({
                         title: 'AR Constructor Pro',
-                        text: 'Mira este modelo en AR Constructor Pro:',
+                        text: 'Mira este modelo en AR:',
                         url: url,
                     })
                     .then(() => console.log('Link compartido exitosamente'))
                     .catch((error) => console.log('Error compartiendo:', error));
                 } else {
-                    // Fallback al portapapeles
                     navigator.clipboard.writeText(url).then(() => this.toast("🔗 Link copiado al portapapeles", "success"));
                 }
-            }
-
-            exitMapToDashboard() {
-                this.toast("Guardado como Borrador Local", "info");
-                this.resetCreationState();
-                this.navTo('dashboard');
-                this.loadProjects();
             }
 
             async openProject(id, mode) {
@@ -524,22 +528,23 @@
                         viewer.src = data.modelUrl;
                     }
                     
-                    // Restaurar Orientación
+                    // --- RESTAURAR METADATOS (Rotación y Escala) ---
                     if(data.orientation) {
                         state.modelOrientation = data.orientation;
                         this.updateModelOrientation();
                     }
-
-                    // --- NUEVO: Restaurar Escala Guardada ---
                     if (data.calibration && data.calibration.s) {
                         const s = data.calibration.s;
+                        // Aplicar escala al modelo
                         viewer.scale = `${s} ${s} ${s}`;
                     }
                     
-                    // --- BOTÓN AR SIEMPRE VISIBLE ---
+                    // --- CONFIGURAR BOTONES ---
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) {
                         arBtn.classList.remove('hidden', 'minimized');
+                        // Aplicar estilo flotante para que se vea encima del panel
+                        arBtn.classList.add('floating-action'); 
                         arBtn.innerHTML = "👓 VER EN AR (MESA/PISO)";
                         arBtn.onclick = () => { this.activateAR(); };
                     }
@@ -548,15 +553,33 @@
 
                     const saveContainer = document.getElementById('save-container');
                     saveContainer.classList.remove('hidden');
+                    
+                    const containerBtns = saveContainer.querySelector('.pointer-events-auto');
+                    
+                    // Limpiar botones extras previos
+                    const oldImpBtn = document.getElementById('btn-import-project');
+                    if(oldImpBtn) oldImpBtn.remove();
+                    const oldShareBtn = document.getElementById('btn-share-view');
+                    if(oldShareBtn) oldShareBtn.remove();
+
+                    // Añadir botón Compartir si el proyecto es global
+                    if (data.status === 'global') {
+                        let shareBtn = document.createElement('button');
+                        shareBtn.id = 'btn-share-view';
+                        shareBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
+                        shareBtn.innerHTML = "<span>🔗</span> COMPARTIR ESTE PROYECTO";
+                        shareBtn.onclick = () => { this.shareProject(data.id); };
+                        
+                        const helpText = containerBtns.querySelector('p');
+                        if(helpText) containerBtns.insertBefore(shareBtn, helpText);
+                    }
+
                     const btn = document.getElementById('btn-capture-location');
-                    btn.innerHTML = "<span>🗺️</span> VER EN MAPA / GPS";
+                    btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS GUARDADA";
                     btn.onclick = () => { 
                         this.navTo('ar'); 
                         this.startARGPS(data); 
                     };
-                    
-                    const impBtn = document.getElementById('btn-import-project');
-                    if(impBtn) impBtn.remove();
 
                 } catch(e) { this.toast(e.message, "error"); }
                 this.loader(false);
@@ -585,13 +608,10 @@
                     const url = await this.fetchAndCache(data.modelUrl);
                     viewer.src = url;
 
-                    // Restaurar Orientación
                     if(data.orientation) {
                         state.modelOrientation = data.orientation;
                         this.updateModelOrientation();
                     }
-
-                    // --- NUEVO: Restaurar Escala en proyecto compartido ---
                     if (data.calibration && data.calibration.s) {
                         const s = data.calibration.s;
                         viewer.scale = `${s} ${s} ${s}`;
@@ -600,30 +620,32 @@
                     document.getElementById('save-container').classList.add('hidden');
                     document.querySelector('.tools-panel').classList.add('hidden'); 
                     
-                    // --- BOTÓN AR VISIBLE EN VISTA COMPARTIDA ---
                     const arBtn = document.getElementById('force-ar-btn');
                     if(arBtn) {
                         arBtn.classList.remove('hidden', 'minimized');
+                        arBtn.classList.add('floating-action');
                         arBtn.innerHTML = "👓 ENTRAR AL MODELO";
                         arBtn.onclick = () => { this.activateAR(); };
                     }
 
-                    // --- AÑADIR BOTÓN IMPORTAR EN VISTA COMPARTIDA ---
                     const saveContainer = document.getElementById('save-container');
                     saveContainer.classList.remove('hidden');
                     
                     const containerBtns = saveContainer.querySelector('.pointer-events-auto');
-                    let impBtn = document.getElementById('btn-import-project');
-                    if (!impBtn) {
-                        impBtn = document.createElement('button');
-                        impBtn.id = 'btn-import-project';
-                        impBtn.className = "w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
-                        impBtn.innerHTML = "<span>💾</span> GUARDAR EN MIS PROYECTOS (APK)";
-                        impBtn.onclick = () => { this.importSharedProject(); };
-                        const helpText = containerBtns.querySelector('p');
-                        if(helpText) containerBtns.insertBefore(impBtn, helpText);
-                        else containerBtns.appendChild(impBtn);
-                    }
+                    
+                    // Limpiar botones previos
+                    const oldImpBtn = document.getElementById('btn-import-project');
+                    if(oldImpBtn) oldImpBtn.remove();
+                    
+                    let impBtn = document.createElement('button');
+                    impBtn.id = 'btn-import-project';
+                    impBtn.className = "w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
+                    impBtn.innerHTML = "<span>💾</span> DESCARGAR A MI APP (IMPORTAR)";
+                    impBtn.onclick = () => { this.importSharedProject(); };
+                    
+                    const helpText = containerBtns.querySelector('p');
+                    if(helpText) containerBtns.insertBefore(impBtn, helpText);
+                    else containerBtns.appendChild(impBtn);
 
                     const mapBtn = document.getElementById('btn-capture-location');
                     mapBtn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS ORIGINAL";
@@ -671,7 +693,16 @@
                     const arBtn = document.getElementById('force-ar-btn');
                     const isCreating = !state.currentProject || state.currentProject.status === 'local'; 
                     
-                    if(arBtn && isCreating) arBtn.classList.add('minimized'); 
+                    if(arBtn) {
+                        if(isCreating) {
+                            arBtn.classList.remove('floating-action');
+                            arBtn.classList.add('minimized'); 
+                        } else {
+                            // Si estamos viendo un proyecto, mantenemos el botón visible pero quizás ajustado
+                            arBtn.classList.add('floating-action');
+                            arBtn.classList.remove('minimized');
+                        }
+                    }
                 }, 2000); 
             }
 
@@ -948,14 +979,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.42</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.44</p>
         </div>
     </div>
 
     <!-- VISTA 2: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.42</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.44</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -1041,7 +1072,7 @@
                 </div>
             </model-viewer>
 
-            <!-- BOTÓN AR FORZADO -->
+            <!-- BOTÓN AR FORZADO (Ahora se muestra correctamente al ver proyectos) -->
             <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">
                 📷 INICIAR CÁMARA AR
                 <span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>
@@ -1107,4 +1138,5 @@
     </div>
 </body>
 </html>
+
 
