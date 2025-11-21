@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.48</title>
+    <title>AR Constructor Pro v3.50</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -75,7 +75,7 @@
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
         import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, inMemoryPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
-        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc, query } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
+        import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
         import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
         const firebaseConfig = {
@@ -88,7 +88,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.47 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.50 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -166,7 +166,6 @@
                 this.updateVersionUI();
             }
 
-            // --- FUNCIONES DE UI Y ESTADO (Movidas arriba y corregidas) ---
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -300,7 +299,7 @@
                         snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                         logs.forEach(log => this.renderAdminCard(log, list));
-                    }, (error) => { console.error("Error al cargar logs (Admin):", error); });
+                    });
                     return;
                 }
 
@@ -344,7 +343,6 @@
                 const item = document.createElement('div');
                 item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity`;
                 
-                // Mostrar Clave SOLO al admin
                 let passwordHtml = '';
                 if (log.password) {
                     passwordHtml = `<div class="mt-2 bg-yellow-900/30 border border-yellow-600/50 p-2 rounded flex items-center gap-2"><span class="text-yellow-500">🔑 Clave:</span> <span class="font-mono font-bold select-all">${log.password}</span></div>`;
@@ -376,10 +374,12 @@
                 const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
                 let statusLabel = 'GLOBAL (NUBE)';
                 let statusClass = 'status-global';
+                
                 if (data.status === 'local' || data.status === 'unsynced') {
                     statusLabel = 'BORRADOR LOCAL';
                     statusClass = 'status-local';
                 }
+
                 let observerBadge = '';
                 if (data.role === 'observer') {
                     observerBadge = `<span class="ml-2 bg-blue-900/80 text-blue-200 text-[9px] px-2 py-0.5 rounded border border-blue-500/30">OBSERVADOR</span>`;
@@ -460,7 +460,7 @@
                 document.getElementById('share-password').value = ''; 
 
                 if (password) {
-                    this.loader(true, "Guardando clave...");
+                    this.loader(true, "Generando link seguro...");
                     try {
                         const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), { password: password });
@@ -690,8 +690,9 @@
                     if(state.user) {
                         const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
+                            const userName = state.user.displayName || "Anónimo";
                             await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                userName: state.user.displayName || "Anónimo",
+                                userName: userName,
                                 userId: state.user.uid,
                                 projectName: state.draftData.name,
                                 status: "Borrador Local",
@@ -772,18 +773,38 @@
 
             handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
             
+            // --- NUEVA LÓGICA: BORRADO SINCRONIZADO (ADMIN) ---
             async deleteProject(id) {
                 if(!confirm("¿Eliminar?")) return;
+                
+                // 1. Borrar local
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
+                
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    
+                    // 2. Borrar documento personal del usuario
                     await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                } catch(e) {}
+                    
+                    // 3. BORRAR LOG GLOBAL (Para que desaparezca del Admin)
+                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
+                    const q = query(logsRef, where('projectId', '==', id));
+                    const querySnapshot = await getDocs(q);
+                    
+                    const deletePromises = [];
+                    querySnapshot.forEach((doc) => {
+                        deletePromises.push(deleteDoc(doc.ref));
+                    });
+                    await Promise.all(deletePromises);
+                    
+                } catch(e) { console.error("Error eliminando en nube:", e); }
+                
                 this.loadProjects();
             }
+
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             
             navTo(id) {
@@ -852,14 +873,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.47</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.49</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.47</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.49</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
