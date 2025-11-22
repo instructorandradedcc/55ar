@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.51</title>
+    <title>AR Constructor Pro v3.52</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -40,7 +40,8 @@
             font-weight: 800; font-size: 16px; letter-spacing: 0.5px; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 100; cursor: pointer; white-space: nowrap; text-transform: uppercase;
+            z-index: 110; /* Aumentado para asegurar visibilidad */
+            cursor: pointer; white-space: nowrap; text-transform: uppercase;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
         .ar-green-btn:active { transform: translateX(-50%) scale(0.95); }
@@ -88,7 +89,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.51 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.52 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -166,9 +167,6 @@
                 this.updateVersionUI();
             }
 
-            // --- FUNCIONES DE UI Y ESTADO ---
-            // IMPORTANTISIMO: Definidas al principio de la clase para que 'this' las encuentre siempre
-            
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -289,7 +287,6 @@
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
-                // 1. SI ES ADMIN: Carga TODOS los logs
                 if (state.role === 'admin') {
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
@@ -306,7 +303,6 @@
                     return;
                 }
 
-                // 2. SI ES USUARIO NORMAL: Carga SUS proyectos y locales
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
                 
                 onSnapshot(projectsRef, async (snap) => {
@@ -331,7 +327,6 @@
                     merged.forEach(p => this.renderUserProjectCard(p, list));
                 }, (error) => {
                     list.innerHTML = '';
-                    // Fallback a local si falla la red
                     getAllLocalProjects().then(locals => {
                         state.localProjects = locals;
                         state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
@@ -411,12 +406,10 @@
                     <div class="flex gap-2 mt-2">
                         <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
                         
-                        <!-- Botón Publicar solo si no es global y no es observador -->
                         ${data.status !== 'global' && data.role !== 'observer' ? 
                             `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
                         }
                         
-                        <!-- Botón Compartir SIEMPRE VISIBLE si eres el dueño o si es global -->
                         ${(data.status === 'global' || data.status === 'local') && data.role !== 'observer' ? 
                             `<button onclick="app.initShareFlow('${data.id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>` : ''
                         }
@@ -458,7 +451,6 @@
             }
 
             initShareFlow(id) {
-                // Si el proyecto es local, forzamos publicación primero
                 const proj = state.localProjects.find(p => p.id === id);
                 if (proj && proj.status === 'local') {
                     if(confirm("Para compartir, primero debes subir el proyecto a la nube. ¿Subir ahora?")) {
@@ -542,12 +534,26 @@
                 this.navTo('surface'); 
                 const viewer = document.getElementById('model-viewer-surface');
                 
-                let blob = await getModelFromCache(data.id) || await getModelFromCache(data.modelUrl);
-                if(blob) viewer.src = URL.createObjectURL(blob);
-                else if (data.status === 'global' || isShared) {
-                    blob = await this.fetchAndCache(data.modelUrl);
-                    viewer.src = blob;
-                } else viewer.src = data.modelUrl;
+                // Lógica robusta para cargar blob local
+                let blob = await getModelFromCache(data.id);
+                if (!blob && !isShared && data.status === 'local') {
+                    // Si es local y no está en caché, intentamos recuperar por modelUrl si es un ID
+                    blob = await getModelFromCache(data.modelUrl);
+                    if(!blob) {
+                        this.toast("Error: Archivo de modelo 3D no encontrado en memoria local.", "error");
+                        return; // Detener si no hay archivo
+                    }
+                } else if (!blob && (data.status === 'global' || isShared)) {
+                     // Si es global o compartido, descargar
+                     blob = await this.fetchAndCache(data.modelUrl);
+                }
+
+                if (blob) {
+                    viewer.src = URL.createObjectURL(blob);
+                } else {
+                     // Fallback último recurso (normalmente no debería llegar aquí si es local sin blob)
+                     viewer.src = data.modelUrl;
+                }
                 
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
@@ -600,7 +606,6 @@
                     const data = snap.data();
                     state.currentProject = { id, data, ownerUid };
                     await this.setupViewer(data, false);
-                    // Mostrar clave al admin
                     if (data.password) alert(`CLAVE DE ESTE PROYECTO: ${data.password}`);
                 } catch(e) { this.toast("Error: " + e.message, "error"); }
                 this.loader(false);
@@ -883,14 +888,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.48</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.52</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.48</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.52</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
