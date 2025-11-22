@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Admin Fix v3.60</title>
+    <title>AR Admin Pro v3.70 (Resilient)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -93,10 +93,9 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.60 | ADMIN FIX & CLEANUP";
+        const APP_VERSION = "v3.70 | ADMIN RESILIENT FIX";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
-        const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
-
+        
         let app, auth, db, storage;
 
         // --- CACHE DATABASE (IndexedDB) ---
@@ -157,7 +156,7 @@
             user: null, role: 'guest', currentProject: null, tempFile: null, localBlobUrl: null,
             draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
             map: null, modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
-            localProjects: [], currentDraftId: null, pendingShareId: null 
+            localProjects: [], currentDraftId: null 
         };
 
         class ARSystem {
@@ -244,15 +243,17 @@
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
-                // 1. PANEL DE ADMINISTRADOR (Ver Todo)
+                // 1. PANEL DE ADMINISTRADOR (Ver Todo + Claves)
                 if (state.role === 'admin') {
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
                         list.innerHTML = '';
-                        if (snap.empty) { list.innerHTML = `<p class="text-center text-white">Sin actividad</p>`; return; }
+                        if (snap.empty) { list.innerHTML = `<p class="text-center text-white">Sin actividad en el sistema</p>`; return; }
+                        
                         const logs = [];
                         snap.forEach(doc => logs.push({ logId: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                        
                         logs.forEach(log => this.renderAdminCard(log, list));
                     });
                     return;
@@ -260,7 +261,6 @@
 
                 // 2. USUARIO NORMAL
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
-                
                 onSnapshot(projectsRef, async (snap) => {
                     const currentLocals = await getAllLocalProjects();
                     state.localProjects = currentLocals; 
@@ -284,56 +284,68 @@
                 });
             }
 
-            // --- RENDERIZADO ADMIN (RESTAURADO) ---
+            // --- RENDERIZADO ADMIN ---
             renderAdminCard(log, container) {
                 const date = new Date(log.createdAt).toLocaleString();
                 const isGlobal = log.status === 'Global (Publicado)' || log.status === 'Clave Generada';
                 const statusClass = isGlobal ? 'status-global' : 'status-local';
                 
                 const item = document.createElement('div');
-                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity relative`;
+                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity relative border-l-4 border-indigo-500`;
                 
+                // MOSTRAR CLAVE PARA SOPORTE
                 let passwordHtml = '';
                 if (log.password) {
-                    passwordHtml = `<div class="mt-2 bg-yellow-900/30 border border-yellow-600/50 p-2 rounded flex items-center gap-2"><span class="text-yellow-500">🔑 Clave:</span> <span class="font-mono font-bold select-all">${log.password}</span></div>`;
+                    passwordHtml = `
+                        <div class="mt-3 bg-yellow-500/20 border border-yellow-500 p-3 rounded-xl flex items-center justify-between gap-2 animate-pulse">
+                            <div class="flex items-center gap-2">
+                                <span class="text-2xl">🔑</span> 
+                                <div>
+                                    <span class="text-[10px] uppercase text-yellow-500 font-bold block">Clave de Acceso:</span>
+                                    <span class="font-mono font-black text-white text-lg select-all">${log.password}</span>
+                                </div>
+                            </div>
+                            <button onclick="navigator.clipboard.writeText('${log.password}')" class="bg-black/30 p-2 rounded-lg text-xs">Copiar</button>
+                        </div>`;
                 }
 
                 item.innerHTML = `
                     <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
-                            <h4 class="font-bold text-lg">${log.projectName}</h4>
-                            <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
+                        <div class="w-full">
+                            <div class="flex justify-between w-full">
+                                <p class="text-xs text-indigo-300 mb-1 font-bold">👤 ${log.userName || 'Usuario Anónimo'}</p>
+                                <span class="text-[9px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
+                            </div>
+                            <h4 class="font-bold text-xl mt-1">${log.projectName}</h4>
+                            <p class="text-[9px] font-mono text-slate-500 mb-2">ID: ${log.projectId}</p>
                             ${passwordHtml}
                         </div>
-                        <div class="text-right">
-                            <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
-                            <p class="text-[10px] text-slate-500 mt-2">${date}</p>
-                        </div>
                     </div>
-                    <div class="mt-4 flex gap-2">
-                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="flex-1 text-black text-sm font-bold py-2 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed'}" ${!isGlobal ? 'disabled' : ''}>
-                            <span>${isGlobal ? '👀 Ver Modelo' : '🔒 Archivo Local'}</span>
+                    <div class="mt-4 flex gap-2 border-t border-white/10 pt-3">
+                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="flex-[2] text-black text-sm font-bold py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed text-gray-500'}" ${!isGlobal ? 'disabled' : ''}>
+                            <span>${isGlobal ? '👀 VERIFICAR (VISOR)' : '🔒 SOLO LOCAL (NO VISIBLE)'}</span>
                         </button>
-                        <button onclick="app.forceDeleteProject('${log.logId}', '${log.projectId}', '${log.userId}')" class="w-12 bg-red-600/80 hover:bg-red-600 text-white rounded-xl flex items-center justify-center shadow-lg border border-red-500/50">🗑️</button>
+                        <button onclick="app.forceDeleteProject('${log.logId}', '${log.projectId}', '${log.userId}')" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg border border-red-400/50 flex items-center justify-center gap-1">
+                            🗑️ BORRAR
+                        </button>
                     </div>
+                    <p class="text-[9px] text-right text-slate-600 mt-1">${date}</p>
                 `;
                 container.appendChild(item);
             }
 
-            // --- FUNCIONES DE ADMIN ---
+            // --- FUNCIONES DE ADMIN (BORRADO INTELIGENTE) ---
             async openAdminProject(projectId, ownerUid) {
-                this.loader(true, "Cargando Admin...");
+                this.loader(true, "Cargando Modo Admin...");
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', projectId));
                     
-                    if(!snap.exists()) throw new Error("El usuario borró este proyecto o no existe.");
+                    if(!snap.exists()) throw new Error("El usuario ya borró este proyecto.");
                     
                     const data = snap.data();
-                    // IMPORTANTE: Para admin, modelUrl suele ser URL. Si es ID, puede fallar si no está en cache local del admin.
                     state.currentProject = { id: projectId, data, ownerUid };
-                    await this.setupViewer(data, true); // Tratamos como compartido para activar modo visor
+                    await this.setupViewer(data, true); 
                     
                 } catch(e) { 
                     this.loader(false);
@@ -343,95 +355,85 @@
             }
 
             async forceDeleteProject(logId, projectId, userId) {
-                if(!confirm("⚠️ ADMIN: ¿Borrar este proyecto permanentemente de la base de datos y del usuario?")) return;
-                this.loader(true, "Eliminando...");
+                if(!confirm("⚠️ ¿Eliminar este proyecto de la lista?\n\nSi tienes permisos de Admin en Firebase, se borrará todo. Si no, solo se limpiará de esta lista.")) return;
+                
+                this.loader(true, "Procesando eliminación...");
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     
-                    // 1. Borrar documento del proyecto del usuario
-                    await deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId));
-                    
-                    // 2. Borrar log publico
-                    await deleteDoc(doc(db, 'artifacts', namespace, 'public', 'data', 'project_logs', logId));
-                    
-                    // 3. (Opcional) Intentar borrar archivo de Storage - Requiere permisos de admin en reglas
+                    // 1. INTENTO DE BORRAR ARCHIVO PRIVADO (Puede fallar por reglas)
                     try {
-                        const storageRef = ref(storage, `models/${userId}/${projectId}.glb`);
-                        // await deleteObject(storageRef); // Necesitas importar deleteObject si quieres activar esto
-                    } catch(e) { console.log("Storage clean skip"); }
-
-                    this.toast("✅ Proyecto eliminado por Admin", "success");
+                        await deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId));
+                    } catch (permError) {
+                        console.warn("Permiso denegado en archivo usuario (Normal sin reglas Admin configuradas). Procediendo a limpiar logs.");
+                        this.toast("⚠️ Permiso archivo privado denegado (Reglas). Limpiando lista pública...", "warning");
+                    }
+                    
+                    // 2. BORRAR EL REGISTRO PÚBLICO ESPECÍFICO (Esto limpia la lista visualmente)
+                    // OJO: Borramos TODOS los logs con este ProjectID para que no queden rastros en la lista
+                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
+                    const q = query(logsRef, where('projectId', '==', projectId));
+                    const querySnapshot = await getDocs(q);
+                    
+                    const deletePromises = [];
+                    querySnapshot.forEach((doc) => {
+                        deletePromises.push(deleteDoc(doc.ref));
+                    });
+                    await Promise.all(deletePromises);
+                    
+                    this.toast("✅ Registro eliminado de la lista.", "success");
                 } catch(e) {
-                    this.toast("Error al borrar: " + e.message, "error");
+                    this.toast("Error General: " + e.message, "error");
+                    console.error(e);
                 } finally {
                     this.loader(false);
                 }
             }
 
-            // --- ABRIR PROYECTO (CORREGIDO CARGA INFINITA) ---
+            // --- ABRIR PROYECTO ---
             async openProject(id, mode) {
                 this.loader(true, "Abriendo...");
-                
-                // 1. Buscar en locales primero
                 let project = state.localProjects.find(p => p.id === id);
                 
-                // 2. Si no está en local, intentar buscarlo en la memoria de Firestore
                 if (!project && state.user) {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     try {
                          const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                         if (docSnap.exists()) {
-                             project = { id: docSnap.id, ...docSnap.data() };
-                         }
+                         if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
                     } catch (e) { console.error(e); }
                 }
 
                 if (!project) {
                     this.loader(false);
-                    this.toast("No se encontró el proyecto", "error");
+                    this.toast("Proyecto no disponible", "error");
                     return;
                 }
 
                 state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
-                
-                if (mode === 'view') {
-                    await this.setupViewer(project);
-                }
+                if (mode === 'view') await this.setupViewer(project);
                 this.loader(false);
             }
 
             async setupViewer(data, isShared = false) {
                 this.navTo('surface'); 
                 const viewer = document.getElementById('model-viewer-surface');
-                
-                // Resetear visor
                 viewer.src = ""; 
                 
-                // Lógica robusta para cargar blob
                 let blob = null;
                 if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) {
-                    // Intenta caché local
                     blob = await getModelFromCache(data.modelUrl || data.id);
                 }
 
-                if (blob) {
-                    viewer.src = URL.createObjectURL(blob);
-                } else if (data.modelUrl && data.modelUrl.startsWith('http')) {
-                    viewer.src = data.modelUrl;
-                } else {
-                     // Fallback crítico para evitar pantalla de carga infinita
-                     this.toast("⚠️ Archivo 3D no disponible en este dispositivo", "error");
-                     // Podríamos redirigir o dejar al usuario subirlo de nuevo, pero al menos no colgamos la app
-                }
+                if (blob) viewer.src = URL.createObjectURL(blob);
+                else if (data.modelUrl && data.modelUrl.startsWith('http')) viewer.src = data.modelUrl;
+                else this.toast("⚠️ Archivo 3D no encontrado", "error");
 
-                // Restaurar configs
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
                     viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
                 }
                 if (data.calibration && data.calibration.s) {
-                    const s = data.calibration.s;
-                    viewer.scale = `${s} ${s} ${s}`;
+                    viewer.scale = `${data.calibration.s} ${data.calibration.s} ${data.calibration.s}`;
                 }
 
                 const arBtn = document.getElementById('force-ar-btn');
@@ -477,7 +479,7 @@
 
             async confirmAndPublishFromMap() {
                 if (!state.currentDraftId) return;
-                this.loader(true, "Finalizando...");
+                this.loader(true, "Publicando...");
                 await this.updateLocalCoords(state.currentDraftId, state.draftData.coords);
                 await this.publishProject(state.currentDraftId);
                 this.navTo('dashboard');
@@ -491,17 +493,14 @@
                 return new Promise((resolve) => {
                     store.get(id).onsuccess = (e) => {
                         const data = e.target.result;
-                        if (data) {
-                            data.coords = coords;
-                            store.put(data);
-                        }
+                        if (data) { data.coords = coords; store.put(data); }
                         resolve();
                     };
                 });
             }
 
             async publishProject(id) {
-                this.loader(true, "Subiendo a la nube...");
+                this.loader(true, "Subiendo...");
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 
                 try {
@@ -523,15 +522,9 @@
                         }
                     }
 
-                    const firestoreData = {
-                        ...projData,
-                        modelUrl: modelUrl,
-                        status: 'global',
-                        updatedAt: new Date().toISOString()
-                    };
+                    const firestoreData = { ...projData, modelUrl, status: 'global', updatedAt: new Date().toISOString() };
 
                     await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
-                    
                     await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                         userName: state.user.displayName, userId: state.user.uid, projectName: projData.name, status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id
                     });
@@ -540,10 +533,9 @@
                     projData.modelUrl = modelUrl; 
                     await saveProjectToLocalDB(projData);
 
-                    this.toast("✅ ¡Publicado con éxito!", "success");
+                    this.toast("✅ ¡Publicado!", "success");
                 } catch(e) {
-                    console.error(e);
-                    this.toast("Error al publicar: " + e.message, "error");
+                    this.toast("Error: " + e.message, "error");
                 } finally {
                     this.loader(false);
                 }
@@ -555,7 +547,7 @@
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
-                    if(!snap.exists()) throw new Error("Proyecto no encontrado o eliminado");
+                    if(!snap.exists()) throw new Error("Proyecto no encontrado");
                     
                     const data = snap.data();
                     state.currentProject = { id, data, ownerUid };
@@ -675,6 +667,16 @@
                 try {
                     if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
                     await saveProjectToLocalDB(projectData);
+                    
+                    if (state.user && !state.user.isAnonymous) {
+                         const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                         try {
+                             await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
+                                userName: state.user.displayName, userId: state.user.uid, projectName: state.draftData.name, status: "Borrador Local", createdAt: new Date().toISOString(), projectId: projectId
+                            });
+                         } catch(e){}
+                    }
+
                     this.loader(false);
                     this.toast("Guardado Local. Vamos al Mapa...", "success");
                     this.navTo('editor');
@@ -811,14 +813,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.60</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.70</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.60</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.70</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
