@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.3 (Hybrid Master)</title>
+    <title>AR Admin Pro v6.4 (User Sync Fix)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -80,7 +80,7 @@
         .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
         .log-card { border-left: 4px solid #6366f1; background: #111; }
         
-        /* HERRAMIENTAS DE GIRO (Restaurado) */
+        /* HERRAMIENTAS DE GIRO */
         .tool-btn { width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .tool-btn:active { background: #4f46e5; }
         .tools-panel { position: absolute; right: 10px; top: 80px; z-index: 50; display: flex; flex-direction: column; gap: 8px; }
@@ -103,7 +103,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v6.3 | HYBRID MASTER";
+        const APP_VERSION = "v6.4 | USER SYNC FIX";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -187,7 +187,7 @@
                             this.openSharedProject(params.get('id'), params.get('uid'));
                         } else {
                             this.navTo('dashboard');
-                            this.loadProjects();
+                            setTimeout(() => this.loadProjects(), 500);
                         }
                     } else {
                         const params = new URLSearchParams(window.location.search);
@@ -207,8 +207,31 @@
                 } else if (user.isAnonymous) state.role = 'guest';
                 else state.role = 'architect';
                 
+                this.updateUserProfile(user);
+            }
+
+            // --- CORRECCIÓN FOTO DE PERFIL ---
+            updateUserProfile(user) {
                 const nameEl = document.getElementById('user-name-display');
+                const avatarImg = document.getElementById('user-avatar-img');
+                const avatarPlaceholder = document.getElementById('user-avatar-placeholder');
+
                 if (nameEl) nameEl.textContent = user.displayName || "Invitado";
+                
+                // FIX: Comprobación más robusta y manejo de errores de carga
+                if (user.photoURL) {
+                    avatarImg.src = user.photoURL;
+                    avatarImg.classList.remove('hidden');
+                    avatarPlaceholder.classList.add('hidden');
+                    avatarImg.onerror = () => {
+                        // Si falla la carga (403/404), mostrar placeholder
+                        avatarImg.classList.add('hidden');
+                        avatarPlaceholder.classList.remove('hidden');
+                    };
+                } else {
+                    avatarImg.classList.add('hidden');
+                    avatarPlaceholder.classList.remove('hidden');
+                }
             }
 
             async loginGoogle() { 
@@ -235,13 +258,13 @@
                 }
             }
             
-            // --- CARGA ROBUSTA DE PROYECTOS (FIXED) ---
+            // --- CARGA ROBUSTA DE PROYECTOS ---
             async loadProjects() {
                 const list = document.getElementById('projects-list');
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
-                // 1. LOGICA ADMIN: Ver Logs Públicos
+                // 1. ADMIN: Ver Logs Públicos
                 if (state.role === 'admin') {
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
@@ -255,37 +278,37 @@
                     return;
                 }
 
-                // 2. LOGICA USUARIO: Carga Híbrida (Local Instantánea + Nube)
-                
-                // Paso A: Cargar Localmente INMEDIATAMENTE (Sin esperar red)
-                const currentLocals = await getAllLocalProjects();
-                state.localProjects = currentLocals;
-                
-                // Si hay locales, renderizar ya mismo
-                if (currentLocals.length > 0) {
-                    this.renderUserList(currentLocals, list);
-                }
+                // 2. USUARIO: Carga Híbrida (Local + Nube Privada)
+                let currentLocals = [];
+                try {
+                    currentLocals = await getAllLocalProjects();
+                    state.localProjects = currentLocals;
+                    if (currentLocals.length > 0) this.renderUserList(currentLocals, list);
+                    else list.innerHTML = '<div class="p-10 text-center text-slate-600">Sincronizando...</div>';
+                } catch(e) {}
 
-                // Paso B: Escuchar cambios en la Nube y Fusionar
-                const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
-                onSnapshot(projectsRef, (snap) => {
-                    const cloudMap = new Map();
-                    snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
-                    
-                    // Mezclar: Nube + (Locales que no estén en nube)
-                    const merged = [...cloudMap.values()];
-                    currentLocals.forEach(lp => { 
-                        if(!cloudMap.has(lp.id)) merged.push(lp); 
+                // Escuchar nube privada del usuario
+                if (state.user && !state.user.isAnonymous) {
+                    const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
+                    onSnapshot(projectsRef, (snap) => {
+                        const cloudMap = new Map();
+                        snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
+                        
+                        // Fusionar: Preferir Nube, rellenar con Local
+                        const merged = [...cloudMap.values()];
+                        currentLocals.forEach(lp => { if(!cloudMap.has(lp.id)) merged.push(lp); });
+                        
+                        merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                        
+                        if (merged.length === 0) { 
+                            list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs">Crea uno nuevo (+)</p></div>`; 
+                        } else {
+                            this.renderUserList(merged, list);
+                        }
                     });
-                    
-                    merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                    
-                    if (merged.length === 0) { 
-                        list.innerHTML = `<div class="p-10 text-center text-slate-600">Sin proyectos</div>`; 
-                    } else {
-                        this.renderUserList(merged, list);
-                    }
-                });
+                } else if (currentLocals.length === 0) {
+                     list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`; 
+                }
             }
 
             renderUserList(projects, container) {
@@ -359,7 +382,7 @@
                 container.appendChild(el);
             }
 
-            // --- MAPA ADMIN EN TIEMPO REAL ---
+            // --- MAPA ADMIN ---
             async openAdminMap() {
                 this.navTo('admin-map');
                 const mapEl = document.getElementById('admin-map-container');
@@ -395,7 +418,6 @@
                         <h4 class="font-bold text-sm text-indigo-400">${log.projectName}</h4>
                         <p class="text-xs text-slate-300">👤 ${log.userName}</p>
                         <p class="text-[10px] text-slate-500">📅 ${new Date(log.createdAt).toLocaleDateString()}</p>
-                        <p class="text-[10px] font-mono mb-2">📍 ${coords.lat.toFixed(4)}, ${coords.lon.toFixed(4)}</p>
                         <button onclick="app.openAdminProject('${log.projectId}', '${log.userId}')" class="bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg w-full font-bold">VER MODELO 3D</button>
                     </div>
                 `);
@@ -419,10 +441,12 @@
                     let project = state.localProjects.find(p => p.id === id);
                     if (!project && state.user) {
                         const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                        const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                        if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
+                        try {
+                             const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                             if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
+                        } catch (e) {}
                     }
-                    if (!project) throw new Error("No encontrado");
+                    if (!project) throw new Error("No encontrado (¿Borraste datos del navegador?)");
                     state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
                     await this.setupViewer(project);
                 } catch (error) { this.toast(error.message, "error"); } finally { this.loader(false); }
@@ -456,7 +480,6 @@
                 const arBtn = document.getElementById('btn-ar-action');
                 if(arBtn) arBtn.onclick = () => { if(viewer.loaded) viewer.activateAR(); else this.toast("Espera carga...", "warning"); };
 
-                // RESTAURAR HERRAMIENTAS DE GIRO Y MAPA
                 const tools = document.getElementById('tools-panel-container');
                 if(tools) tools.classList.remove('hidden'); 
                 
@@ -601,11 +624,10 @@
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
                 
-                // UI CREACIÓN - Herramientas visibles
                 const tools = document.getElementById('tools-panel-container');
                 if(tools) tools.classList.remove('hidden');
                 const mapBtn = document.getElementById('btn-view-map-single');
-                if(mapBtn) mapBtn.classList.add('hidden'); // No mapa al crear
+                if(mapBtn) mapBtn.classList.add('hidden'); 
 
                 document.getElementById('viewer-overlay').innerHTML = `
                     <div class="bg-indigo-600/90 p-4 rounded-xl text-center mb-2 animate-pulse">
@@ -646,7 +668,14 @@
                     
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     if(state.user) {
-                        // Crear Log "Borrador" para que aparezca en mapa Admin
+                        // SOLUCION CRITICA: GUARDAR TAMBIEN EN COLECCION PRIVADA (METADATOS)
+                        // Esto asegura que la lista no salga vacia si se borra el cache local
+                        await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', pid), {
+                            ...pData,
+                            status: 'local_synced' // Marcamos como sincronizado pero con modelo local
+                        });
+
+                        // Y guardamos en log público para el admin
                         await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                             userName: state.user.displayName, userId: state.user.uid, projectName: pData.name, 
                             status: "Borrador Local", createdAt: new Date().toISOString(), projectId: pid, coords: coords
@@ -656,7 +685,12 @@
                     this.toast("✅ Proyecto Creado", "success");
                     this.navTo('dashboard');
                     this.loadProjects();
-                } catch(e) { this.loader(false); this.toast("Error Guardar: "+e.message, "error"); }
+                } catch(e) { 
+                    this.loader(false); 
+                    this.toast("Guardado local OK (Nube falló)", "warning");
+                    this.navTo('dashboard');
+                    this.loadProjects();
+                }
             }
 
             initMap(coords, readOnly = false) {
@@ -691,6 +725,20 @@
             updateModelOrientation() {
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
+            }
+            
+            async deleteProject(id) {
+                if(!confirm("¿Seguro que deseas eliminar este proyecto LOCAL?")) return;
+                this.loader(true, "Eliminando...");
+                const dbL = await dbPromise;
+                const tx = dbL.transaction(["projects", "models"], "readwrite");
+                tx.objectStore("projects").delete(id);
+                tx.objectStore("models").delete(id);
+                
+                const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                try { await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id)); } catch(e) {}
+                this.loader(false);
+                this.loadProjects();
             }
             
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
@@ -730,19 +778,19 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.3</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.4</p>
         </div>
     </div>
 
     <!-- VIEW: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.3</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.4</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
-                        <img id="user-avatar-img" class="w-full h-full rounded-full object-cover hidden" src="">
-                        <div id="user-avatar-placeholder" class="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-2xl">👤</div>
+                        <img id="user-avatar-img" class="w-full h-full rounded-full object-cover hidden" src="" referrerpolicy="no-referrer">
+                        <div id="user-avatar-placeholder" class="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-2xl hidden">👤</div>
                     </div>
                     <div>
                         <h2 id="user-name-display" class="text-2xl font-black text-white leading-none mb-1">Hola!</h2>
