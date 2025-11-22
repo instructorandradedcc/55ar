@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v3.90 (Loader Fix)</title>
+    <title>AR Admin Pro v5.0 (GeoTracking)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -34,27 +34,32 @@
         .dark-card { background: #0a0a0a; border: 1px solid #333; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); }
         .hero-bg-dark { background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); }
         
-        /* Botón AR Verde Mejorado - SIEMPRE VISIBLE */
-        .ar-green-btn {
-            background-color: #4CAF50; color: white; border-radius: 50px; border: none; padding: 18px 36px;
-            font-weight: 900; font-size: 18px; letter-spacing: 1px; box-shadow: 0 10px 30px rgba(76, 175, 80, 0.4);
-            position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
-            display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 110; 
-            cursor: pointer; white-space: nowrap; text-transform: uppercase;
-            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            border: 2px solid rgba(255,255,255,0.3);
+        /* Botones de Control AR */
+        .ar-controls-container {
+            position: absolute; bottom: 40px; left: 0; width: 100%;
+            display: flex; justify-content: space-between; padding: 0 24px;
+            pointer-events: none; z-index: 50;
         }
-        .ar-green-btn:active { transform: translateX(-50%) scale(0.95); background-color: #388E3C; }
         
-        /* Estados del botón AR */
-        .ar-green-btn.minimized { bottom: 160px; transform: translateX(-50%) scale(0.8); opacity: 0.9; padding: 12px 24px; }
+        .ar-btn {
+            pointer-events: auto;
+            border-radius: 16px; border: none; padding: 16px 24px;
+            font-weight: 800; font-size: 14px; letter-spacing: 0.5px;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            text-transform: uppercase;
+        }
+        
+        .btn-cancel { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); color: white; border: 1px solid rgba(255,255,255,0.2); }
+        .btn-cancel:active { background: rgba(220, 38, 38, 0.8); transform: scale(0.95); }
+
+        .btn-action { background: #4CAF50; color: white; box-shadow: 0 8px 25px rgba(76, 175, 80, 0.4); }
+        .btn-action:active { transform: scale(0.95); background: #388E3C; }
         
         /* Utiles */
         .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .btn-pad { width: 50px; height: 50px; background: rgba(20,20,20,0.9); backdrop-filter: blur(8px); border-radius: 14px; color: white; display: flex; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,0.2); box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: all 0.1s; }
-        .btn-pad:active { background: #4f46e5; transform: scale(0.92); }
         .tools-panel { position: absolute; right: 10px; top: 80px; z-index: 50; display: flex; flex-direction: column; gap: 8px; }
         .tool-btn { width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .tool-btn:active { background: #4f46e5; }
@@ -62,20 +67,22 @@
         /* Badges */
         .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
         .status-local { background: #F59E0B; color: #000; }
-        .status-unsynced { background: #EF4444; color: #fff; }
         .status-global { background: #10B981; color: #fff; }
         .ver-badge { position: absolute; top: 10px; right: 10px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); padding: 4px 8px; border-radius: 6px; font-size: 10px; color: #888; font-family: monospace; z-index: 50; }
 
         .slide-up-enter { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
-        /* AR Prompt Fix */
         .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center; width: 100%; }
         model-viewer[ar-status="session-started"] > .ar-prompt { display: block; }
         
-        /* Admin Specifics */
         .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
         .log-card { border-left: 4px solid #6366f1; background: #111; }
+        
+        /* Popup Mapa Custom */
+        .leaflet-popup-content-wrapper { background: #111; color: white; border: 1px solid #333; border-radius: 12px; }
+        .leaflet-popup-tip { background: #333; }
+        .leaflet-container a.leaflet-popup-close-button { color: white; }
     </style>
 
     <!-- LÓGICA FIREBASE & DB -->
@@ -95,7 +102,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.90 | CRITICAL FIX";
+        const APP_VERSION = "v5.0 | ADMIN GEO TRACKING";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -157,7 +164,7 @@
         const state = {
             user: null, role: 'guest', currentProject: null, tempFile: null, localBlobUrl: null,
             draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
-            map: null, modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
+            map: null, adminMap: null, modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
             localProjects: [], currentDraftId: null 
         };
 
@@ -195,6 +202,9 @@
                     state.role = 'admin';
                     document.getElementById('dashboard-header-title').textContent = "PANEL DE CONTROL (ADMIN)";
                     document.querySelector('.hero-bg-dark').classList.add('admin-header');
+                    // Mostrar botón de Admin Map
+                    const adminMapBtn = document.getElementById('admin-map-btn');
+                    if(adminMapBtn) adminMapBtn.classList.remove('hidden');
                 } else if (user.isAnonymous) {
                     state.role = 'guest';
                 } else {
@@ -207,10 +217,7 @@
                 this.loader(true, "Conectando..."); 
                 const provider = new GoogleAuthProvider();
                 try { await signInWithPopup(auth, provider); } 
-                catch (e) { 
-                    this.loader(false); 
-                    this.toast("Error Login: " + e.message, "error"); 
-                }
+                catch (e) { this.loader(false); this.toast("Error Login: " + e.message, "error"); }
             }
 
             async loginAnonymous() {
@@ -245,7 +252,6 @@
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
-                // 1. PANEL DE ADMINISTRADOR (Ver Todo + Claves)
                 if (state.role === 'admin') {
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
@@ -261,7 +267,6 @@
                     return;
                 }
 
-                // 2. USUARIO NORMAL
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
                 onSnapshot(projectsRef, async (snap) => {
                     const currentLocals = await getAllLocalProjects();
@@ -275,7 +280,6 @@
                     currentLocals.forEach(lp => { 
                         if(!cloudMap.has(lp.id)) merged.push(lp); 
                     });
-
                     merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                     
                     if (merged.length === 0) { 
@@ -286,29 +290,17 @@
                 });
             }
 
-            // --- RENDERIZADO ADMIN ---
             renderAdminCard(log, container) {
                 const date = new Date(log.createdAt).toLocaleString();
-                const isGlobal = log.status === 'Global (Publicado)' || log.status === 'Clave Generada';
+                const isGlobal = log.status === 'Global (Publicado)';
                 const statusClass = isGlobal ? 'status-global' : 'status-local';
                 
                 const item = document.createElement('div');
                 item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity relative border-l-4 border-indigo-500`;
                 
-                // MOSTRAR CLAVE PARA SOPORTE
                 let passwordHtml = '';
                 if (log.password) {
-                    passwordHtml = `
-                        <div class="mt-3 bg-yellow-500/20 border border-yellow-500 p-3 rounded-xl flex items-center justify-between gap-2 animate-pulse">
-                            <div class="flex items-center gap-2">
-                                <span class="text-2xl">🔑</span> 
-                                <div>
-                                    <span class="text-[10px] uppercase text-yellow-500 font-bold block">Clave de Acceso:</span>
-                                    <span class="font-mono font-black text-white text-lg select-all">${log.password}</span>
-                                </div>
-                            </div>
-                            <button onclick="navigator.clipboard.writeText('${log.password}')" class="bg-black/30 p-2 rounded-lg text-xs">Copiar</button>
-                        </div>`;
+                    passwordHtml = `<div class="mt-3 bg-yellow-500/20 border border-yellow-500 p-3 rounded-xl flex items-center justify-between gap-2 animate-pulse"><div class="flex items-center gap-2"><span class="text-2xl">🔑</span><div><span class="text-[10px] uppercase text-yellow-500 font-bold block">Clave de Acceso:</span><span class="font-mono font-black text-white text-lg select-all">${log.password}</span></div></div><button onclick="navigator.clipboard.writeText('${log.password}')" class="bg-black/30 p-2 rounded-lg text-xs">Copiar</button></div>`;
                 }
 
                 item.innerHTML = `
@@ -324,19 +316,97 @@
                         </div>
                     </div>
                     <div class="mt-4 flex gap-2 border-t border-white/10 pt-3">
-                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="flex-[2] text-black text-sm font-bold py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed text-gray-500'}" ${!isGlobal ? 'disabled' : ''}>
-                            <span>${isGlobal ? '👀 VERIFICAR (VISOR)' : '🔒 SOLO LOCAL (NO VISIBLE)'}</span>
-                        </button>
-                        <button onclick="app.forceDeleteProject('${log.logId}', '${log.projectId}', '${log.userId}')" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg border border-red-400/50 flex items-center justify-center gap-1">
-                            🗑️ BORRAR
-                        </button>
+                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="flex-[2] text-black text-sm font-bold py-3 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed text-gray-500'}" ${!isGlobal ? 'disabled' : ''}><span>👀 VER MODELO</span></button>
+                        <button onclick="app.forceDeleteProject('${log.logId}', '${log.projectId}', '${log.userId}')" class="flex-1 bg-red-600 hover:bg-red-500 text-white font-bold py-3 rounded-xl shadow-lg border border-red-400/50 flex items-center justify-center gap-1">🗑️</button>
                     </div>
                     <p class="text-[9px] text-right text-slate-600 mt-1">${date}</p>
                 `;
                 container.appendChild(item);
             }
 
-            // --- FUNCIONES DE ADMIN (BORRADO INTELIGENTE) ---
+            // --- MAPA DE ADMINISTRADOR (NUEVO) ---
+            async openAdminMap() {
+                this.navTo('admin-map');
+                this.loader(true, "Cargando Mapa Global...");
+                
+                const mapEl = document.getElementById('admin-map-container');
+                if(state.adminMap) { state.adminMap.remove(); state.adminMap = null; }
+                
+                // Centrado inicial genérico o usuario
+                let center = [0, 0];
+                
+                state.adminMap = L.map(mapEl).setView(center, 2);
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Satellite' }).addTo(state.adminMap);
+
+                // Cargar Logs
+                const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
+                
+                try {
+                    const snap = await getDocs(logsRef);
+                    const bounds = [];
+                    
+                    snap.forEach(docSnap => {
+                        const log = docSnap.data();
+                        
+                        // Si el log tiene coordenadas (Versión 5.0+)
+                        if(log.coords && log.coords.lat) {
+                            this.addAdminMarker(log, log.coords, bounds);
+                        } else {
+                            // Datos antiguos sin coords en log: Intentar buscar en user doc (Resiliencia)
+                            // Hacemos fetch asíncrono no bloqueante para no congelar mapa
+                            this.fetchLegacyCoords(log).then(coords => {
+                                if(coords) this.addAdminMarker(log, coords, bounds);
+                            });
+                        }
+                    });
+                    
+                    this.loader(false);
+                    if(bounds.length > 0) state.adminMap.fitBounds(bounds);
+                } catch(e) {
+                    this.loader(false);
+                    this.toast("Error Mapa: " + e.message, "error");
+                }
+            }
+
+            async fetchLegacyCoords(log) {
+                try {
+                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', log.userId, 'projects', log.projectId));
+                    if(docSnap.exists() && docSnap.data().coords) {
+                        return docSnap.data().coords;
+                    }
+                } catch(e) { return null; }
+                return null;
+            }
+
+            addAdminMarker(log, coords, bounds) {
+                if(!state.adminMap) return;
+                
+                const isGlobal = log.status.includes('Global');
+                const colorUrl = isGlobal 
+                    ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png' 
+                    : 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png';
+
+                const icon = L.icon({ iconUrl: colorUrl, shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+                
+                const marker = L.marker([coords.lat, coords.lon], { icon }).addTo(state.adminMap);
+                
+                const popupContent = `
+                    <div class="text-center min-w-[150px]">
+                        <h4 class="font-bold text-sm text-indigo-400">${log.projectName}</h4>
+                        <p class="text-xs text-slate-300">👤 ${log.userName}</p>
+                        <p class="text-[10px] text-slate-500 mb-2">${new Date(log.createdAt).toLocaleDateString()}</p>
+                        <button onclick="app.openAdminProject('${log.projectId}', '${log.userId}')" class="bg-indigo-600 text-white text-xs px-3 py-2 rounded-lg w-full font-bold hover:bg-indigo-500">
+                            VER MODELO 3D
+                        </button>
+                    </div>
+                `;
+                marker.bindPopup(popupContent);
+                bounds.push([coords.lat, coords.lon]);
+            }
+
+            // --- ADMIN: ABRIR & BORRAR ---
             async openAdminProject(projectId, ownerUid) {
                 this.loader(true, "Cargando Modo Admin...");
                 try {
@@ -350,84 +420,48 @@
                     await this.setupViewer(data, true); 
                     
                 } catch(e) { 
-                    this.loader(false);
                     this.toast("Error: " + e.message, "error"); 
-                }
-                // Loader handled in try/catch but finally block in openProject logic is preferred usually, 
-                // but here we leave it as we added robustness to openProject below.
-            }
-
-            async forceDeleteProject(logId, projectId, userId) {
-                if(!confirm("⚠️ ¿Eliminar este proyecto de la lista?\n\nSi tienes permisos de Admin en Firebase, se borrará todo. Si no, solo se limpiará de esta lista.")) return;
-                
-                this.loader(true, "Procesando eliminación...");
-                try {
-                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    
-                    // 1. INTENTO DE BORRAR ARCHIVO PRIVADO (Puede fallar por reglas)
-                    try {
-                        await deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId));
-                    } catch (permError) {
-                        console.warn("Permiso denegado en archivo usuario (Normal sin reglas Admin configuradas).");
-                    }
-
-                    // 2. BORRAR ARCHIVO GLB DE STORAGE (Limpieza profunda)
-                    try {
-                         const storageRef = ref(storage, `models/${userId}/${projectId}.glb`);
-                         await deleteObject(storageRef);
-                    } catch(storageError) { console.warn("No se pudo borrar archivo GLB o no existía"); }
-                    
-                    // 3. BORRAR EL REGISTRO PÚBLICO (Limpia la lista)
-                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
-                    const q = query(logsRef, where('projectId', '==', projectId));
-                    const querySnapshot = await getDocs(q);
-                    
-                    const deletePromises = [];
-                    querySnapshot.forEach((doc) => {
-                        deletePromises.push(deleteDoc(doc.ref));
-                    });
-                    await Promise.all(deletePromises);
-                    
-                    this.toast("✅ Registro eliminado completamente.", "success");
-                } catch(e) {
-                    this.toast("Error General: " + e.message, "error");
-                    console.error(e);
                 } finally {
                     this.loader(false);
                 }
             }
 
-            // --- ABRIR PROYECTO (CORREGIDO ANTI-BLOQUEO) ---
+            async forceDeleteProject(logId, projectId, userId) {
+                if(!confirm("⚠️ ¿Eliminar proyecto?\n\nSi el almacenamiento falla por permisos, se forzará la limpieza de la base de datos.")) return;
+                this.loader(true, "Procesando...");
+                try {
+                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    try { const storageRef = ref(storage, `models/${userId}/${projectId}.glb`); await deleteObject(storageRef); } catch(e) { console.warn("CORS Storage ignored"); }
+                    
+                    const promises = [];
+                    try { promises.push(deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId))); } catch(e){}
+
+                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
+                    const q = query(logsRef, where('projectId', '==', projectId));
+                    const querySnapshot = await getDocs(q);
+                    querySnapshot.forEach((doc) => { promises.push(deleteDoc(doc.ref)); });
+
+                    await Promise.all(promises);
+                    this.toast("✅ Proyecto eliminado.", "success");
+                } catch(e) { this.toast("Error Crítico: " + e.message, "error"); } finally { this.loader(false); }
+            }
+
+            // --- USUARIO COMÚN ---
             async openProject(id, mode) {
                 this.loader(true, "Abriendo...");
                 try {
                     let project = state.localProjects.find(p => p.id === id);
-                    
-                    // Si no está local, buscar en nube
                     if (!project && state.user) {
                         const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
                              const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
                              if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
-                        } catch (e) { console.error(e); }
+                        } catch (e) { }
                     }
-
-                    if (!project) {
-                        throw new Error("Proyecto no encontrado o eliminado.");
-                    }
-
+                    if (!project) throw new Error("No encontrado");
                     state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
-                    
-                    if (mode === 'view') {
-                         await this.setupViewer(project);
-                    }
-                } catch (error) {
-                    console.error("Error abriendo proyecto:", error);
-                    this.toast("Error al abrir: " + error.message, "error");
-                } finally {
-                    // ESTO ES CRÍTICO: Garantiza que el loader se apague SIEMPRE
-                    this.loader(false);
-                }
+                    if (mode === 'view') await this.setupViewer(project);
+                } catch (error) { this.toast("Error: " + error.message, "error"); } finally { this.loader(false); }
             }
 
             async setupViewer(data, isShared = false) {
@@ -435,64 +469,47 @@
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = ""; 
                 
-                // 1. Cargar el Modelo
                 let blob = null;
-                try {
-                    if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) {
-                        blob = await getModelFromCache(data.modelUrl || data.id);
-                    }
-                } catch(e) { console.error("Error cache:", e); }
+                try { if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) { blob = await getModelFromCache(data.modelUrl || data.id); } } catch(e) {}
 
                 if (blob) viewer.src = URL.createObjectURL(blob);
-                else if (data.modelUrl && data.modelUrl.startsWith('http')) viewer.src = data.modelUrl;
-                else this.toast("⚠️ Aviso: Cargando metadatos, pero el modelo 3D podría no estar disponible.", "warning");
-
-                // 2. Aplicar Metadatos Guardados (Rotación y Escala)
+                else if (data.modelUrl) viewer.src = data.modelUrl;
+                
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
                     viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
                 }
-                if (data.calibration && data.calibration.s) {
-                    // Aplicar escala visual
-                    viewer.scale = `${data.calibration.s} ${data.calibration.s} ${data.calibration.s}`;
-                }
+                if (data.calibration && data.calibration.s) viewer.scale = `${data.calibration.s} ${data.calibration.s} ${data.calibration.s}`;
 
-                // 3. Configurar el Botón AR (CORRECCIÓN CLAVE)
-                // Aseguramos que el botón esté visible y configurado para abrir la cámara con los datos actuales
-                const arBtn = document.getElementById('force-ar-btn');
-                if(arBtn) {
-                    arBtn.classList.remove('hidden', 'minimized', 'floating-action');
-                    // Usamos la clase principal para que se vea grande y centrado
-                    arBtn.className = 'ar-green-btn'; 
-                    arBtn.innerHTML = "📷 VER EN REALIDAD AUMENTADA";
-                    
-                    arBtn.onclick = () => { 
-                        if (!viewer.src || viewer.src === "" || viewer.src === window.location.href) {
-                             this.toast("⏳ Espera a que el modelo cargue...", "warning");
-                             return;
-                        }
-                        this.toast("Iniciando cámara con configuración guardada...");
+                // Botones AR
+                const actionBtn = document.getElementById('btn-ar-action');
+                if(actionBtn) {
+                    actionBtn.onclick = () => { 
+                        if (!viewer.src || viewer.src === "") return this.toast("Cargando...", "warning");
                         this.activateAR(); 
                     };
                 }
                 
-                // 4. Manejo de Paneles UI
+                // Botón VER MAPA (Individual)
+                const mapBtn = document.getElementById('btn-view-map-single');
+                if (mapBtn) {
+                    mapBtn.classList.remove('hidden');
+                    mapBtn.onclick = () => {
+                         this.navTo('editor'); // Reusamos la vista de editor como visor de mapa simple
+                         setTimeout(() => this.initMap(data.coords, true), 300); // true = modo solo lectura
+                    };
+                }
+                
+                // Panel de herramientas
                 document.querySelector('.tools-panel').classList.add('hidden'); 
                 const saveContainer = document.getElementById('save-container');
                 
-                // Si estamos en modo SOLO VER (no creando), ocultamos el panel de guardar/publicar
-                // pero dejamos el botón AR accesible
                 if(!isShared && data.status !== 'local') {
                      saveContainer.classList.add('hidden');
                 } else {
-                    // Si es borrador local, mostramos opciones de guardar
                     saveContainer.classList.remove('hidden');
-                    
-                    // Limpiamos botones duplicados si existen
                     const containerBtns = saveContainer.querySelector('.pointer-events-auto');
-                    ['btn-import-project', 'btn-share-view', 'btn-confirm-pub'].forEach(bid => {
-                        const el = document.getElementById(bid); if(el) el.remove();
-                    });
+                    ['btn-confirm-pub'].forEach(bid => { const el = document.getElementById(bid); if(el) el.remove(); });
 
                     const btn = document.getElementById('btn-capture-location');
                     btn.innerHTML = "<span>🗺️</span> ACTUALIZAR UBICACIÓN GPS";
@@ -510,13 +527,12 @@
                 }
             }
 
-            // --- MAPA & PUBLICACIÓN ---
+            // --- MAPA (Editor & Visor) ---
             exitMapToDashboard() {
                 if (state.currentDraftId && state.draftData.coords) {
                     this.updateLocalCoords(state.currentDraftId, state.draftData.coords);
                 }
                 this.navTo('dashboard');
-                this.toast("Guardado en celular");
             }
 
             async confirmAndPublishFromMap() {
@@ -544,7 +560,6 @@
             async publishProject(id) {
                 this.loader(true, "Subiendo...");
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                
                 try {
                     const dbL = await dbPromise;
                     const projData = await new Promise(r => {
@@ -567,20 +582,24 @@
                     const firestoreData = { ...projData, modelUrl, status: 'global', updatedAt: new Date().toISOString() };
 
                     await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
+                    
+                    // AHORA GUARDAMOS LAS COORDENADAS EN EL LOG PÚBLICO
                     await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                        userName: state.user.displayName, userId: state.user.uid, projectName: projData.name, status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id
+                        userName: state.user.displayName, 
+                        userId: state.user.uid, 
+                        projectName: projData.name, 
+                        status: "Global (Publicado)", 
+                        createdAt: new Date().toISOString(), 
+                        projectId: id,
+                        coords: projData.coords // <-- CLAVE PARA EL MAPA GLOBAL
                     });
 
                     projData.status = 'global';
                     projData.modelUrl = modelUrl; 
                     await saveProjectToLocalDB(projData);
 
-                    this.toast("✅ ¡Publicado!", "success");
-                } catch(e) {
-                    this.toast("Error: " + e.message, "error");
-                } finally {
-                    this.loader(false);
-                }
+                    this.toast("✅ ¡Publicado y Geolocalizado!", "success");
+                } catch(e) { this.toast("Error: " + e.message, "error"); } finally { this.loader(false); }
             }
 
              // --- PROYECTOS COMPARTIDOS ---
@@ -590,26 +609,18 @@
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
                     if(!snap.exists()) throw new Error("Proyecto no encontrado");
-                    
                     const data = snap.data();
                     state.currentProject = { id, data, ownerUid };
-
                     if (data.password) {
                         this.loader(false);
                         this.toggleModal('password-entry', true);
                         return;
                     }
                     await this.setupViewer(data, true);
-                } catch(e) { 
-                    // loader handled by openProject caller usually, but shared logic is separate entry point
-                    // so we must handle loader here too.
-                    this.toast("Error Link: " + e.message, "error"); 
-                } finally {
-                    this.loader(false);
-                }
+                } catch(e) { this.toast("Error Link: " + e.message, "error"); } finally { this.loader(false); }
             }
             
-            // --- CREACIÓN & UTILIDADES ---
+            // --- CREACIÓN ---
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -621,16 +632,10 @@
                 const fileLabel = document.getElementById('file-name'); if(fileLabel) fileLabel.textContent = "Máx 50MB";
                 const viewer = document.getElementById('model-viewer-surface'); if(viewer) { viewer.src = ""; viewer.scale = "1 1 1"; viewer.orientation = "0deg 0deg 0deg"; }
                 
-                const arBtn = document.getElementById('force-ar-btn');
-                if(arBtn) {
-                    arBtn.classList.remove('minimized', 'hidden', 'floating-action');
-                    arBtn.className = 'ar-green-btn';
-                    arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
-                    arBtn.onclick = () => { this.activateAR(); };
-                }
-                
                 const saveContainer = document.getElementById('save-container'); if(saveContainer) saveContainer.classList.add('hidden');
                 const tools = document.querySelector('.tools-panel'); if(tools) tools.classList.remove('hidden');
+                
+                const mapBtn = document.getElementById('btn-view-map-single'); if(mapBtn) mapBtn.classList.add('hidden'); // Ocultar boton mapa al crear
             }
             
             toggleModal(id, show) {
@@ -669,20 +674,12 @@
             onARStarted() {
                 setTimeout(() => {
                     const saveContainer = document.getElementById('save-container');
-                    // Solo mostramos el panel de guardar SI estamos creando (no visualizando un global)
                     const isCreating = !state.currentProject || (state.currentProject && state.currentProject.status === 'local');
-                    
                     if(isCreating && saveContainer) {
                         saveContainer.classList.remove('hidden');
                         saveContainer.classList.add('slide-up-enter');
                     }
-
-                    const arBtn = document.getElementById('force-ar-btn');
-                    if(arBtn) { 
-                         // Minimizamos el botón en modo AR para dar espacio
-                        arBtn.classList.add('minimized'); 
-                    }
-                }, 2000); 
+                }, 1000); 
             }
 
             captureDataAndGoMap() {
@@ -708,15 +705,9 @@
                 const projectId = `loc_${Date.now()}`;
                 state.currentDraftId = projectId;
                 const projectData = {
-                    id: projectId,
-                    name: state.draftData.name,
-                    modelUrl: projectId, 
-                    coords: state.draftData.coords,
+                    id: projectId, name: state.draftData.name, modelUrl: projectId, coords: state.draftData.coords,
                     calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
-                    orientation: state.modelOrientation, 
-                    status: 'local', 
-                    role: 'owner',
-                    createdAt: new Date().toISOString()
+                    orientation: state.modelOrientation, status: 'local', role: 'owner', createdAt: new Date().toISOString()
                 };
                 try {
                     if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
@@ -726,7 +717,8 @@
                          const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                          try {
                              await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                userName: state.user.displayName, userId: state.user.uid, projectName: state.draftData.name, status: "Borrador Local", createdAt: new Date().toISOString(), projectId: projectId
+                                userName: state.user.displayName, userId: state.user.uid, projectName: state.draftData.name, 
+                                status: "Borrador Local", createdAt: new Date().toISOString(), projectId: projectId, coords: state.draftData.coords
                             });
                          } catch(e){}
                     }
@@ -736,23 +728,30 @@
                     this.navTo('editor');
                     setTimeout(() => this.initMap(state.draftData.coords), 300);
                     this.loadProjects(); 
-                } catch(e) {
-                    this.loader(false);
-                    this.toast("Error Memoria: " + e.message, "error");
-                }
+                } catch(e) { this.loader(false); this.toast("Error Memoria: " + e.message, "error"); }
             }
 
-            initMap(coords) {
+            initMap(coords, readOnly = false) {
                 const mapEl = document.getElementById('map');
                 if(state.map) { state.map.remove(); state.map = null; }
                 state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
                 L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Maps' }).addTo(state.map);
                 const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
-                const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
-                marker.on('dragend', e => {
-                    const ll = e.target.getLatLng();
-                    state.draftData.coords = { lat: ll.lat, lon: ll.lng };
-                });
+                const marker = L.marker([coords.lat, coords.lon], { draggable: !readOnly, icon }).addTo(state.map);
+                
+                if(!readOnly) {
+                    marker.on('dragend', e => {
+                        const ll = e.target.getLatLng();
+                        state.draftData.coords = { lat: ll.lat, lon: ll.lng };
+                    });
+                } else {
+                    marker.bindPopup("Ubicación del Modelo").openPopup();
+                    document.querySelector('#view-editor button').textContent = "Volver al Visor";
+                    document.querySelector('#view-editor button').onclick = () => app.navTo('surface');
+                    // Ocultar segundo boton
+                     const btns = document.querySelectorAll('#view-editor button');
+                     if(btns[1]) btns[1].classList.add('hidden');
+                }
                 setTimeout(() => state.map.invalidateSize(), 500);
             }
 
@@ -771,40 +770,6 @@
                     </a-scene>`;
             }
 
-            renderUserProjectCard(data, container) {
-                const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
-                let statusLabel = 'GLOBAL (NUBE)';
-                let statusClass = 'status-global';
-                if (data.status === 'local' || data.status === 'unsynced') {
-                    statusLabel = 'BORRADOR LOCAL';
-                    statusClass = 'status-local';
-                }
-                const el = document.createElement('div');
-                el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
-                el.innerHTML = `
-                    <div class="flex justify-between items-start mb-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-xl bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl font-bold shadow-sm">${data.name.charAt(0).toUpperCase()}</div>
-                            <div>
-                                <h3 class="font-bold text-white text-lg leading-tight">${data.name}</h3>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <span class="status-badge ${statusClass}">${statusLabel}</span>
-                                    <p class="text-xs text-slate-400 font-medium"><span>📅</span> ${date}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <button onclick="app.deleteProject('${data.id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
-                    </div>
-                    <div class="flex gap-2 mt-2">
-                        <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
-                        ${data.status !== 'global' ? 
-                            `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
-                        }
-                    </div>
-                `;
-                container.appendChild(el);
-            }
-
             rotateModel(axis, deg) {
                 if (axis === 'pitch') state.modelOrientation.pitch += deg; 
                 if (axis === 'roll') state.modelOrientation.roll += deg;   
@@ -817,48 +782,17 @@
             }
             
             async deleteProject(id) {
-                if(!confirm("¿Seguro que deseas eliminar este proyecto? Esta acción borrará los datos locales, los de la nube y las listas públicas.")) return;
-                this.loader(true, "Eliminando todo...");
-                
-                // 1. Borrar DB Local (IndexedDB)
+                if(!confirm("¿Seguro que deseas eliminar este proyecto LOCAL?")) return;
+                this.loader(true, "Eliminando...");
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
-
+                
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-
-                try {
-                    // 2. Borrar Documento Privado (Users Collection)
-                    try {
-                         await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                    } catch(e) { console.warn("No se pudo borrar doc privado o no existía"); }
-
-                    // 3. BORRADO CRÍTICO: Limpiar de la Lista del Administrador (Public Logs)
-                    // Buscamos todos los logs que tengan este projectId
-                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
-                    const q = query(logsRef, where('projectId', '==', id));
-                    const querySnapshot = await getDocs(q);
-                    const deletePromises = [];
-                    querySnapshot.forEach((d) => {
-                        deletePromises.push(deleteDoc(d.ref));
-                    });
-                    await Promise.all(deletePromises);
-
-                    // 4. Borrar Archivo GLB de Storage (Limpieza total)
-                    try {
-                        const storageRef = ref(storage, `models/${state.user.uid}/${id}.glb`);
-                        await deleteObject(storageRef);
-                    } catch(e) { console.warn("No se pudo borrar archivo Storage o no existía"); }
-
-                    this.toast("✅ Proyecto eliminado completamente", "success");
-                } catch(e) {
-                    console.error(e);
-                    this.toast("Error eliminando nube: " + e.message, "error");
-                } finally {
-                    this.loader(false);
-                    this.loadProjects();
-                }
+                try { await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id)); } catch(e) {}
+                this.loader(false);
+                this.loadProjects();
             }
             
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
@@ -899,14 +833,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.90</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v5.0</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.90</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v5.0</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -918,9 +852,15 @@
                         <p id="dashboard-header-title" class="text-slate-400 text-xs">Bienvenido al futuro</p>
                     </div>
                 </div>
-                <button type="button" onclick="app.logout()" class="bg-white/10 hover:bg-red-500/20 text-white p-3 rounded-2xl backdrop-blur transition border border-white/10">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
-                </button>
+                <div class="flex gap-2">
+                    <!-- BOTÓN DE MAPA ADMIN -->
+                    <button id="admin-map-btn" type="button" onclick="app.openAdminMap()" class="hidden bg-indigo-600 hover:bg-indigo-500 text-white p-3 rounded-2xl shadow-lg border border-indigo-400">
+                        🌍 MAPA
+                    </button>
+                    <button type="button" onclick="app.logout()" class="bg-white/10 hover:bg-red-500/20 text-white p-3 rounded-2xl backdrop-blur transition border border-white/10">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    </button>
+                </div>
             </div>
         </div>
         <div id="projects-list" class="flex-1 overflow-y-auto p-6 -mt-10 relative z-0 pb-32 space-y-4"></div>
@@ -957,17 +897,22 @@
         </div>
 
         <div class="tools-panel pointer-events-auto">
+            <!-- Botón de Mapa (Visible para todos) -->
+            <button id="btn-view-map-single" type="button" class="tool-btn hidden mb-2 text-emerald-400 border-emerald-500/50">🌍</button>
             <button type="button" class="tool-btn" onclick="app.rotateModel('pitch', 90)">🔃</button>
             <button type="button" class="tool-btn" onclick="app.rotateModel('pitch', -90)">🔄</button>
             <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
         </div>
 
         <div class="relative w-full h-full z-0">
-            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" ar-scale="auto" touch-action="none" interaction-prompt="auto" class="w-full h-full">
+            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto" class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
             </model-viewer>
-            <!-- Botón Principal AR (Mejorado y SIEMPRE Visible) -->
-            <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">📷 INICIAR CÁMARA AR</button>
+            
+            <div class="ar-controls-container">
+                <button onclick="app.navTo('dashboard')" class="ar-btn btn-cancel">⛔ Salir</button>
+                <button id="btn-ar-action" class="ar-btn btn-action">📷 Iniciar AR</button>
+            </div>
         </div>
 
         <div id="save-container" class="hidden absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pointer-events-none">
@@ -979,12 +924,25 @@
         </div>
     </div>
 
-    <!-- MAPA -->
+    <!-- MAPA (Editor & Visor) -->
     <div id="view-editor" class="view">
         <div id="map" class="flex-1 bg-slate-900 relative z-0"></div>
         <div class="absolute bottom-0 left-0 w-full p-6 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 flex flex-col gap-2">
             <button type="button" onclick="app.confirmAndPublishFromMap()" class="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 border border-white/20"><span>☁️</span> CONFIRMAR Y PUBLICAR (GLOBAL)</button>
             <button type="button" onclick="app.exitMapToDashboard()" class="w-full bg-white/10 text-slate-300 py-3 rounded-xl font-bold hover:bg-white/20 backdrop-blur transition">💾 Guardar solo en celular (Salir)</button>
+        </div>
+    </div>
+
+    <!-- ADMIN MAPA GLOBAL -->
+    <div id="view-admin-map" class="view">
+        <div id="admin-map-container" class="flex-1 bg-slate-900 relative z-0"></div>
+        <div class="absolute top-0 left-0 w-full p-4 z-20 flex justify-between pointer-events-none">
+            <div class="bg-black/80 backdrop-blur text-white px-4 py-2 rounded-xl text-xs font-bold border border-white/20 shadow-xl pointer-events-auto">
+                <h3 class="text-indigo-400 mb-1">RASTREO GLOBAL</h3>
+                <div class="flex items-center gap-2 mb-1"><div class="w-2 h-2 rounded-full bg-green-500"></div> Publicados</div>
+                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-orange-500"></div> Borradores</div>
+            </div>
+            <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white text-black font-bold px-4 py-2 rounded-xl shadow-lg h-10">Cerrar Mapa</button>
         </div>
     </div>
 
