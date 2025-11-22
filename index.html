@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.0 (RealTime GPS)</title>
+    <title>AR Admin Pro v6.2 (Tools Restored)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -34,7 +34,7 @@
         .dark-card { background: #0a0a0a; border: 1px solid #333; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); }
         .hero-bg-dark { background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); }
         
-        /* Botones AR Overlay (Solución Error Rojo) */
+        /* Botones AR Overlay */
         .ar-overlay-ui {
             position: absolute; bottom: 0; left: 0; width: 100%; 
             padding: 24px; pointer-events: none; z-index: 100;
@@ -71,6 +71,19 @@
         
         .slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        /* AR Prompt Fix */
+        .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center; width: 100%; }
+        model-viewer[ar-status="session-started"] > .ar-prompt { display: block; }
+        
+        /* Admin Specifics */
+        .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
+        .log-card { border-left: 4px solid #6366f1; background: #111; }
+        
+        /* HERRAMIENTAS DE GIRO (Restaurado) */
+        .tool-btn { width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .tool-btn:active { background: #4f46e5; }
+        .tools-panel { position: absolute; right: 10px; top: 80px; z-index: 50; display: flex; flex-direction: column; gap: 8px; }
     </style>
 
     <!-- LÓGICA FIREBASE & DB -->
@@ -90,7 +103,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v6.0 | REALTIME GPS";
+        const APP_VERSION = "v6.2 | TOOLS RESTORED";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -158,6 +171,7 @@
 
         class ARSystem {
             constructor() {
+                console.log(`%c AR System ${APP_VERSION} `, 'background: #4CAF50; color: #fff; padding: 2px 5px; border-radius: 3px;');
                 this.initAuth();
                 this.updateVersionUI();
             }
@@ -165,9 +179,9 @@
             initAuth() {
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
-                    const params = new URLSearchParams(window.location.search);
                     if (user) {
                         this.handleUserLogin(user);
+                        const params = new URLSearchParams(window.location.search);
                         if (params.get('id') && params.get('uid')) {
                             state.role = 'client';
                             this.openSharedProject(params.get('id'), params.get('uid'));
@@ -176,6 +190,7 @@
                             this.loadProjects();
                         }
                     } else {
+                        const params = new URLSearchParams(window.location.search);
                         if (params.get('id')) signInAnonymously(auth); 
                         else this.navTo('auth');
                     }
@@ -214,9 +229,8 @@
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 document.getElementById(`view-${id}`).classList.add('active');
                 
-                // Detener listener de mapa si salimos
                 if (id !== 'admin-map' && state.mapListener) {
-                    state.mapListener(); // Unsubscribe
+                    state.mapListener(); 
                     state.mapListener = null;
                 }
             }
@@ -260,6 +274,12 @@
                 const statusClass = isGlobal ? 'status-global' : 'status-local';
                 const item = document.createElement('div');
                 item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white border-l-4 border-indigo-500`;
+                
+                let passwordHtml = '';
+                if (log.password) {
+                    passwordHtml = `<div class="mt-3 bg-yellow-500/20 border border-yellow-500 p-3 rounded-xl flex items-center justify-between gap-2 animate-pulse"><div class="flex items-center gap-2"><span class="text-2xl">🔑</span><div><span class="text-[10px] uppercase text-yellow-500 font-bold block">Clave de Acceso:</span><span class="font-mono font-black text-white text-lg select-all">${log.password}</span></div></div><button onclick="navigator.clipboard.writeText('${log.password}')" class="bg-black/30 p-2 rounded-lg text-xs">Copiar</button></div>`;
+                }
+
                 item.innerHTML = `
                     <div class="flex justify-between items-start">
                         <div class="w-full">
@@ -270,6 +290,7 @@
                             <h4 class="font-bold text-xl mt-1">${log.projectName}</h4>
                             <p class="text-[9px] font-mono text-slate-500 mb-2">ID: ${log.projectId}</p>
                             ${log.coords ? `<p class="text-[10px] text-emerald-400">📍 GPS: ${log.coords.lat.toFixed(5)}, ${log.coords.lon.toFixed(5)}</p>` : ''}
+                            ${passwordHtml}
                         </div>
                     </div>
                     <div class="mt-4 flex gap-2 border-t border-white/10 pt-3">
@@ -280,7 +301,6 @@
                 container.appendChild(item);
             }
 
-            // --- MAPA EN TIEMPO REAL ---
             async openAdminMap() {
                 this.navTo('admin-map');
                 const mapEl = document.getElementById('admin-map-container');
@@ -291,19 +311,12 @@
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                 
-                // LISTENER REAL-TIME
                 state.mapListener = onSnapshot(logsRef, (snap) => {
-                    // Limpiar marcadores antiguos (simple approach: remove all layers except tile)
-                    state.adminMap.eachLayer((layer) => {
-                        if (!layer._url) state.adminMap.removeLayer(layer);
-                    });
-
+                    state.adminMap.eachLayer((layer) => { if (!layer._url) state.adminMap.removeLayer(layer); });
                     const bounds = [];
                     snap.forEach(docSnap => {
                         const log = docSnap.data();
-                        if(log.coords && log.coords.lat) {
-                            this.addAdminMarker(log, log.coords, bounds);
-                        }
+                        if(log.coords && log.coords.lat) this.addAdminMarker(log, log.coords, bounds);
                     });
                     if(bounds.length > 0) state.adminMap.fitBounds(bounds);
                 });
@@ -330,7 +343,6 @@
                 bounds.push([coords.lat, coords.lon]);
             }
 
-            // --- ABRIR & VISOR ---
             async openAdminProject(pid, uid) {
                 this.loader(true, "Cargando...");
                 try {
@@ -385,23 +397,36 @@
                 const arBtn = document.getElementById('btn-ar-action');
                 if(arBtn) arBtn.onclick = () => { if(viewer.loaded) viewer.activateAR(); else this.toast("Espera carga...", "warning"); };
 
+                // RESTAURAR HERRAMIENTAS DE GIRO Y MAPA
+                const tools = document.getElementById('tools-panel-container');
+                if(tools) tools.classList.remove('hidden'); // Asegurar que se vean
+                
+                const mapBtn = document.getElementById('btn-view-map-single');
+                if(mapBtn) {
+                    if(data.coords) {
+                        mapBtn.classList.remove('hidden');
+                        mapBtn.onclick = () => {
+                             this.navTo('editor'); 
+                             setTimeout(() => this.initMap(data.coords, true), 300); 
+                        };
+                    } else {
+                        mapBtn.classList.add('hidden');
+                    }
+                }
+
                 if(data.orientation) viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
                 if(data.calibration?.s) viewer.scale = `${data.calibration.s} ${data.calibration.s} ${data.calibration.s}`;
             }
 
-            // --- GPS AR REPARADO ---
             async startARGPSWrapper() {
                 const data = state.currentProject.data;
                 if(!data.coords) return this.toast("Sin coordenadas", "error");
                 this.navTo('ar');
-                
-                // Asegurar URL del modelo (Blob o HTTP)
                 let finalUrl = data.modelUrl;
                 if (!finalUrl.startsWith('http')) {
                     const blob = await getModelFromCache(data.id);
                     if(blob) finalUrl = URL.createObjectURL(blob);
                 }
-                
                 this.startARGPS(data.coords, finalUrl, data.calibration?.s || 1);
             }
 
@@ -418,7 +443,6 @@
                         </a-entity>
                     </a-scene>`;
 
-                // Actualizar panel de datos GPS
                 if(navigator.geolocation) {
                     navigator.geolocation.watchPosition(pos => {
                         const dist = this.calcDist(pos.coords.latitude, pos.coords.longitude, coords.lat, coords.lon);
@@ -432,14 +456,13 @@
             }
 
             calcDist(lat1, lon1, lat2, lon2) {
-                const R = 6371e3; // metros
+                const R = 6371e3; 
                 const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
                 const Δφ = (lat2-lat1) * Math.PI/180, Δλ = (lon2-lon1) * Math.PI/180;
                 const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
                 return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
             }
 
-            // --- CREACIÓN & UPLOAD ---
             async publishProject(id) {
                 this.loader(true, "Publicando...");
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
@@ -449,7 +472,6 @@
                         const req = dbL.transaction("projects").objectStore("projects").get(id);
                         req.onsuccess = () => r(req.result);
                     });
-                    
                     if(!projData) throw new Error("Datos corruptos");
 
                     let modelUrl = projData.modelUrl;
@@ -465,21 +487,20 @@
                     const firestoreData = { ...projData, modelUrl, status: 'global', updatedAt: new Date().toISOString() };
                     await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
                     
-                    // IMPORTANTE: Guardar coordenadas en Log Público para el Mapa Admin
                     await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                         userName: state.user.displayName, userId: state.user.uid, projectName: projData.name, 
                         status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id,
-                        coords: projData.coords // GPS DATA
+                        coords: projData.coords, 
+                        password: projData.password || null
                     });
 
                     projData.status = 'global'; projData.modelUrl = modelUrl; 
                     await saveProjectToLocalDB(projData);
                     this.toast("✅ Publicado con éxito", "success");
-                    this.openProject(id); // Recargar vista
+                    this.openProject(id);
                 } catch(e) { this.toast("Error: " + e.message, "error"); } finally { this.loader(false); }
             }
 
-            // --- UTILIDADES ---
             async forceDeleteProject(logId, projectId, userId) {
                 if(!confirm("¿Eliminar proyecto y rastros?")) return;
                 this.loader(true, "Eliminando...");
@@ -521,7 +542,12 @@
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
                 
-                // UI CREACIÓN
+                // UI CREACIÓN - Herramientas visibles
+                const tools = document.getElementById('tools-panel-container');
+                if(tools) tools.classList.remove('hidden');
+                const mapBtn = document.getElementById('btn-view-map-single');
+                if(mapBtn) mapBtn.classList.add('hidden'); // No mapa al crear
+
                 document.getElementById('viewer-overlay').innerHTML = `
                     <div class="bg-indigo-600/90 p-4 rounded-xl text-center mb-2 animate-pulse">
                         <h3 class="font-bold text-white">PASO 1: Ajustar en AR</h3>
@@ -559,7 +585,6 @@
                     await saveModelToCache(pid, state.tempFile);
                     await saveProjectToLocalDB(pData);
                     
-                    // Crear Log "Borrador" para que aparezca en el mapa del Admin (naranja)
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     if(state.user) {
                         await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
@@ -567,7 +592,6 @@
                             status: "Borrador Local", createdAt: new Date().toISOString(), projectId: pid, coords: coords
                         });
                     }
-                    
                     this.loader(false);
                     this.toast("✅ Proyecto Creado", "success");
                     this.navTo('dashboard');
@@ -575,6 +599,40 @@
                 } catch(e) { this.loader(false); this.toast("Error Guardar: "+e.message, "error"); }
             }
 
+            initMap(coords, readOnly = false) {
+                const mapEl = document.getElementById('map');
+                if(state.map) { state.map.remove(); state.map = null; }
+                state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Maps' }).addTo(state.map);
+                const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
+                const marker = L.marker([coords.lat, coords.lon], { draggable: !readOnly, icon }).addTo(state.map);
+                
+                if(!readOnly) {
+                    marker.on('dragend', e => {
+                        const ll = e.target.getLatLng();
+                        state.draftData.coords = { lat: ll.lat, lon: ll.lng };
+                    });
+                } else {
+                    marker.bindPopup("Ubicación del Modelo").openPopup();
+                    const btn = document.querySelector('#view-editor .save-btn');
+                    if(btn) { btn.textContent = "Volver al Visor"; btn.onclick = () => app.navTo('surface'); }
+                    const btnExit = document.querySelector('#view-editor .exit-btn');
+                    if(btnExit) btnExit.classList.add('hidden');
+                }
+                setTimeout(() => state.map.invalidateSize(), 500);
+            }
+
+            rotateModel(axis, deg) {
+                if (axis === 'pitch') state.modelOrientation.pitch += deg; 
+                if (axis === 'roll') state.modelOrientation.roll += deg;   
+                if (axis === 'yaw') state.modelOrientation.yaw += deg;     
+                this.updateModelOrientation();
+            }
+            updateModelOrientation() {
+                const viewer = document.getElementById('model-viewer-surface');
+                if(viewer) viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
+            }
+            
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             toast(msg, type = 'info') {
                 const t = document.getElementById('toast');
@@ -612,14 +670,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.0</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.2</p>
         </div>
     </div>
 
     <!-- VIEW: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.0</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.2</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -645,6 +703,13 @@
 
     <!-- VIEW: SURFACE (VISOR 3D & AR MESA) -->
     <div id="view-surface" class="view bg-black">
+        <div id="tools-panel-container" class="tools-panel pointer-events-auto">
+            <!-- Botón de Mapa RESTAURADO -->
+            <button id="btn-view-map-single" type="button" class="tool-btn hidden mb-2 text-emerald-400 border-emerald-500/50">🌍</button>
+            <button type="button" class="tool-btn" onclick="app.rotateModel('pitch', 90)">🔃</button>
+            <button type="button" class="tool-btn" onclick="app.rotateModel('pitch', -90)">🔄</button>
+            <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
+        </div>
         <div class="relative w-full h-full z-0">
             <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto" class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
@@ -672,16 +737,23 @@
     <!-- VIEW: AR GPS -->
     <div id="view-ar" class="view bg-black">
         <div id="ar-container" class="absolute inset-0 z-0"></div>
-        
         <div id="ar-debug-panel" class="hidden absolute top-0 left-0 w-full p-4 z-20 pointer-events-none">
             <div class="bg-black/60 backdrop-blur text-white p-4 rounded-xl text-xs font-mono border border-white/10 shadow-lg">
                 <h3 class="text-sky-400 font-bold mb-2">📡 RADAR GPS ACTIVO</h3>
                 <div id="gps-data-display">Esperando señal...</div>
             </div>
         </div>
-
         <div class="absolute bottom-10 left-0 w-full p-6 z-20 flex justify-center pointer-events-auto">
              <button onclick="app.navTo('surface')" class="bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg border border-red-400">SALIR DEL GPS</button>
+        </div>
+    </div>
+    
+    <!-- MAPA EDITOR -->
+    <div id="view-editor" class="view">
+        <div id="map" class="flex-1 bg-slate-900 relative z-0"></div>
+        <div class="absolute bottom-0 left-0 w-full p-6 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 flex flex-col gap-2">
+            <button type="button" onclick="app.confirmAndPublishFromMap()" class="save-btn w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 border border-white/20"><span>☁️</span> CONFIRMAR Y PUBLICAR (GLOBAL)</button>
+            <button type="button" onclick="app.exitMapToDashboard()" class="exit-btn w-full bg-white/10 text-slate-300 py-3 rounded-xl font-bold hover:bg-white/20 backdrop-blur transition">💾 Guardar solo en celular (Salir)</button>
         </div>
     </div>
     
@@ -702,6 +774,16 @@
                 <button onclick="app.toggleModal('new-project', false)" class="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-white/5">Cancelar</button>
                 <button onclick="app.startCreationFlow()" class="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-xl hover:bg-indigo-500">CONTINUAR</button>
             </div>
+        </div>
+    </div>
+    
+    <!-- MODALES COMPARTIDOS -->
+    <div id="modal-password-entry" class="hidden fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
+        <div class="dark-card w-full max-w-sm p-8 rounded-2xl shadow-2xl text-center border border-red-500/30">
+            <div class="mb-4 text-4xl animate-bounce">🔐</div>
+            <h3 class="text-2xl font-black text-white mb-6">ACCESO PRIVADO</h3>
+            <input type="password" id="access-password" placeholder="Ingresa la clave" class="w-full bg-black border border-white/20 p-4 rounded-xl text-white text-center text-lg font-bold mb-6 focus:border-red-500 outline-none">
+            <button onclick="app.checkSharePassword()" class="w-full py-4 rounded-xl font-black bg-white text-black shadow-xl">ENTRAR</button>
         </div>
     </div>
 </body>
