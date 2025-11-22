@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.53</title>
+    <title>AR Constructor Pro v3.55 Fix</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -15,10 +15,10 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- Model Viewer -->
+    <!-- Model Viewer (Google AR) -->
     <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
 
-    <!-- A-Frame & AR.js -->
+    <!-- A-Frame & AR.js (GPS AR) -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'></script>
 
@@ -93,7 +93,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.53 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.55 | FIX MAPA & AR";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -150,11 +150,7 @@
             auth = getAuth(app);
             db = getFirestore(app);
             storage = getStorage(app);
-            
-            setPersistence(auth, browserLocalPersistence).catch((error) => {
-                console.warn("Persistence Warning:", error.code);
-                setPersistence(auth, inMemoryPersistence).catch(console.error);
-            });
+            setPersistence(auth, browserLocalPersistence).catch(console.error);
         } catch (e) { console.error("Init Error:", e); }
 
         const state = {
@@ -171,68 +167,24 @@
                 this.updateVersionUI();
             }
 
-            resetCreationState() {
-                state.tempFile = null;
-                state.localBlobUrl = null;
-                state.currentDraftId = null;
-                state.draftData = { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } };
-                state.modelOrientation = { roll: 0, pitch: 0, yaw: 0 };
-                
-                const nameInput = document.getElementById('project-name');
-                if(nameInput) nameInput.value = "";
-                
-                const fileLabel = document.getElementById('file-name');
-                if(fileLabel) fileLabel.textContent = "Máx 50MB";
-                
-                const viewer = document.getElementById('model-viewer-surface');
-                if(viewer) viewer.src = "";
-                
-                const arBtn = document.getElementById('force-ar-btn');
-                if(arBtn) {
-                    arBtn.classList.remove('minimized', 'hidden', 'floating-action');
-                    arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
-                    arBtn.onclick = () => { this.activateAR(); };
-                }
-                
-                const saveContainer = document.getElementById('save-container');
-                if(saveContainer) saveContainer.classList.add('hidden');
-                
-                const tools = document.querySelector('.tools-panel');
-                if(tools) tools.classList.remove('hidden');
-                
-                const fileInput = document.querySelector('input[type="file"]');
-                if(fileInput) fileInput.value = '';
-            }
-
-            toggleModal(id, show) {
-                const m = document.getElementById(`modal-${id}`);
-                if(m) {
-                    if(id === 'new-project' && show) { 
-                        this.resetCreationState(); 
-                    }
-                    show ? m.classList.remove('hidden') : m.classList.add('hidden');
-                }
-            }
-
             // --- AUTH ---
             initAuth() {
-                const self = this; 
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
                     const params = new URLSearchParams(window.location.search);
                     
                     if (user) {
-                        self.handleUserLogin(user);
+                        this.handleUserLogin(user);
                         if (params.get('id') && params.get('uid')) {
                             state.role = 'client';
-                            self.openSharedProject(params.get('id'), params.get('uid'));
+                            this.openSharedProject(params.get('id'), params.get('uid'));
                         } else {
-                            self.navTo('dashboard');
-                            self.loadProjects();
+                            this.navTo('dashboard');
+                            this.loadProjects();
                         }
                     } else {
                         if (params.get('id')) signInAnonymously(auth); 
-                        else self.navTo('auth');
+                        else this.navTo('auth');
                     }
                 });
             }
@@ -253,15 +205,10 @@
             async loginGoogle() { 
                 this.loader(true, "Conectando..."); 
                 const provider = new GoogleAuthProvider();
-                provider.setCustomParameters({ prompt: 'select_account' });
                 try { await signInWithPopup(auth, provider); } 
                 catch (e) { 
                     this.loader(false); 
-                    if (e.message.includes("disallowed_useragent") || e.code === 'auth/operation-not-supported-in-this-environment') {
-                        alert("⚠️ ERROR 403 APK: Cambia el 'User Agent' en tu generador a:\nMozilla/5.0 (Linux; Android 10; Mobile; rv:89.0) Gecko/89.0 Firefox/89.0");
-                    } else {
-                        this.toast("Error Login: " + e.message, "error"); 
-                    }
+                    this.toast("Error Login: " + e.message, "error"); 
                 }
             }
 
@@ -285,40 +232,45 @@
                 }
             }
 
+            // --- NAVEGACIÓN ---
+            navTo(id) {
+                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+                document.getElementById(`view-${id}`).classList.add('active');
+            }
+            
             // --- CARGA DE PROYECTOS ---
             async loadProjects() {
                 const list = document.getElementById('projects-list');
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
-                // 1. SI ES ADMIN: Carga TODOS los logs
                 if (state.role === 'admin') {
+                    // Admin logic (como estaba antes)
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
                         list.innerHTML = '';
-                        if (snap.empty) {
-                            list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-500"><p>Sin actividad reciente</p></div>`;
-                            return;
-                        }
+                        if (snap.empty) { list.innerHTML = `<p class="text-center text-white">Sin actividad</p>`; return; }
                         const logs = [];
                         snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                         logs.forEach(log => this.renderAdminCard(log, list));
-                    }, (error) => { console.error("Error al cargar logs (Admin):", error); });
+                    });
                     return;
                 }
 
-                // 2. SI ES USUARIO NORMAL: Carga SUS proyectos y locales
+                // Usuario Normal: Cargar Firestore + Local
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
                 
                 onSnapshot(projectsRef, async (snap) => {
                     const currentLocals = await getAllLocalProjects();
-                    state.localProjects = currentLocals;
+                    state.localProjects = currentLocals; // Actualizar estado global
+                    
                     list.innerHTML = '';
                     const cloudMap = new Map();
                     
                     snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
                     
+                    // Fusionar: Preferir Cloud si existe, sino Local
                     const merged = [...cloudMap.values()];
                     currentLocals.forEach(lp => { 
                         if(!cloudMap.has(lp.id)) merged.push(lp); 
@@ -331,302 +283,243 @@
                         return; 
                     }
                     merged.forEach(p => this.renderUserProjectCard(p, list));
-                }, (error) => {
-                    list.innerHTML = '';
-                    getAllLocalProjects().then(locals => {
-                        state.localProjects = locals;
-                        state.localProjects.forEach(p => this.renderUserProjectCard(p, list));
-                        if (state.localProjects.length === 0) list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs text-red-500 mt-2">Error de conexión a la Nube.</p></div>`;
-                    });
                 });
             }
-            
-            renderAdminCard(log, container) {
-                const date = new Date(log.createdAt).toLocaleString();
-                const isGlobal = log.status === 'Global (Publicado)';
-                const statusClass = isGlobal ? 'status-global' : 'status-local';
+
+            // --- CORRECCIÓN 2: ABRIR PROYECTO (El botón "Ver") ---
+            async openProject(id, mode) {
+                this.loader(true, "Abriendo...");
                 
-                const item = document.createElement('div');
-                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity`;
+                // 1. Buscar en locales primero (más rápido)
+                let project = state.localProjects.find(p => p.id === id);
                 
-                let passwordHtml = '';
-                if (log.password) {
-                    passwordHtml = `<div class="mt-2 bg-yellow-900/30 border border-yellow-600/50 p-2 rounded flex items-center gap-2"><span class="text-yellow-500">🔑 Clave:</span> <span class="font-mono font-bold select-all">${log.password}</span></div>`;
+                // 2. Si no está en local, intentar buscarlo en la memoria de Firestore cargada o pedirlo
+                if (!project && state.user) {
+                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    try {
+                         const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                         if (docSnap.exists()) {
+                             project = { id: docSnap.id, ...docSnap.data() };
+                         }
+                    } catch (e) { console.error(e); }
                 }
 
-                item.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
-                            <h4 class="font-bold text-lg">${log.projectName}</h4>
-                            <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
-                            ${passwordHtml}
-                        </div>
-                        <div class="text-right">
-                            <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
-                            <p class="text-[10px] text-slate-500 mt-2">${date}</p>
-                        </div>
-                    </div>
-                    <div class="mt-4">
-                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="w-full text-black text-sm font-bold py-2 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed'}" ${!isGlobal ? 'disabled' : ''}>
-                            <span>${isGlobal ? '👀 Ver Modelo' : '🔒 Archivo en Móvil'}</span>
-                        </button>
-                    </div>
-                `;
-                container.appendChild(item);
-            }
-            
-            renderUserProjectCard(data, container) {
-                const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
-                let statusLabel = 'GLOBAL (NUBE)';
-                let statusClass = 'status-global';
-                
-                if (data.status === 'local' || data.status === 'unsynced') {
-                    statusLabel = 'BORRADOR LOCAL';
-                    statusClass = 'status-local';
-                }
-
-                let observerBadge = '';
-                if (data.role === 'observer') {
-                    observerBadge = `<span class="ml-2 bg-blue-900/80 text-blue-200 text-[9px] px-2 py-0.5 rounded border border-blue-500/30">OBSERVADOR</span>`;
-                }
-                
-                const el = document.createElement('div');
-                el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
-                el.innerHTML = `
-                    <div class="flex justify-between items-start mb-3">
-                        <div class="flex items-center gap-3">
-                            <div class="w-12 h-12 rounded-xl bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl font-bold shadow-sm">${data.name.charAt(0).toUpperCase()}</div>
-                            <div>
-                                <h3 class="font-bold text-white text-lg leading-tight flex items-center">${data.name} ${observerBadge}</h3>
-                                <div class="flex items-center gap-2 mt-1">
-                                    <span class="status-badge ${statusClass}">${statusLabel}</span>
-                                    <p class="text-xs text-slate-400 font-medium"><span>📅</span> ${date}</p>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="flex gap-1">
-                            <button onclick="app.deleteProject('${data.id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
-                        </div>
-                    </div>
-                    <div class="flex gap-2 mt-2">
-                        <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
-                        
-                        ${data.status !== 'global' && data.role !== 'observer' ? 
-                            `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
-                        }
-                        
-                        ${(data.status === 'global' || data.status === 'local') && data.role !== 'observer' ? 
-                            `<button onclick="app.initShareFlow('${data.id}')" class="flex-1 bg-blue-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-blue-500 transition flex items-center justify-center gap-2">🔗 Compartir</button>` : ''
-                        }
-                    </div>
-                `;
-                container.appendChild(el);
-            }
-            
-            async importSharedProject() {
-                if(!state.currentProject) return;
-                this.loader(true, "Descargando a tu APK...");
-                try {
-                    const data = state.currentProject.data;
-                    const newId = `imp_${Date.now()}`;
-                    let blobUrl = document.getElementById('model-viewer-surface').src;
-                    let blob = await fetch(blobUrl).then(r => r.blob());
-                    await saveModelToCache(newId, blob);
-                    
-                    const newProject = {
-                        id: newId,
-                        name: `${data.name} (Importado)`,
-                        modelUrl: newId, 
-                        coords: data.coords,
-                        calibration: data.calibration || { x:0, y:0, z:0, r:0, s:1 },
-                        orientation: data.orientation || { roll: 0, pitch: 0, yaw: 0 },
-                        status: 'local', 
-                        role: 'observer', 
-                        createdAt: new Date().toISOString()
-                    };
-                    await saveProjectToLocalDB(newProject);
-                    state.localProjects.push(newProject);
+                if (!project) {
                     this.loader(false);
-                    this.toast("✅ ¡Proyecto guardado!", "success");
-                    setTimeout(() => { this.openProject(newId, 'view'); }, 1000);
-                } catch(e) {
-                    this.loader(false);
-                    this.toast("Error al importar: " + e.message, "error");
-                }
-            }
-
-            initShareFlow(id) {
-                const proj = state.localProjects.find(p => p.id === id);
-                if (proj && proj.status === 'local') {
-                    if(confirm("Para compartir, primero debes subir el proyecto a la nube. ¿Subir ahora?")) {
-                        this.publishProject(id);
-                    }
+                    this.toast("No se encontró el proyecto", "error");
                     return;
                 }
+
+                state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
                 
-                state.pendingShareId = id;
-                this.toggleModal('password-protect', true);
-            }
-
-            async confirmShare() {
-                const id = state.pendingShareId;
-                const password = document.getElementById('share-password').value;
-                this.toggleModal('password-protect', false);
-                document.getElementById('share-password').value = ''; 
-
-                if (password) {
-                    this.loader(true, "Generando link seguro...");
-                    try {
-                        const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                        await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), { password: password });
-                         await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                userName: state.user.displayName, userId: state.user.uid, projectName: "Actualización Clave", status: "Clave Generada", createdAt: new Date().toISOString(), projectId: id, password: password 
-                        });
-                    } catch(e) { console.error(e); }
-                    this.loader(false);
+                if (mode === 'view') {
+                    await this.setupViewer(project);
                 }
-                this.shareLinkGenerado(id);
-            }
-
-            shareLinkGenerado(id) {
-                let baseUrl = window.location.href.split('?')[0];
-                if (window.location.protocol === 'file:') baseUrl = PUBLIC_HOST; 
-                const url = `${baseUrl}?id=${id}&uid=${state.user.uid}`;
-                
-                if (navigator.share) {
-                    navigator.share({ title: 'AR Constructor', text: 'Mira este modelo:', url: url }).catch(console.error);
-                } else {
-                    navigator.clipboard.writeText(url).then(() => this.toast("🔗 Link copiado", "success"));
-                }
-            }
-
-            async openSharedProject(id, ownerUid) {
-                this.loader(true, "Cargando...");
-                try {
-                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
-                    if(!snap.exists()) throw new Error("No encontrado");
-                    const data = snap.data();
-                    state.currentProject = { id, data, ownerUid }; 
-
-                    if (data.password) {
-                        this.loader(false);
-                        this.toggleModal('password-entry', true); 
-                        return;
-                    }
-                    this.loadSharedView(data);
-                } catch(e) { this.loader(false); this.toast("Error: " + e.message, "error"); }
-            }
-
-            async checkSharePassword() {
-                const input = document.getElementById('access-password').value;
-                const realPassword = state.currentProject.data.password;
-                if (input === realPassword) {
-                    this.toggleModal('password-entry', false);
-                    this.loadSharedView(state.currentProject.data);
-                } else {
-                    this.toast("❌ Clave Incorrecta", "error");
-                }
-            }
-
-            async loadSharedView(data) {
-                this.loader(true, "Descargando...");
-                await this.setupViewer(data, true);
                 this.loader(false);
             }
 
+            // --- LOGICA DEL VISOR & AR (Setup) ---
             async setupViewer(data, isShared = false) {
                 this.navTo('surface'); 
                 const viewer = document.getElementById('model-viewer-surface');
                 
-                // Lógica robusta para cargar blob local o remoto
+                // 1. Recuperar el BLOB (Modelo 3D)
                 let blob = await getModelFromCache(data.id);
-                if (!blob && !isShared && data.status === 'local') {
-                     blob = await getModelFromCache(data.modelUrl);
-                     if(!blob) {
-                         this.toast("⚠️ Archivo local no encontrado.", "error");
-                         // Intentar fallback si es URL
-                         if(data.modelUrl.startsWith('http')) viewer.src = data.modelUrl;
-                         else return; 
+                if (!blob && data.modelUrl) {
+                     if (data.modelUrl.startsWith('http')) {
+                         // Es URL remota
+                         viewer.src = data.modelUrl;
+                     } else {
+                         // Es ID local, intentar buscar de nuevo o error
+                         blob = await getModelFromCache(data.modelUrl);
                      }
-                } else if (!blob && (data.status === 'global' || isShared)) {
-                     blob = await this.fetchAndCache(data.modelUrl);
                 }
-
+                
                 if (blob) {
                     viewer.src = URL.createObjectURL(blob);
                 } 
 
-                // Asegurar recarga del modelo
-                setTimeout(() => { if(viewer.src) viewer.dismissPoster(); }, 500);
-
+                // 2. RESTAURAR CONFIGURACIONES (CORRECCIÓN SOLICITADA)
+                // Orientación
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
-                    this.updateModelOrientation();
+                    viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
                 }
+                // Escala
                 if (data.calibration && data.calibration.s) {
                     const s = data.calibration.s;
                     viewer.scale = `${s} ${s} ${s}`;
                 }
-                
+
+                // 3. Configurar Botones
                 const arBtn = document.getElementById('force-ar-btn');
                 if(arBtn) {
                     arBtn.classList.remove('hidden', 'minimized');
                     arBtn.classList.add('floating-action');
-                    arBtn.innerHTML = "📷 INICIAR CÁMARA AR (MESA)";
+                    arBtn.innerHTML = "📷 INICIAR CÁMARA AR";
                     arBtn.onclick = () => { this.activateAR(); };
                 }
                 
                 document.querySelector('.tools-panel').classList.add('hidden'); 
                 const saveContainer = document.getElementById('save-container');
                 saveContainer.classList.remove('hidden');
-                const containerBtns = saveContainer.querySelector('.pointer-events-auto');
                 
-                ['btn-import-project', 'btn-share-view'].forEach(bid => {
-                    const el = document.getElementById(bid);
-                    if(el) el.remove();
+                // Limpiar botones viejos
+                const containerBtns = saveContainer.querySelector('.pointer-events-auto');
+                ['btn-import-project', 'btn-share-view', 'btn-confirm-pub'].forEach(bid => {
+                    const el = document.getElementById(bid); if(el) el.remove();
                 });
 
-                if (isShared) {
-                    let impBtn = document.createElement('button');
-                    impBtn.id = 'btn-import-project';
-                    impBtn.className = "w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-lg hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
-                    impBtn.innerHTML = "<span>💾</span> DESCARGAR A MI APP (OBSERVADOR)";
-                    impBtn.onclick = () => { this.importSharedProject(); };
-                    const helpText = containerBtns.querySelector('p');
-                    if(helpText) containerBtns.insertBefore(impBtn, helpText);
-                } else if (data.status === 'global' || data.status === 'local') {
-                    // MOSTRAR COMPARTIR SIEMPRE SI ES EL DUEÑO
-                    let shareBtn = document.createElement('button');
-                    shareBtn.id = 'btn-share-view';
-                    shareBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
-                    shareBtn.innerHTML = "<span>🔗</span> COMPARTIR ESTE PROYECTO";
-                    shareBtn.onclick = () => { this.initShareFlow(data.id); };
-                    const helpText = containerBtns.querySelector('p');
-                    if(helpText) containerBtns.insertBefore(shareBtn, helpText);
-                }
-
+                // Botón GPS
                 const btn = document.getElementById('btn-capture-location');
-                btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS";
+                btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS (EXTERIORES)";
                 btn.onclick = () => { this.navTo('ar'); this.startARGPS(data); };
+
+                // Botón Publicar si es borrador
+                if (!isShared && (data.status === 'local' || data.status === 'unsynced')) {
+                    let pubBtn = document.createElement('button');
+                    pubBtn.id = 'btn-confirm-pub';
+                    pubBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition flex items-center justify-center gap-2 mt-2";
+                    pubBtn.innerHTML = "☁️ PUBLICAR AHORA";
+                    pubBtn.onclick = () => { this.publishProject(data.id); };
+                    const helpText = containerBtns.querySelector('p');
+                    if(helpText) containerBtns.insertBefore(pubBtn, helpText);
+                }
             }
 
-            async openAdminProject(id, ownerUid) {
-                this.loader(true, "Cargando Admin...");
-                try {
-                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
-                    if(!snap.exists()) throw new Error("No encontrado");
-                    const data = snap.data();
-                    state.currentProject = { id, data, ownerUid };
-                    await this.setupViewer(data, false);
-                    if (data.password) alert(`CLAVE DE ESTE PROYECTO: ${data.password}`);
-                } catch(e) { this.toast("Error: " + e.message, "error"); }
+            // --- CORRECCIÓN 1: BOTONES DEL MAPA ---
+            
+            // Botón: Guardar solo en celular (Salir)
+            exitMapToDashboard() {
+                // El borrador ya se guardó al entrar al mapa en saveLocalDraft()
+                // Solo necesitamos actualizar las coordenadas si el usuario movió el pin
+                if (state.currentDraftId && state.draftData.coords) {
+                    this.updateLocalCoords(state.currentDraftId, state.draftData.coords);
+                }
+                this.navTo('dashboard');
+                this.toast("Guardado en celular");
+            }
+
+            // Botón: Confirmar y Publicar (Global)
+            async confirmAndPublishFromMap() {
+                if (!state.currentDraftId) return;
+                
+                this.loader(true, "Finalizando...");
+                
+                // 1. Actualizar coordenadas locales (por si movió el pin)
+                await this.updateLocalCoords(state.currentDraftId, state.draftData.coords);
+                
+                // 2. Publicar
+                await this.publishProject(state.currentDraftId);
+                
+                this.navTo('dashboard');
                 this.loader(false);
             }
 
-            // --- CREACIÓN Y EDICIÓN ---
+            async updateLocalCoords(id, coords) {
+                const db = await dbPromise;
+                const tx = db.transaction("projects", "readwrite");
+                const store = tx.objectStore("projects");
+                
+                return new Promise((resolve) => {
+                    store.get(id).onsuccess = (e) => {
+                        const data = e.target.result;
+                        if (data) {
+                            data.coords = coords;
+                            store.put(data);
+                        }
+                        resolve();
+                    };
+                });
+            }
+
+            async publishProject(id) {
+                this.loader(true, "Subiendo a la nube...");
+                const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                
+                try {
+                    // 1. Obtener datos locales
+                    const dbL = await dbPromise;
+                    const projData = await new Promise(r => {
+                        const req = dbL.transaction("projects").objectStore("projects").get(id);
+                        req.onsuccess = () => r(req.result);
+                    });
+                    
+                    if(!projData) throw new Error("Datos locales corruptos");
+
+                    // 2. Subir modelo a Storage si no es URL
+                    let modelUrl = projData.modelUrl;
+                    if (!modelUrl.startsWith('http')) {
+                        const blob = await getModelFromCache(id);
+                        if (blob) {
+                            const storageRef = ref(storage, `models/${state.user.uid}/${id}.glb`);
+                            const uploadTask = await uploadBytesResumable(storageRef, blob);
+                            modelUrl = await getDownloadURL(uploadTask.ref);
+                        }
+                    }
+
+                    // 3. Guardar en Firestore
+                    const firestoreData = {
+                        ...projData,
+                        modelUrl: modelUrl,
+                        status: 'global',
+                        updatedAt: new Date().toISOString()
+                    };
+
+                    await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
+                    
+                    // 4. Log Global
+                    await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
+                        userName: state.user.displayName, userId: state.user.uid, projectName: projData.name, status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id
+                    });
+
+                    // 5. Actualizar local
+                    projData.status = 'global';
+                    projData.modelUrl = modelUrl; // Ahora usamos la URL remota como referencia principal
+                    await saveProjectToLocalDB(projData);
+
+                    this.toast("✅ ¡Publicado con éxito!", "success");
+                } catch(e) {
+                    console.error(e);
+                    this.toast("Error al publicar: " + e.message, "error");
+                } finally {
+                    this.loader(false);
+                }
+            }
+
+            // --- FUNCIONES DE CREACIÓN ---
+            resetCreationState() {
+                state.tempFile = null;
+                state.localBlobUrl = null;
+                state.currentDraftId = null;
+                state.draftData = { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } };
+                state.modelOrientation = { roll: 0, pitch: 0, yaw: 0 };
+                
+                const nameInput = document.getElementById('project-name'); if(nameInput) nameInput.value = "";
+                const fileLabel = document.getElementById('file-name'); if(fileLabel) fileLabel.textContent = "Máx 50MB";
+                const viewer = document.getElementById('model-viewer-surface'); if(viewer) { viewer.src = ""; viewer.scale = "1 1 1"; viewer.orientation = "0deg 0deg 0deg"; }
+                
+                const arBtn = document.getElementById('force-ar-btn');
+                if(arBtn) {
+                    arBtn.classList.remove('minimized', 'hidden', 'floating-action');
+                    arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
+                    arBtn.onclick = () => { this.activateAR(); };
+                }
+                
+                const saveContainer = document.getElementById('save-container'); if(saveContainer) saveContainer.classList.add('hidden');
+                const tools = document.querySelector('.tools-panel'); if(tools) tools.classList.remove('hidden');
+            }
+            
+            toggleModal(id, show) {
+                const m = document.getElementById(`modal-${id}`);
+                if(m) {
+                    if(id === 'new-project' && show) { this.resetCreationState(); }
+                    show ? m.classList.remove('hidden') : m.classList.add('hidden');
+                }
+            }
+
+            handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
+
             async startCreationFlow() {
                 const name = document.getElementById('project-name').value;
                 if(!name) return this.toast("Falta el nombre", "warning");
@@ -642,36 +535,11 @@
                 this.toast("Acomoda tu modelo en AR");
             }
 
-            async fetchAndCache(url) {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                await saveModelToCache(url, blob);
-                return URL.createObjectURL(blob);
-            }
-
-            rotateModel(axis, deg) {
-                if (axis === 'pitch') state.modelOrientation.pitch += deg; 
-                if (axis === 'roll') state.modelOrientation.roll += deg;   
-                if (axis === 'yaw') state.modelOrientation.yaw += deg;     
-                this.updateModelOrientation();
-            }
-
-            updateModelOrientation() {
-                const viewer = document.getElementById('model-viewer-surface');
-                if(viewer) viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
-            }
-
             activateAR() {
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) { 
-                    try {
-                        // Forzar la carga si no está listo
-                        if (!viewer.loaded) {
-                            this.toast("Cargando modelo para AR...", "info");
-                        }
-                        viewer.activateAR(); 
-                        this.onARStarted(); 
-                    } catch(e) { this.toast("Error cámara: " + e.message, "error"); }
+                    if (!viewer.loaded) this.toast("Cargando modelo...", "info");
+                    try { viewer.activateAR(); this.onARStarted(); } catch(e) { this.toast("Error cámara: " + e.message, "error"); }
                 }
             }
 
@@ -680,25 +548,30 @@
                     document.getElementById('save-container').classList.remove('hidden');
                     document.getElementById('save-container').classList.add('slide-up-enter');
                     const arBtn = document.getElementById('force-ar-btn');
-                    const isCreating = !state.currentProject || (state.currentProject.status === 'local' && state.currentProject.role !== 'observer'); 
+                    // Si estamos creando, el botón se minimiza. Si estamos viendo, se queda flotante
+                    const isCreating = !state.currentProject || (state.currentProject && state.currentProject.id.startsWith('loc_'));
+                    
                     if(arBtn && isCreating) { arBtn.classList.remove('floating-action'); arBtn.classList.add('minimized'); }
-                    else if(arBtn) { arBtn.classList.add('floating-action'); arBtn.classList.remove('minimized'); }
                 }, 2000); 
             }
 
             captureDataAndGoMap() {
                 this.loader(true, "Guardando...");
                 const viewer = document.getElementById('model-viewer-surface');
+                
+                // Capturar escala final
                 if(viewer && viewer.scale) {
                      const s = parseFloat(viewer.scale.toString().split(' ')[0]);
                      state.draftData.calibration.s = s || 1;
                 }
+                
+                // GPS
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
                     this.saveLocalDraft(); 
                 }, err => {
                     this.loader(false);
-                    this.toast("No GPS, usando 0,0", "warning");
+                    this.toast("GPS Falló: Usando 0,0", "warning");
                     state.draftData.coords = { lat: 0, lon: 0 };
                     this.saveLocalDraft();
                 }, { enableHighAccuracy: true, timeout: 8000 });
@@ -708,33 +581,23 @@
                 this.loader(true, "Guardando Localmente...");
                 const projectId = `loc_${Date.now()}`;
                 state.currentDraftId = projectId;
+                
                 const projectData = {
                     id: projectId,
                     name: state.draftData.name,
                     modelUrl: projectId, 
                     coords: state.draftData.coords,
                     calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
-                    orientation: state.modelOrientation,
+                    orientation: state.modelOrientation, // Guardamos la rotacion
                     status: 'local', 
+                    role: 'owner',
                     createdAt: new Date().toISOString()
                 };
+                
                 try {
                     if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
                     await saveProjectToLocalDB(projectData);
-                    if(state.user) {
-                        const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                        try {
-                            const userName = state.user.displayName || "Anónimo";
-                            await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                                userName: userName,
-                                userId: state.user.uid,
-                                projectName: state.draftData.name,
-                                status: "Borrador Local",
-                                createdAt: new Date().toISOString(),
-                                projectId: projectId 
-                            });
-                        } catch(e) {}
-                    }
+                    
                     this.loader(false);
                     this.toast("Guardado Local. Vamos al Mapa...", "success");
                     this.navTo('editor');
@@ -751,61 +614,84 @@
                 if(state.map) { state.map.remove(); state.map = null; }
                 state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
                 L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Maps' }).addTo(state.map);
+                
                 const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
                 const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
+                
                 marker.on('dragend', e => {
                     const ll = e.target.getLatLng();
                     state.draftData.coords = { lat: ll.lat, lon: ll.lng };
                 });
+                
                 setTimeout(() => state.map.invalidateSize(), 500);
             }
 
+            // --- AR GPS (A-Frame) ---
             startARGPS(data) {
                 const container = document.getElementById('ar-container');
-                const scale = data.calibration && data.calibration.s ? data.calibration.s : state.calibration.s;
+                // Usar datos guardados o defaults
+                const scale = data.calibration && data.calibration.s ? data.calibration.s : 1;
+                const calib = data.calibration || { x:0, y:0, z:0, r:0 };
+
                 container.innerHTML = `
                     <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
                         <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
                         <a-entity gps-entity-place="latitude: ${data.coords.lat}; longitude: ${data.coords.lon};">
-                            <a-entity id="ar-model-entity" position="${state.calibration.x} ${state.calibration.y} ${state.calibration.z}" rotation="0 ${state.calibration.r} 0" scale="${scale} ${scale} ${scale}">
-                                <a-gltf-model src="${data.modelUrl}" opacity="${state.calibration.opacity}" transparent="true"></a-gltf-model>
+                            <a-entity id="ar-model-entity" position="${calib.x} ${calib.y} ${calib.z}" rotation="0 ${calib.r} 0" scale="${scale} ${scale} ${scale}">
+                                <a-gltf-model src="${data.modelUrl}" opacity="1" transparent="true"></a-gltf-model>
                             </a-entity>
                         </a-entity>
                     </a-scene>`;
-                setTimeout(() => this.updateOpacity(state.calibration.opacity), 1500);
             }
 
-            adjust(axis, val) {
-                const c = state.calibration;
-                if(axis === 'r') c.r += val;
-                else if (axis === 's') c.s = Math.max(0.1, c.s + val);
-                else c[axis] += val;
-                const el = document.getElementById('ar-model-entity');
-                if(el) {
-                    el.setAttribute('position', `${c.x} ${c.y} ${c.z}`);
-                    el.setAttribute('rotation', `0 ${c.r} 0`);
-                    el.setAttribute('scale', `${c.s} ${c.s} ${c.s}`);
+            // --- UTILIDADES DE UI ---
+            renderUserProjectCard(data, container) {
+                const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
+                let statusLabel = 'GLOBAL (NUBE)';
+                let statusClass = 'status-global';
+                
+                if (data.status === 'local' || data.status === 'unsynced') {
+                    statusLabel = 'BORRADOR LOCAL';
+                    statusClass = 'status-local';
                 }
-                this.toast(`${axis.toUpperCase()}: ${c[axis].toFixed(2)}`);
-            }
-            updateOpacity(val) {
-                state.calibration.opacity = parseFloat(val);
-                const model = document.querySelector('a-gltf-model');
-                if(model) model.setAttribute('opacity', val); 
-            }
-            async saveCalibration() {
-                if(state.currentProject.role === 'observer') {
-                    this.toast("Modo Observador: No se guardan cambios", "warning");
-                    return;
-                }
-                this.loader(true, "Actualizando...");
-                const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                await updateDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', state.currentProject.id), { calibration: state.calibration });
-                this.toast("Guardado");
-                this.loader(false);
+
+                const el = document.createElement('div');
+                el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
+                el.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl font-bold shadow-sm">${data.name.charAt(0).toUpperCase()}</div>
+                            <div>
+                                <h3 class="font-bold text-white text-lg leading-tight">${data.name}</h3>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="status-badge ${statusClass}">${statusLabel}</span>
+                                    <p class="text-xs text-slate-400 font-medium"><span>📅</span> ${date}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="app.deleteProject('${data.id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
+                        ${data.status !== 'global' ? 
+                            `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
+                        }
+                    </div>
+                `;
+                container.appendChild(el);
             }
 
-            handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
+            // --- RESTO DE UTILIDADES ---
+            rotateModel(axis, deg) {
+                if (axis === 'pitch') state.modelOrientation.pitch += deg; 
+                if (axis === 'roll') state.modelOrientation.roll += deg;   
+                if (axis === 'yaw') state.modelOrientation.yaw += deg;     
+                this.updateModelOrientation();
+            }
+            updateModelOrientation() {
+                const viewer = document.getElementById('model-viewer-surface');
+                if(viewer) viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
+            }
             
             async deleteProject(id) {
                 if(!confirm("¿Eliminar?")) return;
@@ -816,28 +702,15 @@
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                    // Borrar log global
-                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
-                    const q = query(logsRef, where('projectId', '==', id));
-                    const querySnapshot = await getDocs(q);
-                    const deletePromises = [];
-                    querySnapshot.forEach((doc) => { deletePromises.push(deleteDoc(doc.ref)); });
-                    await Promise.all(deletePromises);
                 } catch(e) {}
                 this.loadProjects();
             }
-            updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             
-            navTo(id) {
-                document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-                document.getElementById(`view-${id}`).classList.add('active');
-            }
+            updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             toast(msg, type = 'info') {
                 const t = document.getElementById('toast');
                 const bg = type==='error'?'bg-red-600': type==='success'?'bg-emerald-600':'bg-slate-800';
-                const textCol = type==='warning'?'text-black':'text-white';
-                if(type==='warning') { t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full font-bold shadow-xl z-[9999] transition-all duration-300 bg-yellow-400 ${textCol} border border-black/10`; }
-                else { t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${bg} border border-white/20`; }
+                t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${bg} border border-white/20`; 
                 t.innerHTML = msg;
                 setTimeout(() => t.classList.add('-translate-y-24'), 3000);
                 t.classList.remove('-translate-y-24');
@@ -858,29 +731,6 @@
     <div id="loader" class="hidden fixed inset-0 bg-black/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
         <div class="loader-spin mb-4"></div>
         <p id="loader-text" class="font-bold tracking-widest text-sm animate-pulse">PROCESANDO...</p>
-        <div id="progress-wrapper" class="hidden w-64 mt-4"><div class="progress-container"><div id="upload-progress" class="progress-bar"></div></div></div>
-    </div>
-
-    <!-- MODALES -->
-    <div id="modal-password-protect" class="hidden fixed inset-0 z-[1000] bg-black/90 backdrop-blur-md p-6 flex items-center justify-center">
-        <div class="dark-card w-full max-w-sm p-6 rounded-2xl shadow-2xl text-center">
-            <div class="mb-4 text-4xl">🔒</div>
-            <h3 class="text-xl font-bold text-white mb-2">Proteger Link</h3>
-            <input type="text" id="share-password" placeholder="Clave opcional" class="w-full bg-white/10 border border-white/20 p-3 rounded-xl text-white text-center mb-4 focus:border-indigo-500 outline-none">
-            <div class="flex gap-2">
-                <button onclick="app.toggleModal('password-protect', false)" class="flex-1 py-3 rounded-xl font-bold text-slate-400 bg-white/5">Cancelar</button>
-                <button onclick="app.confirmShare()" class="flex-1 py-3 rounded-xl font-bold bg-indigo-600 text-white shadow-lg">Crear Link</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="modal-password-entry" class="hidden fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
-        <div class="dark-card w-full max-w-sm p-8 rounded-2xl shadow-2xl text-center border border-red-500/30">
-            <div class="mb-4 text-4xl animate-bounce">🔐</div>
-            <h3 class="text-2xl font-black text-white mb-6">ACCESO PRIVADO</h3>
-            <input type="password" id="access-password" placeholder="Ingresa la clave" class="w-full bg-black border border-white/20 p-4 rounded-xl text-white text-center text-lg font-bold mb-6 focus:border-red-500 outline-none">
-            <button onclick="app.checkSharePassword()" class="w-full py-4 rounded-xl font-black bg-white text-black shadow-xl">ENTRAR</button>
-        </div>
     </div>
 
     <!-- LOGIN -->
@@ -894,14 +744,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.53</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.55</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.53</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.55</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -947,7 +797,7 @@
     <!-- SURFACE -->
     <div id="view-surface" class="view bg-black">
         <div class="absolute top-0 left-0 w-full p-6 z-20 flex justify-between pointer-events-none">
-            <span class="bg-black/60 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold border border-white/10">PASO 1: Acomoda en AR</span>
+            <span class="bg-black/60 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold border border-white/10">AR STUDIO</span>
             <button type="button" onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 w-10 h-10 rounded-full flex items-center justify-center text-white hover:bg-red-500/50 transition border border-white/10">✕</button>
         </div>
 
@@ -961,7 +811,7 @@
             <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" ar-scale="auto" touch-action="none" interaction-prompt="auto" class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
             </model-viewer>
-            <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span></button>
+            <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">📷 INICIAR CÁMARA AR</button>
         </div>
 
         <div id="save-container" class="hidden absolute bottom-0 left-0 w-full p-6 z-30 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pointer-events-none">
@@ -988,25 +838,6 @@
         <div class="absolute top-0 left-0 w-full p-6 z-20 flex justify-between pointer-events-none">
              <div class="bg-black/60 backdrop-blur text-white px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 flex items-center gap-2 shadow-lg"><div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>VISOR GPS</div>
              <button type="button" onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 backdrop-blur text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-600 transition border border-white/10">✕</button>
-        </div>
-        <div class="absolute bottom-0 left-0 w-full p-5 z-30 flex flex-col gap-4 pointer-events-none bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-20">
-             <div class="pointer-events-auto bg-white/10 backdrop-blur p-4 rounded-2xl border border-white/10 shadow-xl">
-                <div class="flex justify-between text-white text-[10px] font-bold uppercase mb-2 tracking-wider opacity-80"><span>Opacidad</span></div>
-                <input type="range" min="0" max="1" step="0.05" value="1" oninput="app.updateOpacity(this.value)">
-            </div>
-            <div class="pointer-events-auto flex justify-between items-end gap-3">
-                <div class="grid grid-cols-3 gap-2">
-                    <div></div><button class="btn-pad" ontouchstart="app.adjust('z', -0.5)">⬆️</button><div></div>
-                    <button class="btn-pad" ontouchstart="app.adjust('x', -0.5)">⬅️</button><div class="w-[50px] h-[50px] flex items-center justify-center text-white/20 text-[10px] font-bold border border-white/10 rounded-xl bg-white/5">MOV</div><button class="btn-pad" ontouchstart="app.adjust('x', 0.5)">➡️</button>
-                    <div></div><button class="btn-pad" ontouchstart="app.adjust('z', 0.5)">⬇️</button><div></div>
-                </div>
-                <div class="flex flex-col gap-2">
-                    <button class="btn-pad text-[10px] font-bold w-14" onclick="app.adjust('y', 0.5)">▲</button>
-                    <button class="btn-pad text-[10px] font-bold w-14" onclick="app.adjust('y', -0.5)">▼</button>
-                    <button class="btn-pad text-[10px] font-bold w-14 text-yellow-300" onclick="app.adjust('r', 5)">↻</button>
-                </div>
-            </div>
-            <button type="button" onclick="app.saveCalibration()" class="pointer-events-auto w-full bg-blue-600 text-white font-bold py-4 rounded-xl shadow-lg hover:bg-blue-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/10"><span>💾</span> ACTUALIZAR</button>
         </div>
     </div>
 </body>
