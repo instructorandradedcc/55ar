@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.2 (Tools Restored)</title>
+    <title>AR Admin Pro v6.3 (Hybrid Master)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -103,7 +103,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v6.2 | TOOLS RESTORED";
+        const APP_VERSION = "v6.3 | HYBRID MASTER";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -235,11 +235,13 @@
                 }
             }
             
+            // --- CARGA ROBUSTA DE PROYECTOS (FIXED) ---
             async loadProjects() {
                 const list = document.getElementById('projects-list');
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
+                // 1. LOGICA ADMIN: Ver Logs Públicos
                 if (state.role === 'admin') {
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
@@ -253,20 +255,42 @@
                     return;
                 }
 
+                // 2. LOGICA USUARIO: Carga Híbrida (Local Instantánea + Nube)
+                
+                // Paso A: Cargar Localmente INMEDIATAMENTE (Sin esperar red)
+                const currentLocals = await getAllLocalProjects();
+                state.localProjects = currentLocals;
+                
+                // Si hay locales, renderizar ya mismo
+                if (currentLocals.length > 0) {
+                    this.renderUserList(currentLocals, list);
+                }
+
+                // Paso B: Escuchar cambios en la Nube y Fusionar
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
-                onSnapshot(projectsRef, async (snap) => {
-                    const currentLocals = await getAllLocalProjects();
-                    state.localProjects = currentLocals; 
-                    list.innerHTML = '';
+                onSnapshot(projectsRef, (snap) => {
                     const cloudMap = new Map();
                     snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
+                    
+                    // Mezclar: Nube + (Locales que no estén en nube)
                     const merged = [...cloudMap.values()];
-                    currentLocals.forEach(lp => { if(!cloudMap.has(lp.id)) merged.push(lp); });
+                    currentLocals.forEach(lp => { 
+                        if(!cloudMap.has(lp.id)) merged.push(lp); 
+                    });
+                    
                     merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                     
-                    if (merged.length === 0) { list.innerHTML = `<div class="p-10 text-center text-slate-600">Sin proyectos</div>`; return; }
-                    merged.forEach(p => this.renderUserProjectCard(p, list));
+                    if (merged.length === 0) { 
+                        list.innerHTML = `<div class="p-10 text-center text-slate-600">Sin proyectos</div>`; 
+                    } else {
+                        this.renderUserList(merged, list);
+                    }
                 });
+            }
+
+            renderUserList(projects, container) {
+                container.innerHTML = '';
+                projects.forEach(p => this.renderUserProjectCard(p, container));
             }
 
             renderAdminCard(log, container) {
@@ -301,6 +325,41 @@
                 container.appendChild(item);
             }
 
+            renderUserProjectCard(data, container) {
+                const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
+                let statusLabel = 'GLOBAL (NUBE)';
+                let statusClass = 'status-global';
+                if (data.status === 'local' || data.status === 'unsynced') {
+                    statusLabel = 'BORRADOR LOCAL';
+                    statusClass = 'status-local';
+                }
+                const el = document.createElement('div');
+                el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
+                el.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div class="flex items-center gap-3">
+                            <div class="w-12 h-12 rounded-xl bg-indigo-900/50 text-indigo-400 border border-indigo-500/30 flex items-center justify-center text-2xl font-bold shadow-sm">${data.name.charAt(0).toUpperCase()}</div>
+                            <div>
+                                <h3 class="font-bold text-white text-lg leading-tight">${data.name}</h3>
+                                <div class="flex items-center gap-2 mt-1">
+                                    <span class="status-badge ${statusClass}">${statusLabel}</span>
+                                    <p class="text-xs text-slate-400 font-medium"><span>📅</span> ${date}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <button onclick="app.deleteProject('${data.id}')" class="p-2 text-slate-400 hover:text-red-400 transition bg-white/5 rounded-lg border border-white/10">🗑️</button>
+                    </div>
+                    <div class="flex gap-2 mt-2">
+                        <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
+                        ${data.status !== 'global' ? 
+                            `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
+                        }
+                    </div>
+                `;
+                container.appendChild(el);
+            }
+
+            // --- MAPA ADMIN EN TIEMPO REAL ---
             async openAdminMap() {
                 this.navTo('admin-map');
                 const mapEl = document.getElementById('admin-map-container');
@@ -399,7 +458,7 @@
 
                 // RESTAURAR HERRAMIENTAS DE GIRO Y MAPA
                 const tools = document.getElementById('tools-panel-container');
-                if(tools) tools.classList.remove('hidden'); // Asegurar que se vean
+                if(tools) tools.classList.remove('hidden'); 
                 
                 const mapBtn = document.getElementById('btn-view-map-single');
                 if(mapBtn) {
@@ -587,6 +646,7 @@
                     
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     if(state.user) {
+                        // Crear Log "Borrador" para que aparezca en mapa Admin
                         await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                             userName: state.user.displayName, userId: state.user.uid, projectName: pData.name, 
                             status: "Borrador Local", createdAt: new Date().toISOString(), projectId: pid, coords: coords
@@ -670,14 +730,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.2</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.3</p>
         </div>
     </div>
 
     <!-- VIEW: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.2</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.3</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -788,3 +848,4 @@
     </div>
 </body>
 </html>
+
