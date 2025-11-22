@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.55 Fix</title>
+    <title>AR Constructor Admin Fix v3.60</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -93,7 +93,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.55 | FIX MAPA & AR";
+        const APP_VERSION = "v3.60 | ADMIN FIX & CLEANUP";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -244,33 +244,31 @@
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
+                // 1. PANEL DE ADMINISTRADOR (Ver Todo)
                 if (state.role === 'admin') {
-                    // Admin logic (como estaba antes)
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
                         list.innerHTML = '';
                         if (snap.empty) { list.innerHTML = `<p class="text-center text-white">Sin actividad</p>`; return; }
                         const logs = [];
-                        snap.forEach(doc => logs.push({ id: doc.id, ...doc.data() }));
+                        snap.forEach(doc => logs.push({ logId: doc.id, ...doc.data() }));
                         logs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                         logs.forEach(log => this.renderAdminCard(log, list));
                     });
                     return;
                 }
 
-                // Usuario Normal: Cargar Firestore + Local
+                // 2. USUARIO NORMAL
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
                 
                 onSnapshot(projectsRef, async (snap) => {
                     const currentLocals = await getAllLocalProjects();
-                    state.localProjects = currentLocals; // Actualizar estado global
+                    state.localProjects = currentLocals; 
                     
                     list.innerHTML = '';
                     const cloudMap = new Map();
-                    
                     snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
                     
-                    // Fusionar: Preferir Cloud si existe, sino Local
                     const merged = [...cloudMap.values()];
                     currentLocals.forEach(lp => { 
                         if(!cloudMap.has(lp.id)) merged.push(lp); 
@@ -286,14 +284,98 @@
                 });
             }
 
-            // --- CORRECCIÓN 2: ABRIR PROYECTO (El botón "Ver") ---
+            // --- RENDERIZADO ADMIN (RESTAURADO) ---
+            renderAdminCard(log, container) {
+                const date = new Date(log.createdAt).toLocaleString();
+                const isGlobal = log.status === 'Global (Publicado)' || log.status === 'Clave Generada';
+                const statusClass = isGlobal ? 'status-global' : 'status-local';
+                
+                const item = document.createElement('div');
+                item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white transition-opacity relative`;
+                
+                let passwordHtml = '';
+                if (log.password) {
+                    passwordHtml = `<div class="mt-2 bg-yellow-900/30 border border-yellow-600/50 p-2 rounded flex items-center gap-2"><span class="text-yellow-500">🔑 Clave:</span> <span class="font-mono font-bold select-all">${log.password}</span></div>`;
+                }
+
+                item.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs text-slate-400 mb-1">👤 ${log.userName || 'Anónimo'}</p>
+                            <h4 class="font-bold text-lg">${log.projectName}</h4>
+                            <p class="text-[10px] font-mono opacity-60">${log.userId}</p>
+                            ${passwordHtml}
+                        </div>
+                        <div class="text-right">
+                            <span class="text-[10px] font-bold uppercase border border-white/20 px-2 py-1 rounded ${statusClass}">${log.status}</span>
+                            <p class="text-[10px] text-slate-500 mt-2">${date}</p>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex gap-2">
+                        <button onclick="${isGlobal ? `app.openAdminProject('${log.projectId}', '${log.userId}')` : ''}" class="flex-1 text-black text-sm font-bold py-2 rounded-xl shadow-lg transition flex items-center justify-center gap-2 ${isGlobal ? 'bg-white hover:bg-slate-200' : 'bg-gray-700/50 cursor-not-allowed'}" ${!isGlobal ? 'disabled' : ''}>
+                            <span>${isGlobal ? '👀 Ver Modelo' : '🔒 Archivo Local'}</span>
+                        </button>
+                        <button onclick="app.forceDeleteProject('${log.logId}', '${log.projectId}', '${log.userId}')" class="w-12 bg-red-600/80 hover:bg-red-600 text-white rounded-xl flex items-center justify-center shadow-lg border border-red-500/50">🗑️</button>
+                    </div>
+                `;
+                container.appendChild(item);
+            }
+
+            // --- FUNCIONES DE ADMIN ---
+            async openAdminProject(projectId, ownerUid) {
+                this.loader(true, "Cargando Admin...");
+                try {
+                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', projectId));
+                    
+                    if(!snap.exists()) throw new Error("El usuario borró este proyecto o no existe.");
+                    
+                    const data = snap.data();
+                    // IMPORTANTE: Para admin, modelUrl suele ser URL. Si es ID, puede fallar si no está en cache local del admin.
+                    state.currentProject = { id: projectId, data, ownerUid };
+                    await this.setupViewer(data, true); // Tratamos como compartido para activar modo visor
+                    
+                } catch(e) { 
+                    this.loader(false);
+                    this.toast("Error: " + e.message, "error"); 
+                }
+                this.loader(false);
+            }
+
+            async forceDeleteProject(logId, projectId, userId) {
+                if(!confirm("⚠️ ADMIN: ¿Borrar este proyecto permanentemente de la base de datos y del usuario?")) return;
+                this.loader(true, "Eliminando...");
+                try {
+                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    
+                    // 1. Borrar documento del proyecto del usuario
+                    await deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId));
+                    
+                    // 2. Borrar log publico
+                    await deleteDoc(doc(db, 'artifacts', namespace, 'public', 'data', 'project_logs', logId));
+                    
+                    // 3. (Opcional) Intentar borrar archivo de Storage - Requiere permisos de admin en reglas
+                    try {
+                        const storageRef = ref(storage, `models/${userId}/${projectId}.glb`);
+                        // await deleteObject(storageRef); // Necesitas importar deleteObject si quieres activar esto
+                    } catch(e) { console.log("Storage clean skip"); }
+
+                    this.toast("✅ Proyecto eliminado por Admin", "success");
+                } catch(e) {
+                    this.toast("Error al borrar: " + e.message, "error");
+                } finally {
+                    this.loader(false);
+                }
+            }
+
+            // --- ABRIR PROYECTO (CORREGIDO CARGA INFINITA) ---
             async openProject(id, mode) {
                 this.loader(true, "Abriendo...");
                 
-                // 1. Buscar en locales primero (más rápido)
+                // 1. Buscar en locales primero
                 let project = state.localProjects.find(p => p.id === id);
                 
-                // 2. Si no está en local, intentar buscarlo en la memoria de Firestore cargada o pedirlo
+                // 2. Si no está en local, intentar buscarlo en la memoria de Firestore
                 if (!project && state.user) {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     try {
@@ -318,40 +400,40 @@
                 this.loader(false);
             }
 
-            // --- LOGICA DEL VISOR & AR (Setup) ---
             async setupViewer(data, isShared = false) {
                 this.navTo('surface'); 
                 const viewer = document.getElementById('model-viewer-surface');
                 
-                // 1. Recuperar el BLOB (Modelo 3D)
-                let blob = await getModelFromCache(data.id);
-                if (!blob && data.modelUrl) {
-                     if (data.modelUrl.startsWith('http')) {
-                         // Es URL remota
-                         viewer.src = data.modelUrl;
-                     } else {
-                         // Es ID local, intentar buscar de nuevo o error
-                         blob = await getModelFromCache(data.modelUrl);
-                     }
-                }
+                // Resetear visor
+                viewer.src = ""; 
                 
+                // Lógica robusta para cargar blob
+                let blob = null;
+                if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) {
+                    // Intenta caché local
+                    blob = await getModelFromCache(data.modelUrl || data.id);
+                }
+
                 if (blob) {
                     viewer.src = URL.createObjectURL(blob);
-                } 
+                } else if (data.modelUrl && data.modelUrl.startsWith('http')) {
+                    viewer.src = data.modelUrl;
+                } else {
+                     // Fallback crítico para evitar pantalla de carga infinita
+                     this.toast("⚠️ Archivo 3D no disponible en este dispositivo", "error");
+                     // Podríamos redirigir o dejar al usuario subirlo de nuevo, pero al menos no colgamos la app
+                }
 
-                // 2. RESTAURAR CONFIGURACIONES (CORRECCIÓN SOLICITADA)
-                // Orientación
+                // Restaurar configs
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
                     viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
                 }
-                // Escala
                 if (data.calibration && data.calibration.s) {
                     const s = data.calibration.s;
                     viewer.scale = `${s} ${s} ${s}`;
                 }
 
-                // 3. Configurar Botones
                 const arBtn = document.getElementById('force-ar-btn');
                 if(arBtn) {
                     arBtn.classList.remove('hidden', 'minimized');
@@ -364,18 +446,15 @@
                 const saveContainer = document.getElementById('save-container');
                 saveContainer.classList.remove('hidden');
                 
-                // Limpiar botones viejos
                 const containerBtns = saveContainer.querySelector('.pointer-events-auto');
                 ['btn-import-project', 'btn-share-view', 'btn-confirm-pub'].forEach(bid => {
                     const el = document.getElementById(bid); if(el) el.remove();
                 });
 
-                // Botón GPS
                 const btn = document.getElementById('btn-capture-location');
                 btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS (EXTERIORES)";
                 btn.onclick = () => { this.navTo('ar'); this.startARGPS(data); };
 
-                // Botón Publicar si es borrador
                 if (!isShared && (data.status === 'local' || data.status === 'unsynced')) {
                     let pubBtn = document.createElement('button');
                     pubBtn.id = 'btn-confirm-pub';
@@ -387,12 +466,8 @@
                 }
             }
 
-            // --- CORRECCIÓN 1: BOTONES DEL MAPA ---
-            
-            // Botón: Guardar solo en celular (Salir)
+            // --- MAPA & PUBLICACIÓN ---
             exitMapToDashboard() {
-                // El borrador ya se guardó al entrar al mapa en saveLocalDraft()
-                // Solo necesitamos actualizar las coordenadas si el usuario movió el pin
                 if (state.currentDraftId && state.draftData.coords) {
                     this.updateLocalCoords(state.currentDraftId, state.draftData.coords);
                 }
@@ -400,18 +475,11 @@
                 this.toast("Guardado en celular");
             }
 
-            // Botón: Confirmar y Publicar (Global)
             async confirmAndPublishFromMap() {
                 if (!state.currentDraftId) return;
-                
                 this.loader(true, "Finalizando...");
-                
-                // 1. Actualizar coordenadas locales (por si movió el pin)
                 await this.updateLocalCoords(state.currentDraftId, state.draftData.coords);
-                
-                // 2. Publicar
                 await this.publishProject(state.currentDraftId);
-                
                 this.navTo('dashboard');
                 this.loader(false);
             }
@@ -420,7 +488,6 @@
                 const db = await dbPromise;
                 const tx = db.transaction("projects", "readwrite");
                 const store = tx.objectStore("projects");
-                
                 return new Promise((resolve) => {
                     store.get(id).onsuccess = (e) => {
                         const data = e.target.result;
@@ -438,7 +505,6 @@
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 
                 try {
-                    // 1. Obtener datos locales
                     const dbL = await dbPromise;
                     const projData = await new Promise(r => {
                         const req = dbL.transaction("projects").objectStore("projects").get(id);
@@ -447,7 +513,6 @@
                     
                     if(!projData) throw new Error("Datos locales corruptos");
 
-                    // 2. Subir modelo a Storage si no es URL
                     let modelUrl = projData.modelUrl;
                     if (!modelUrl.startsWith('http')) {
                         const blob = await getModelFromCache(id);
@@ -458,7 +523,6 @@
                         }
                     }
 
-                    // 3. Guardar en Firestore
                     const firestoreData = {
                         ...projData,
                         modelUrl: modelUrl,
@@ -468,14 +532,12 @@
 
                     await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
                     
-                    // 4. Log Global
                     await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                         userName: state.user.displayName, userId: state.user.uid, projectName: projData.name, status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id
                     });
 
-                    // 5. Actualizar local
                     projData.status = 'global';
-                    projData.modelUrl = modelUrl; // Ahora usamos la URL remota como referencia principal
+                    projData.modelUrl = modelUrl; 
                     await saveProjectToLocalDB(projData);
 
                     this.toast("✅ ¡Publicado con éxito!", "success");
@@ -487,7 +549,31 @@
                 }
             }
 
-            // --- FUNCIONES DE CREACIÓN ---
+             // --- PROYECTOS COMPARTIDOS ---
+            async openSharedProject(id, ownerUid) {
+                this.loader(true, "Cargando...");
+                try {
+                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                    const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', ownerUid, 'projects', id));
+                    if(!snap.exists()) throw new Error("Proyecto no encontrado o eliminado");
+                    
+                    const data = snap.data();
+                    state.currentProject = { id, data, ownerUid };
+
+                    if (data.password) {
+                        this.loader(false);
+                        this.toggleModal('password-entry', true);
+                        return;
+                    }
+                    await this.setupViewer(data, true);
+                } catch(e) { 
+                    this.loader(false); 
+                    this.toast("Error Link: " + e.message, "error"); 
+                }
+                this.loader(false);
+            }
+            
+            // --- CREACIÓN & UTILIDADES ---
             resetCreationState() {
                 state.tempFile = null;
                 state.localBlobUrl = null;
@@ -548,9 +634,7 @@
                     document.getElementById('save-container').classList.remove('hidden');
                     document.getElementById('save-container').classList.add('slide-up-enter');
                     const arBtn = document.getElementById('force-ar-btn');
-                    // Si estamos creando, el botón se minimiza. Si estamos viendo, se queda flotante
                     const isCreating = !state.currentProject || (state.currentProject && state.currentProject.id.startsWith('loc_'));
-                    
                     if(arBtn && isCreating) { arBtn.classList.remove('floating-action'); arBtn.classList.add('minimized'); }
                 }, 2000); 
             }
@@ -558,14 +642,10 @@
             captureDataAndGoMap() {
                 this.loader(true, "Guardando...");
                 const viewer = document.getElementById('model-viewer-surface');
-                
-                // Capturar escala final
                 if(viewer && viewer.scale) {
                      const s = parseFloat(viewer.scale.toString().split(' ')[0]);
                      state.draftData.calibration.s = s || 1;
                 }
-                
-                // GPS
                 navigator.geolocation.getCurrentPosition(pos => {
                     state.draftData.coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
                     this.saveLocalDraft(); 
@@ -581,23 +661,20 @@
                 this.loader(true, "Guardando Localmente...");
                 const projectId = `loc_${Date.now()}`;
                 state.currentDraftId = projectId;
-                
                 const projectData = {
                     id: projectId,
                     name: state.draftData.name,
                     modelUrl: projectId, 
                     coords: state.draftData.coords,
                     calibration: { x:0, y:0, z:0, r:0, s: state.draftData.calibration.s || 1 }, 
-                    orientation: state.modelOrientation, // Guardamos la rotacion
+                    orientation: state.modelOrientation, 
                     status: 'local', 
                     role: 'owner',
                     createdAt: new Date().toISOString()
                 };
-                
                 try {
                     if(state.tempFile) await saveModelToCache(projectId, state.tempFile);
                     await saveProjectToLocalDB(projectData);
-                    
                     this.loader(false);
                     this.toast("Guardado Local. Vamos al Mapa...", "success");
                     this.navTo('editor');
@@ -614,25 +691,19 @@
                 if(state.map) { state.map.remove(); state.map = null; }
                 state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
                 L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Maps' }).addTo(state.map);
-                
                 const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
                 const marker = L.marker([coords.lat, coords.lon], { draggable: true, icon }).addTo(state.map);
-                
                 marker.on('dragend', e => {
                     const ll = e.target.getLatLng();
                     state.draftData.coords = { lat: ll.lat, lon: ll.lng };
                 });
-                
                 setTimeout(() => state.map.invalidateSize(), 500);
             }
 
-            // --- AR GPS (A-Frame) ---
             startARGPS(data) {
                 const container = document.getElementById('ar-container');
-                // Usar datos guardados o defaults
                 const scale = data.calibration && data.calibration.s ? data.calibration.s : 1;
                 const calib = data.calibration || { x:0, y:0, z:0, r:0 };
-
                 container.innerHTML = `
                     <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
                         <a-camera gps-camera="minDistance: 1;" rotation-reader></a-camera>
@@ -644,17 +715,14 @@
                     </a-scene>`;
             }
 
-            // --- UTILIDADES DE UI ---
             renderUserProjectCard(data, container) {
                 const date = data.createdAt ? new Date(data.createdAt).toLocaleDateString() : 'Hoy';
                 let statusLabel = 'GLOBAL (NUBE)';
                 let statusClass = 'status-global';
-                
                 if (data.status === 'local' || data.status === 'unsynced') {
                     statusLabel = 'BORRADOR LOCAL';
                     statusClass = 'status-local';
                 }
-
                 const el = document.createElement('div');
                 el.className = `dark-card p-5 rounded-2xl mb-4 relative overflow-hidden group transition-all hover:-translate-y-1`;
                 el.innerHTML = `
@@ -681,7 +749,6 @@
                 container.appendChild(el);
             }
 
-            // --- RESTO DE UTILIDADES ---
             rotateModel(axis, deg) {
                 if (axis === 'pitch') state.modelOrientation.pitch += deg; 
                 if (axis === 'roll') state.modelOrientation.roll += deg;   
@@ -744,14 +811,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.55</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.60</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.55</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.60</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -838,6 +905,16 @@
         <div class="absolute top-0 left-0 w-full p-6 z-20 flex justify-between pointer-events-none">
              <div class="bg-black/60 backdrop-blur text-white px-4 py-1.5 rounded-full text-xs font-bold border border-white/10 flex items-center gap-2 shadow-lg"><div class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>VISOR GPS</div>
              <button type="button" onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white/10 backdrop-blur text-white w-10 h-10 rounded-full flex items-center justify-center hover:bg-red-600 transition border border-white/10">✕</button>
+        </div>
+    </div>
+    
+    <!-- MODALES -->
+    <div id="modal-password-entry" class="hidden fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
+        <div class="dark-card w-full max-w-sm p-8 rounded-2xl shadow-2xl text-center border border-red-500/30">
+            <div class="mb-4 text-4xl animate-bounce">🔐</div>
+            <h3 class="text-2xl font-black text-white mb-6">ACCESO PRIVADO</h3>
+            <input type="password" id="access-password" placeholder="Ingresa la clave" class="w-full bg-black border border-white/20 p-4 rounded-xl text-white text-center text-lg font-bold mb-6 focus:border-red-500 outline-none">
+            <button onclick="app.checkSharePassword()" class="w-full py-4 rounded-xl font-black bg-white text-black shadow-xl">ENTRAR</button>
         </div>
     </div>
 </body>
