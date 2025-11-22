@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Constructor Pro v3.52</title>
+    <title>AR Constructor Pro v3.53</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -40,7 +40,7 @@
             font-weight: 800; font-size: 16px; letter-spacing: 0.5px; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 110; /* Aumentado para asegurar visibilidad */
+            z-index: 110; 
             cursor: pointer; white-space: nowrap; text-transform: uppercase;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
         }
@@ -67,6 +67,10 @@
         .slide-up-enter { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
         
+        /* AR Prompt Fix */
+        .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center; width: 100%; }
+        model-viewer[ar-status="session-started"] > .ar-prompt { display: block; }
+        
         /* Admin Specifics */
         .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
         .log-card { border-left: 4px solid #6366f1; background: #111; }
@@ -89,7 +93,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.52 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
+        const APP_VERSION = "v3.53 | ARQUITECTURA Y DISEÑO A OTRO NIVEL";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         const PUBLIC_HOST = "https://instructorandradedcc.github.io/55ar/"; 
 
@@ -287,6 +291,7 @@
                 list.innerHTML = '<div class="p-8 text-center text-slate-500 animate-pulse">Cargando proyectos...</div>';
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
 
+                // 1. SI ES ADMIN: Carga TODOS los logs
                 if (state.role === 'admin') {
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     onSnapshot(logsRef, (snap) => {
@@ -303,6 +308,7 @@
                     return;
                 }
 
+                // 2. SI ES USUARIO NORMAL: Carga SUS proyectos y locales
                 const projectsRef = collection(db, 'artifacts', namespace, 'users', state.user.uid, 'projects');
                 
                 onSnapshot(projectsRef, async (snap) => {
@@ -534,27 +540,27 @@
                 this.navTo('surface'); 
                 const viewer = document.getElementById('model-viewer-surface');
                 
-                // Lógica robusta para cargar blob local
+                // Lógica robusta para cargar blob local o remoto
                 let blob = await getModelFromCache(data.id);
                 if (!blob && !isShared && data.status === 'local') {
-                    // Si es local y no está en caché, intentamos recuperar por modelUrl si es un ID
-                    blob = await getModelFromCache(data.modelUrl);
-                    if(!blob) {
-                        this.toast("Error: Archivo de modelo 3D no encontrado en memoria local.", "error");
-                        return; // Detener si no hay archivo
-                    }
+                     blob = await getModelFromCache(data.modelUrl);
+                     if(!blob) {
+                         this.toast("⚠️ Archivo local no encontrado.", "error");
+                         // Intentar fallback si es URL
+                         if(data.modelUrl.startsWith('http')) viewer.src = data.modelUrl;
+                         else return; 
+                     }
                 } else if (!blob && (data.status === 'global' || isShared)) {
-                     // Si es global o compartido, descargar
                      blob = await this.fetchAndCache(data.modelUrl);
                 }
 
                 if (blob) {
                     viewer.src = URL.createObjectURL(blob);
-                } else {
-                     // Fallback último recurso (normalmente no debería llegar aquí si es local sin blob)
-                     viewer.src = data.modelUrl;
-                }
-                
+                } 
+
+                // Asegurar recarga del modelo
+                setTimeout(() => { if(viewer.src) viewer.dismissPoster(); }, 500);
+
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
                     this.updateModelOrientation();
@@ -568,7 +574,7 @@
                 if(arBtn) {
                     arBtn.classList.remove('hidden', 'minimized');
                     arBtn.classList.add('floating-action');
-                    arBtn.innerHTML = "👓 VER EN AR (MESA/PISO)";
+                    arBtn.innerHTML = "📷 INICIAR CÁMARA AR (MESA)";
                     arBtn.onclick = () => { this.activateAR(); };
                 }
                 
@@ -590,6 +596,15 @@
                     impBtn.onclick = () => { this.importSharedProject(); };
                     const helpText = containerBtns.querySelector('p');
                     if(helpText) containerBtns.insertBefore(impBtn, helpText);
+                } else if (data.status === 'global' || data.status === 'local') {
+                    // MOSTRAR COMPARTIR SIEMPRE SI ES EL DUEÑO
+                    let shareBtn = document.createElement('button');
+                    shareBtn.id = 'btn-share-view';
+                    shareBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 mb-2 border border-white/20 mt-2";
+                    shareBtn.innerHTML = "<span>🔗</span> COMPARTIR ESTE PROYECTO";
+                    shareBtn.onclick = () => { this.initShareFlow(data.id); };
+                    const helpText = containerBtns.querySelector('p');
+                    if(helpText) containerBtns.insertBefore(shareBtn, helpText);
                 }
 
                 const btn = document.getElementById('btn-capture-location');
@@ -650,6 +665,10 @@
                 const viewer = document.getElementById('model-viewer-surface');
                 if(viewer) { 
                     try {
+                        // Forzar la carga si no está listo
+                        if (!viewer.loaded) {
+                            this.toast("Cargando modelo para AR...", "info");
+                        }
                         viewer.activateAR(); 
                         this.onARStarted(); 
                     } catch(e) { this.toast("Error cámara: " + e.message, "error"); }
@@ -788,38 +807,25 @@
 
             handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
             
-            // --- NUEVA LÓGICA: BORRADO SINCRONIZADO (ADMIN) ---
             async deleteProject(id) {
                 if(!confirm("¿Eliminar?")) return;
-                
-                // 1. Borrar local
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
-                
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    
-                    // 2. Borrar documento personal del usuario
                     await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                    
-                    // 3. BORRAR LOG GLOBAL (Para que desaparezca del Admin)
+                    // Borrar log global
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     const q = query(logsRef, where('projectId', '==', id));
                     const querySnapshot = await getDocs(q);
-                    
                     const deletePromises = [];
-                    querySnapshot.forEach((doc) => {
-                        deletePromises.push(deleteDoc(doc.ref));
-                    });
+                    querySnapshot.forEach((doc) => { deletePromises.push(deleteDoc(doc.ref)); });
                     await Promise.all(deletePromises);
-                    
-                } catch(e) { console.error("Error eliminando en nube:", e); }
-                
+                } catch(e) {}
                 this.loadProjects();
             }
-
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             
             navTo(id) {
@@ -888,14 +894,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.52</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.53</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.52</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.53</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
