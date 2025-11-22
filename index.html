@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v3.80 (Sync Fix)</title>
+    <title>AR Admin Pro v3.90 (Loader Fix)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -34,11 +34,11 @@
         .dark-card { background: #0a0a0a; border: 1px solid #333; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); }
         .hero-bg-dark { background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); }
         
-        /* Botón AR Verde Mejorado */
+        /* Botón AR Verde Mejorado - SIEMPRE VISIBLE */
         .ar-green-btn {
             background-color: #4CAF50; color: white; border-radius: 50px; border: none; padding: 18px 36px;
             font-weight: 900; font-size: 18px; letter-spacing: 1px; box-shadow: 0 10px 30px rgba(76, 175, 80, 0.4);
-            position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
+            position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             z-index: 110; 
             cursor: pointer; white-space: nowrap; text-transform: uppercase;
@@ -95,7 +95,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.80 | SYNC & VIEW FIX";
+        const APP_VERSION = "v3.90 | CRITICAL FIX";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -353,7 +353,8 @@
                     this.loader(false);
                     this.toast("Error: " + e.message, "error"); 
                 }
-                this.loader(false);
+                // Loader handled in try/catch but finally block in openProject logic is preferred usually, 
+                // but here we leave it as we added robustness to openProject below.
             }
 
             async forceDeleteProject(logId, projectId, userId) {
@@ -396,28 +397,37 @@
                 }
             }
 
-            // --- ABRIR PROYECTO ---
+            // --- ABRIR PROYECTO (CORREGIDO ANTI-BLOQUEO) ---
             async openProject(id, mode) {
                 this.loader(true, "Abriendo...");
-                let project = state.localProjects.find(p => p.id === id);
-                
-                if (!project && state.user) {
-                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    try {
-                         const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                         if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
-                    } catch (e) { console.error(e); }
-                }
+                try {
+                    let project = state.localProjects.find(p => p.id === id);
+                    
+                    // Si no está local, buscar en nube
+                    if (!project && state.user) {
+                        const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                        try {
+                             const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                             if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
+                        } catch (e) { console.error(e); }
+                    }
 
-                if (!project) {
+                    if (!project) {
+                        throw new Error("Proyecto no encontrado o eliminado.");
+                    }
+
+                    state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
+                    
+                    if (mode === 'view') {
+                         await this.setupViewer(project);
+                    }
+                } catch (error) {
+                    console.error("Error abriendo proyecto:", error);
+                    this.toast("Error al abrir: " + error.message, "error");
+                } finally {
+                    // ESTO ES CRÍTICO: Garantiza que el loader se apague SIEMPRE
                     this.loader(false);
-                    this.toast("Proyecto no disponible", "error");
-                    return;
                 }
-
-                state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
-                if (mode === 'view') await this.setupViewer(project);
-                this.loader(false);
             }
 
             async setupViewer(data, isShared = false) {
@@ -427,13 +437,15 @@
                 
                 // 1. Cargar el Modelo
                 let blob = null;
-                if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) {
-                    blob = await getModelFromCache(data.modelUrl || data.id);
-                }
+                try {
+                    if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) {
+                        blob = await getModelFromCache(data.modelUrl || data.id);
+                    }
+                } catch(e) { console.error("Error cache:", e); }
 
                 if (blob) viewer.src = URL.createObjectURL(blob);
                 else if (data.modelUrl && data.modelUrl.startsWith('http')) viewer.src = data.modelUrl;
-                else this.toast("⚠️ Archivo 3D no encontrado", "error");
+                else this.toast("⚠️ Aviso: Cargando metadatos, pero el modelo 3D podría no estar disponible.", "warning");
 
                 // 2. Aplicar Metadatos Guardados (Rotación y Escala)
                 if(data.orientation) {
@@ -455,6 +467,10 @@
                     arBtn.innerHTML = "📷 VER EN REALIDAD AUMENTADA";
                     
                     arBtn.onclick = () => { 
+                        if (!viewer.src || viewer.src === "" || viewer.src === window.location.href) {
+                             this.toast("⏳ Espera a que el modelo cargue...", "warning");
+                             return;
+                        }
                         this.toast("Iniciando cámara con configuración guardada...");
                         this.activateAR(); 
                     };
@@ -585,10 +601,12 @@
                     }
                     await this.setupViewer(data, true);
                 } catch(e) { 
-                    this.loader(false); 
+                    // loader handled by openProject caller usually, but shared logic is separate entry point
+                    // so we must handle loader here too.
                     this.toast("Error Link: " + e.message, "error"); 
+                } finally {
+                    this.loader(false);
                 }
-                this.loader(false);
             }
             
             // --- CREACIÓN & UTILIDADES ---
@@ -881,14 +899,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.80</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.90</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.80</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.90</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -948,7 +966,7 @@
             <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" ar-scale="auto" touch-action="none" interaction-prompt="auto" class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
             </model-viewer>
-            <!-- Botón Principal AR (Mejorado) -->
+            <!-- Botón Principal AR (Mejorado y SIEMPRE Visible) -->
             <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">📷 INICIAR CÁMARA AR</button>
         </div>
 
@@ -990,5 +1008,3 @@
     </div>
 </body>
 </html>
-
-
