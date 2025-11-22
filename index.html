@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v3.70 (Resilient)</title>
+    <title>AR Admin Pro v3.80 (Sync Fix)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -34,20 +34,22 @@
         .dark-card { background: #0a0a0a; border: 1px solid #333; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); }
         .hero-bg-dark { background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); }
         
-        /* Botón AR Verde */
+        /* Botón AR Verde Mejorado */
         .ar-green-btn {
-            background-color: #4CAF50; color: white; border-radius: 50px; border: none; padding: 15px 30px;
-            font-weight: 800; font-size: 16px; letter-spacing: 0.5px; box-shadow: 0 10px 20px rgba(0,0,0,0.5);
-            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            background-color: #4CAF50; color: white; border-radius: 50px; border: none; padding: 18px 36px;
+            font-weight: 900; font-size: 18px; letter-spacing: 1px; box-shadow: 0 10px 30px rgba(76, 175, 80, 0.4);
+            position: absolute; bottom: 60px; left: 50%; transform: translateX(-50%);
             display: flex; flex-direction: column; align-items: center; justify-content: center;
             z-index: 110; 
             cursor: pointer; white-space: nowrap; text-transform: uppercase;
             transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            border: 2px solid rgba(255,255,255,0.3);
         }
-        .ar-green-btn:active { transform: translateX(-50%) scale(0.95); }
-        .ar-green-btn.minimized { bottom: 160px; transform: translateX(-50%) scale(0.9); opacity: 0.95; }
-        .ar-green-btn.floating-action { bottom: 160px; background-color: #10B981; box-shadow: 0 15px 30px rgba(16, 185, 129, 0.4); border: 2px solid rgba(255,255,255,0.2); z-index: 110; }
-
+        .ar-green-btn:active { transform: translateX(-50%) scale(0.95); background-color: #388E3C; }
+        
+        /* Estados del botón AR */
+        .ar-green-btn.minimized { bottom: 160px; transform: translateX(-50%) scale(0.8); opacity: 0.9; padding: 12px 24px; }
+        
         /* Utiles */
         .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
@@ -79,9 +81,9 @@
     <!-- LÓGICA FIREBASE & DB -->
     <script type="module">
         import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-app.js';
-        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence, inMemoryPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
+        import { getAuth, signInAnonymously, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup, setPersistence, browserLocalPersistence } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-auth.js';
         import { getFirestore, collection, doc, setDoc, getDoc, deleteDoc, onSnapshot, updateDoc, addDoc, query, where, getDocs } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-firestore.js';
-        import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
+        import { getStorage, ref, uploadBytesResumable, getDownloadURL, deleteObject } from 'https://www.gstatic.com/firebasejs/11.0.2/firebase-storage.js';
 
         const firebaseConfig = {
             apiKey: "AIzaSyD25y6TynkWWwD72sPod5cOWmq0SYPIp6I",
@@ -93,7 +95,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v3.70 | ADMIN RESILIENT FIX";
+        const APP_VERSION = "v3.80 | SYNC & VIEW FIX";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -365,12 +367,16 @@
                     try {
                         await deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId));
                     } catch (permError) {
-                        console.warn("Permiso denegado en archivo usuario (Normal sin reglas Admin configuradas). Procediendo a limpiar logs.");
-                        this.toast("⚠️ Permiso archivo privado denegado (Reglas). Limpiando lista pública...", "warning");
+                        console.warn("Permiso denegado en archivo usuario (Normal sin reglas Admin configuradas).");
                     }
+
+                    // 2. BORRAR ARCHIVO GLB DE STORAGE (Limpieza profunda)
+                    try {
+                         const storageRef = ref(storage, `models/${userId}/${projectId}.glb`);
+                         await deleteObject(storageRef);
+                    } catch(storageError) { console.warn("No se pudo borrar archivo GLB o no existía"); }
                     
-                    // 2. BORRAR EL REGISTRO PÚBLICO ESPECÍFICO (Esto limpia la lista visualmente)
-                    // OJO: Borramos TODOS los logs con este ProjectID para que no queden rastros en la lista
+                    // 3. BORRAR EL REGISTRO PÚBLICO (Limpia la lista)
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     const q = query(logsRef, where('projectId', '==', projectId));
                     const querySnapshot = await getDocs(q);
@@ -381,7 +387,7 @@
                     });
                     await Promise.all(deletePromises);
                     
-                    this.toast("✅ Registro eliminado de la lista.", "success");
+                    this.toast("✅ Registro eliminado completamente.", "success");
                 } catch(e) {
                     this.toast("Error General: " + e.message, "error");
                     console.error(e);
@@ -419,6 +425,7 @@
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = ""; 
                 
+                // 1. Cargar el Modelo
                 let blob = null;
                 if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) {
                     blob = await getModelFromCache(data.modelUrl || data.id);
@@ -428,43 +435,62 @@
                 else if (data.modelUrl && data.modelUrl.startsWith('http')) viewer.src = data.modelUrl;
                 else this.toast("⚠️ Archivo 3D no encontrado", "error");
 
+                // 2. Aplicar Metadatos Guardados (Rotación y Escala)
                 if(data.orientation) {
                     state.modelOrientation = data.orientation;
                     viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
                 }
                 if (data.calibration && data.calibration.s) {
+                    // Aplicar escala visual
                     viewer.scale = `${data.calibration.s} ${data.calibration.s} ${data.calibration.s}`;
                 }
 
+                // 3. Configurar el Botón AR (CORRECCIÓN CLAVE)
+                // Aseguramos que el botón esté visible y configurado para abrir la cámara con los datos actuales
                 const arBtn = document.getElementById('force-ar-btn');
                 if(arBtn) {
-                    arBtn.classList.remove('hidden', 'minimized');
-                    arBtn.classList.add('floating-action');
-                    arBtn.innerHTML = "📷 INICIAR CÁMARA AR";
-                    arBtn.onclick = () => { this.activateAR(); };
+                    arBtn.classList.remove('hidden', 'minimized', 'floating-action');
+                    // Usamos la clase principal para que se vea grande y centrado
+                    arBtn.className = 'ar-green-btn'; 
+                    arBtn.innerHTML = "📷 VER EN REALIDAD AUMENTADA";
+                    
+                    arBtn.onclick = () => { 
+                        this.toast("Iniciando cámara con configuración guardada...");
+                        this.activateAR(); 
+                    };
                 }
                 
+                // 4. Manejo de Paneles UI
                 document.querySelector('.tools-panel').classList.add('hidden'); 
                 const saveContainer = document.getElementById('save-container');
-                saveContainer.classList.remove('hidden');
                 
-                const containerBtns = saveContainer.querySelector('.pointer-events-auto');
-                ['btn-import-project', 'btn-share-view', 'btn-confirm-pub'].forEach(bid => {
-                    const el = document.getElementById(bid); if(el) el.remove();
-                });
+                // Si estamos en modo SOLO VER (no creando), ocultamos el panel de guardar/publicar
+                // pero dejamos el botón AR accesible
+                if(!isShared && data.status !== 'local') {
+                     saveContainer.classList.add('hidden');
+                } else {
+                    // Si es borrador local, mostramos opciones de guardar
+                    saveContainer.classList.remove('hidden');
+                    
+                    // Limpiamos botones duplicados si existen
+                    const containerBtns = saveContainer.querySelector('.pointer-events-auto');
+                    ['btn-import-project', 'btn-share-view', 'btn-confirm-pub'].forEach(bid => {
+                        const el = document.getElementById(bid); if(el) el.remove();
+                    });
 
-                const btn = document.getElementById('btn-capture-location');
-                btn.innerHTML = "<span>🗺️</span> VER UBICACIÓN GPS (EXTERIORES)";
-                btn.onclick = () => { this.navTo('ar'); this.startARGPS(data); };
+                    const btn = document.getElementById('btn-capture-location');
+                    btn.innerHTML = "<span>🗺️</span> ACTUALIZAR UBICACIÓN GPS";
+                    btn.onclick = () => { this.navTo('ar'); this.startARGPS(data); };
 
-                if (!isShared && (data.status === 'local' || data.status === 'unsynced')) {
-                    let pubBtn = document.createElement('button');
-                    pubBtn.id = 'btn-confirm-pub';
-                    pubBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition flex items-center justify-center gap-2 mt-2";
-                    pubBtn.innerHTML = "☁️ PUBLICAR AHORA";
-                    pubBtn.onclick = () => { this.publishProject(data.id); };
-                    const helpText = containerBtns.querySelector('p');
-                    if(helpText) containerBtns.insertBefore(pubBtn, helpText);
+                    if (!isShared && (data.status === 'local' || data.status === 'unsynced')) {
+                        let pubBtn = document.createElement('button');
+                        pubBtn.id = 'btn-confirm-pub';
+                        pubBtn.className = "w-full bg-indigo-600 text-white py-3 rounded-xl font-bold shadow-lg hover:bg-indigo-500 transition flex items-center justify-center gap-2 mt-2";
+                        pubBtn.innerHTML = "☁️ PUBLICAR AHORA";
+                        pubBtn.onclick = () => { this.publishProject(data.id); };
+                        const helpText = containerBtns.querySelector('p');
+                        if(helpText) containerBtns.insertBefore(pubBtn, helpText);
+                    }
                 }
             }
 
@@ -580,6 +606,7 @@
                 const arBtn = document.getElementById('force-ar-btn');
                 if(arBtn) {
                     arBtn.classList.remove('minimized', 'hidden', 'floating-action');
+                    arBtn.className = 'ar-green-btn';
                     arBtn.innerHTML = `📷 INICIAR CÁMARA AR<span class="text-[9px] font-normal normal-case mt-1 opacity-80">Paso 1: Acomodar</span>`;
                     arBtn.onclick = () => { this.activateAR(); };
                 }
@@ -623,11 +650,20 @@
 
             onARStarted() {
                 setTimeout(() => {
-                    document.getElementById('save-container').classList.remove('hidden');
-                    document.getElementById('save-container').classList.add('slide-up-enter');
+                    const saveContainer = document.getElementById('save-container');
+                    // Solo mostramos el panel de guardar SI estamos creando (no visualizando un global)
+                    const isCreating = !state.currentProject || (state.currentProject && state.currentProject.status === 'local');
+                    
+                    if(isCreating && saveContainer) {
+                        saveContainer.classList.remove('hidden');
+                        saveContainer.classList.add('slide-up-enter');
+                    }
+
                     const arBtn = document.getElementById('force-ar-btn');
-                    const isCreating = !state.currentProject || (state.currentProject && state.currentProject.id.startsWith('loc_'));
-                    if(arBtn && isCreating) { arBtn.classList.remove('floating-action'); arBtn.classList.add('minimized'); }
+                    if(arBtn) { 
+                         // Minimizamos el botón en modo AR para dar espacio
+                        arBtn.classList.add('minimized'); 
+                    }
                 }, 2000); 
             }
 
@@ -763,16 +799,48 @@
             }
             
             async deleteProject(id) {
-                if(!confirm("¿Eliminar?")) return;
+                if(!confirm("¿Seguro que deseas eliminar este proyecto? Esta acción borrará los datos locales, los de la nube y las listas públicas.")) return;
+                this.loader(true, "Eliminando todo...");
+                
+                // 1. Borrar DB Local (IndexedDB)
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
+
+                const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+
                 try {
-                    const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                } catch(e) {}
-                this.loadProjects();
+                    // 2. Borrar Documento Privado (Users Collection)
+                    try {
+                         await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                    } catch(e) { console.warn("No se pudo borrar doc privado o no existía"); }
+
+                    // 3. BORRADO CRÍTICO: Limpiar de la Lista del Administrador (Public Logs)
+                    // Buscamos todos los logs que tengan este projectId
+                    const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
+                    const q = query(logsRef, where('projectId', '==', id));
+                    const querySnapshot = await getDocs(q);
+                    const deletePromises = [];
+                    querySnapshot.forEach((d) => {
+                        deletePromises.push(deleteDoc(d.ref));
+                    });
+                    await Promise.all(deletePromises);
+
+                    // 4. Borrar Archivo GLB de Storage (Limpieza total)
+                    try {
+                        const storageRef = ref(storage, `models/${state.user.uid}/${id}.glb`);
+                        await deleteObject(storageRef);
+                    } catch(e) { console.warn("No se pudo borrar archivo Storage o no existía"); }
+
+                    this.toast("✅ Proyecto eliminado completamente", "success");
+                } catch(e) {
+                    console.error(e);
+                    this.toast("Error eliminando nube: " + e.message, "error");
+                } finally {
+                    this.loader(false);
+                    this.loadProjects();
+                }
             }
             
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
@@ -813,14 +881,14 @@
             <button type="button" onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.70</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v3.80</p>
         </div>
     </div>
 
     <!-- DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.70</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v3.80</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
@@ -880,6 +948,7 @@
             <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" ar-scale="auto" touch-action="none" interaction-prompt="auto" class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
             </model-viewer>
+            <!-- Botón Principal AR (Mejorado) -->
             <button id="force-ar-btn" class="ar-green-btn" onclick="app.activateAR()">📷 INICIAR CÁMARA AR</button>
         </div>
 
@@ -921,4 +990,5 @@
     </div>
 </body>
 </html>
+
 
