@@ -174,6 +174,8 @@
                 console.log(`%c AR System ${APP_VERSION} `, 'background: #4CAF50; color: #fff; padding: 2px 5px; border-radius: 3px;');
                 this.initAuth();
                 this.updateVersionUI();
+                // Inicializa el listener de escala para el model-viewer una vez cargado
+                document.getElementById('model-viewer-surface').addEventListener('scale-change', this.handleScaleChange.bind(this));
             }
 
             initAuth() {
@@ -448,6 +450,14 @@
                     }
                     if (!project) throw new Error("No encontrado (¿Borraste datos del navegador?)");
                     state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
+                    
+                    // Al cargar, inicializa la escala temporal con la guardada en el proyecto
+                    if (project.calibration?.s) {
+                        state.draftData.calibration.s = project.calibration.s;
+                    } else {
+                        state.draftData.calibration.s = 1; // Default
+                    }
+
                     await this.setupViewer(project);
                 } catch (error) { this.toast(error.message, "error"); } finally { this.loader(false); }
             }
@@ -495,9 +505,14 @@
                         mapBtn.classList.add('hidden');
                     }
                 }
-
+                
+                // Aplica la orientación guardada
                 if(data.orientation) viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
-                if(data.calibration?.s) viewer.scale = `${data.calibration.s} ${data.calibration.s} ${data.calibration.s}`;
+                
+                // Aplica la escala guardada (ya sea del proyecto o la temporal por defecto/ajustada)
+                const scaleValue = data.calibration?.s || state.draftData.calibration.s || 1;
+                viewer.scale = `${scaleValue} ${scaleValue} ${scaleValue}`;
+                state.draftData.calibration.s = scaleValue; // Asegura que el estado refleje lo que se muestra
             }
 
             async startARGPSWrapper() {
@@ -517,6 +532,9 @@
                 const debugPanel = document.getElementById('ar-debug-panel');
                 debugPanel.classList.remove('hidden');
                 
+                // NOTA: El escalado solo está disponible en el modo 'ar' (ARCore/ARKit) del model-viewer.
+                // A-Frame AR.js (GPS AR) usa un escalado fijo basado en la distancia/geolocalización.
+                // Mantenemos la escala original guardada para A-Frame.
                 container.innerHTML = `
                     <a-scene embedded vr-mode-ui="enabled: false" renderer="logarithmicDepthBuffer: true;" arjs="sourceType: webcam; videoTexture: true; debugUIEnabled: false;">
                         <a-camera gps-camera="minDistance: 0; positionMinAccuracy: 50;" rotation-reader></a-camera>
@@ -610,6 +628,7 @@
             }
             resetCreation() { 
                 state.tempFile = null; document.getElementById('project-name').value = ""; 
+                // Al iniciar, la escala de calibración vuelve a 1
                 state.draftData = { name: '', coords: { lat: 0, lon: 0 }, calibration: { s: 1 } };
             }
 
@@ -623,7 +642,9 @@
                 
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
-                
+                // Aplica la escala por defecto (1) al iniciar el flujo
+                viewer.scale = "1 1 1";
+
                 const tools = document.getElementById('tools-panel-container');
                 if(tools) tools.classList.remove('hidden');
                 const mapBtn = document.getElementById('btn-view-map-single');
@@ -633,6 +654,7 @@
                     <div class="bg-indigo-600/90 p-4 rounded-xl text-center mb-2 animate-pulse">
                         <h3 class="font-bold text-white">PASO 1: Ajustar en AR</h3>
                         <p class="text-xs text-indigo-100">Usa el botón "VER EN MESA" para ver cómo queda.</p>
+                        <p class="text-xs text-yellow-300 font-bold mt-1">¡Ahora puedes usar pinza (pinch) para escalar!</p>
                     </div>
                     <button id="btn-ar-action" class="ar-btn btn-primary w-full mb-2">📷 VER EN MESA (AR)</button>
                     <button onclick="app.captureDataAndSave()" class="ar-btn bg-emerald-600 text-white w-full">💾 GUARDAR Y FINALIZAR</button>
@@ -641,16 +663,27 @@
                 document.getElementById('btn-ar-action').onclick = () => viewer.activateAR();
             }
 
+            // --- NUEVA FUNCIÓN PARA CAPTURAR LA ESCALA EN AR ---
+            handleScaleChange(event) {
+                // event.detail.currentScale es la escala actual en AR
+                const newScale = event.detail.currentScale;
+                state.draftData.calibration.s = newScale;
+                console.log(`Escala AR actualizada: ${newScale}`);
+            }
+
             captureDataAndSave() {
                 this.loader(true, "Guardando GPS...");
                 const viewer = document.getElementById('model-viewer-surface');
-                const s = parseFloat(viewer.scale.toString().split(' ')[0]) || 1;
                 
+                // La escala actual debe provenir de state.draftData.calibration.s que se actualizó en handleScaleChange
+                // Si el usuario no entró a AR o no la modificó, seguirá siendo 1.
+                const finalScale = state.draftData.calibration.s || 1; 
+
                 navigator.geolocation.getCurrentPosition(pos => {
                     const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-                    this.saveLocalDraft(coords, s);
+                    this.saveLocalDraft(coords, finalScale);
                 }, () => {
-                    this.saveLocalDraft({ lat: 0, lon: 0 }, s);
+                    this.saveLocalDraft({ lat: 0, lon: 0 }, finalScale);
                     this.toast("GPS falló (Usando 0,0)", "warning");
                 }, { enableHighAccuracy: true });
             }
@@ -659,7 +692,9 @@
                 const pid = `loc_${Date.now()}`;
                 const pData = {
                     id: pid, name: state.draftData.name, modelUrl: pid, coords,
-                    calibration: { s: scale }, orientation: { roll:0, pitch:0, yaw:0 },
+                    // Guarda la escala ajustada por el usuario
+                    calibration: { s: scale }, 
+                    orientation: { roll:0, pitch:0, yaw:0 },
                     status: 'local', role: 'owner', createdAt: new Date().toISOString()
                 };
                 try {
@@ -819,7 +854,8 @@
             <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
         </div>
         <div class="relative w-full h-full z-0">
-            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" ar-scale="fixed" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto" class="w-full h-full">
+            <!-- SE ELIMINA ar-scale="fixed" para permitir el escalado con pinza -->
+            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto" class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
             </model-viewer>
             <!-- UI OVERLAY (BOTONES FUERA DEL VISOR) -->
@@ -896,4 +932,3 @@
     </div>
 </body>
 </html>
-
