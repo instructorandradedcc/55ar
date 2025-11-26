@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.fundacionecopiensaevolution.arquitek1",
+    "sha256_cert_fingerprints": [
+      "43:42:9B:B3:65:60:58:A4:09:69:77:B3:35:93:79:F8:F0:FC:3B:53:CE:9B:CA:69:16:0F:0E:67:22:0C:0A:F1"
+    ]
+  }
+}]
