@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.4 (User Sync Fix)</title>
+    <title>AR Admin Pro v6.6 (Inicio Visible)</title>
     
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -27,6 +27,8 @@
 
     <style>
         body { font-family: 'Outfit', sans-serif; background: #000; overflow: hidden; color: white; }
+        
+        /* FIX VISUAL: Aseguramos que las vistas ocupen todo pero estén ocultas por defecto, salvo la activa */
         .view { display: none; width: 100%; height: 100%; position: absolute; inset: 0; flex-direction: column; background: #000; }
         .view.active { display: flex; z-index: 10; }
         
@@ -103,7 +105,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v6.5 | DISEÑO Y ARQUITECTURA A OTRO NIVEL";
+        const APP_VERSION = "v6.6 | INICIO VISIBLE";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
         
         let app, auth, db, storage;
@@ -175,12 +177,17 @@
                 this.initAuth();
                 this.updateVersionUI();
                 // Inicializa el listener de escala para el model-viewer una vez cargado
-                document.getElementById('model-viewer-surface').addEventListener('scale-change', this.handleScaleChange.bind(this));
+                const viewer = document.getElementById('model-viewer-surface');
+                if(viewer) viewer.addEventListener('scale-change', this.handleScaleChange.bind(this));
             }
 
             initAuth() {
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
+                    
+                    // --- CORRECCIÓN APK: SIEMPRE APAGAR LOADER CUANDO HAY RESPUESTA DE AUTH ---
+                    this.loader(false); 
+
                     if (user) {
                         this.handleUserLogin(user);
                         const params = new URLSearchParams(window.location.search);
@@ -192,6 +199,8 @@
                             setTimeout(() => this.loadProjects(), 500);
                         }
                     } else {
+                        // Si no hay usuario, nos aseguramos de estar en la vista auth
+                        // Aunque ya está activa por HTML, esto confirma la navegación lógica
                         const params = new URLSearchParams(window.location.search);
                         if (params.get('id')) signInAnonymously(auth); 
                         else this.navTo('auth');
@@ -220,13 +229,11 @@
 
                 if (nameEl) nameEl.textContent = user.displayName || "Invitado";
                 
-                // FIX: Comprobación más robusta y manejo de errores de carga
                 if (user.photoURL) {
                     avatarImg.src = user.photoURL;
                     avatarImg.classList.remove('hidden');
                     avatarPlaceholder.classList.add('hidden');
                     avatarImg.onerror = () => {
-                        // Si falla la carga (403/404), mostrar placeholder
                         avatarImg.classList.add('hidden');
                         avatarPlaceholder.classList.remove('hidden');
                     };
@@ -239,8 +246,17 @@
             async loginGoogle() { 
                 this.loader(true, "Conectando..."); 
                 const provider = new GoogleAuthProvider();
-                try { await signInWithPopup(auth, provider); } 
-                catch (e) { this.loader(false); this.toast("Error Login: " + e.message, "error"); }
+                try { 
+                    await signInWithPopup(auth, provider);
+                    // El onAuthStateChanged se encargará del resto, pero aseguramos:
+                    this.loader(false); 
+                } 
+                catch (e) { 
+                    this.loader(false); 
+                    console.error("Login Error:", e);
+                    // Mensaje más amigable para el usuario
+                    this.toast("Error: " + e.message, "error"); 
+                }
             }
 
             async loginAnonymous() {
@@ -252,7 +268,8 @@
 
             navTo(id) {
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-                document.getElementById(`view-${id}`).classList.add('active');
+                const target = document.getElementById(`view-${id}`);
+                if (target) target.classList.add('active');
                 
                 if (id !== 'admin-map' && state.mapListener) {
                     state.mapListener(); 
@@ -307,6 +324,10 @@
                         } else {
                             this.renderUserList(merged, list);
                         }
+                    }, (error) => {
+                        console.error("Error cargando proyectos:", error);
+                        if (currentLocals.length > 0) this.renderUserList(currentLocals, list);
+                        else list.innerHTML = `<div class="p-10 text-center text-red-400">Error de conexión</div>`;
                     });
                 } else if (currentLocals.length === 0) {
                      list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`; 
@@ -802,8 +823,8 @@
         <p id="loader-text" class="font-bold tracking-widest text-sm animate-pulse">PROCESANDO...</p>
     </div>
 
-    <!-- VIEW: AUTH -->
-    <div id="view-auth" class="view justify-center items-center p-6 hero-bg-dark">
+    <!-- VIEW: AUTH (ACTIVADO POR DEFECTO PARA EVITAR PANTALLA NEGRA) -->
+    <div id="view-auth" class="view active justify-center items-center p-6 hero-bg-dark">
         <div class="ver-badge">Ver: <span id="version-display">...</span></div>
         <div class="w-full max-w-sm dark-card p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden">
             <div class="w-24 h-24 bg-white/5 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl shadow-inner border border-white/10">🏗️</div>
@@ -813,14 +834,14 @@
             <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.4</p>
+            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.6</p>
         </div>
     </div>
 
     <!-- VIEW: DASHBOARD -->
     <div id="view-dashboard" class="view bg-black">
         <div class="hero-bg-dark px-6 pb-16 pt-12 rounded-b-[3rem] shadow-xl relative z-10 border-b border-white/10">
-            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.4</div>
+            <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.6</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
                     <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
