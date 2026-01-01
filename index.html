@@ -1,16 +1,17 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
     <title>AR Admin Pro v6.6 (Inicio Visible)</title>
-    
+
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    
+
     <!-- Leaflet (Mapas) -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -20,72 +21,234 @@
 
     <!-- A-Frame & AR.js (GPS AR) -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
-    <script type='text/javascript' src='https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'></script>
+    <script type='text/javascript'
+        src='https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js'></script>
+
+    <!-- JSZip (Para compartir .arproj) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- Fuentes -->
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
 
     <style>
-        body { font-family: 'Outfit', sans-serif; background: #000; overflow: hidden; color: white; }
-        
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: #000;
+            overflow: hidden;
+            color: white;
+        }
+
         /* FIX VISUAL: Aseguramos que las vistas ocupen todo pero estén ocultas por defecto, salvo la activa */
-        .view { display: none; width: 100%; height: 100%; position: absolute; inset: 0; flex-direction: column; background: #000; }
-        .view.active { display: flex; z-index: 10; }
-        
+        .view {
+            display: none;
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            inset: 0;
+            flex-direction: column;
+            background: #000;
+        }
+
+        .view.active {
+            display: flex;
+            z-index: 10;
+        }
+
         /* UI Dark Premium */
-        .dark-card { background: #0a0a0a; border: 1px solid #333; box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8); }
-        .hero-bg-dark { background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%); }
-        
+        .dark-card {
+            background: #0a0a0a;
+            border: 1px solid #333;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.8);
+        }
+
+        .hero-bg-dark {
+            background: radial-gradient(circle at top, #1e1b4b 0%, #000000 80%);
+        }
+
         /* Botones AR Overlay */
         .ar-overlay-ui {
-            position: absolute; bottom: 0; left: 0; width: 100%; 
-            padding: 24px; pointer-events: none; z-index: 100;
-            display: flex; flex-direction: column; gap: 12px;
-            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            padding: 24px;
+            pointer-events: none;
+            z-index: 100;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
         }
-        
+
         .ar-btn {
             pointer-events: auto;
-            border-radius: 16px; border: none; padding: 18px;
-            font-weight: 800; font-size: 15px; letter-spacing: 0.5px;
-            display: flex; align-items: center; justify-content: center; gap: 10px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.6);
-            transition: transform 0.1s; text-transform: uppercase;
+            border-radius: 16px;
+            border: none;
+            padding: 18px;
+            font-weight: 800;
+            font-size: 15px;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+            transition: transform 0.1s;
+            text-transform: uppercase;
         }
-        .ar-btn:active { transform: scale(0.96); }
-        
-        .btn-primary { background: #4CAF50; color: white; border: 1px solid #66BB6A; }
-        .btn-secondary { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); color: white; }
-        .btn-gps { background: #0ea5e9; color: white; border: 1px solid #38bdf8; }
+
+        .ar-btn:active {
+            transform: scale(0.96);
+        }
+
+        .btn-primary {
+            background: #4CAF50;
+            color: white;
+            border: 1px solid #66BB6A;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+
+        .btn-gps {
+            background: #0ea5e9;
+            color: white;
+            border: 1px solid #38bdf8;
+        }
 
         /* Mapa Popups */
-        .leaflet-popup-content-wrapper { background: #111; color: white; border: 1px solid #333; border-radius: 12px; font-family: 'Outfit'; }
-        .leaflet-popup-tip { background: #333; }
-        .leaflet-container a.leaflet-popup-close-button { color: white; font-size: 20px; }
-        
-        /* Badges */
-        .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 10px; font-weight: bold; text-transform: uppercase; }
-        .status-local { background: #F59E0B; color: #000; }
-        .status-global { background: #10B981; color: #fff; }
+        .leaflet-popup-content-wrapper {
+            background: #111;
+            color: white;
+            border: 1px solid #333;
+            border-radius: 12px;
+            font-family: 'Outfit';
+        }
 
-        .loader-spin { border: 4px solid rgba(255,255,255,0.1); border-left-color: #4f46e5; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        @keyframes slideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        
+        .leaflet-popup-tip {
+            background: #333;
+        }
+
+        .leaflet-container a.leaflet-popup-close-button {
+            color: white;
+            font-size: 20px;
+        }
+
+        /* Badges */
+        .status-badge {
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 10px;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+
+        .status-local {
+            background: #F59E0B;
+            color: #000;
+        }
+
+        .status-global {
+            background: #10B981;
+            color: #fff;
+        }
+
+        .loader-spin {
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-left-color: #4f46e5;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .slide-up {
+            animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+        }
+
+        @keyframes slideUp {
+            from {
+                transform: translateY(100%);
+                opacity: 0;
+            }
+
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
         /* AR Prompt Fix */
-        .ar-prompt { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: none; pointer-events: none; z-index: 20; text-align: center; width: 100%; }
-        model-viewer[ar-status="session-started"] > .ar-prompt { display: block; }
-        
+        .ar-prompt {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            pointer-events: none;
+            z-index: 20;
+            text-align: center;
+            width: 100%;
+        }
+
+        model-viewer[ar-status="session-started"]>.ar-prompt {
+            display: block;
+        }
+
         /* Admin Specifics */
-        .admin-header { background: linear-gradient(90deg, #312e81, #1e1b4b); border-bottom: 1px solid #4338ca; }
-        .log-card { border-left: 4px solid #6366f1; background: #111; }
-        
+        .admin-header {
+            background: linear-gradient(90deg, #312e81, #1e1b4b);
+            border-bottom: 1px solid #4338ca;
+        }
+
+        .log-card {
+            border-left: 4px solid #6366f1;
+            background: #111;
+        }
+
         /* HERRAMIENTAS DE GIRO */
-        .tool-btn { width: 45px; height: 45px; background: rgba(30,30,30,0.8); backdrop-filter: blur(4px); border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 18px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        .tool-btn:active { background: #4f46e5; }
-        .tools-panel { position: absolute; right: 10px; top: 80px; z-index: 50; display: flex; flex-direction: column; gap: 8px; }
+        .tool-btn {
+            width: 45px;
+            height: 45px;
+            background: rgba(30, 30, 30, 0.8);
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+        }
+
+        .tool-btn:active {
+            background: #4f46e5;
+        }
+
+        .tools-panel {
+            position: absolute;
+            right: 10px;
+            top: 80px;
+            z-index: 50;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
     </style>
 
     <!-- LÓGICA FIREBASE & DB -->
@@ -107,7 +270,7 @@
 
         const APP_VERSION = "v6.6 | INICIO VISIBLE";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
-        
+
         let app, auth, db, storage;
 
         // --- CACHE DATABASE (IndexedDB) ---
@@ -166,7 +329,7 @@
 
         const state = {
             user: null, role: 'guest', currentProject: null, tempFile: null, localBlobUrl: null,
-            draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x:0, y:0, z:0, r:0, s:1 } },
+            draftData: { name: '', coords: { lat: 0, lon: 0 }, calibration: { x: 0, y: 0, z: 0, r: 0, s: 1 } },
             map: null, adminMap: null, modelOrientation: { roll: 0, pitch: 0, yaw: 0 },
             localProjects: [], currentDraftId: null, mapListener: null
         };
@@ -178,15 +341,15 @@
                 this.updateVersionUI();
                 // Inicializa el listener de escala para el model-viewer una vez cargado
                 const viewer = document.getElementById('model-viewer-surface');
-                if(viewer) viewer.addEventListener('scale-change', this.handleScaleChange.bind(this));
+                if (viewer) viewer.addEventListener('scale-change', this.handleScaleChange.bind(this));
             }
 
             initAuth() {
                 onAuthStateChanged(auth, (user) => {
                     state.user = user;
-                    
+
                     // --- CORRECCIÓN APK: SIEMPRE APAGAR LOADER CUANDO HAY RESPUESTA DE AUTH ---
-                    this.loader(false); 
+                    this.loader(false);
 
                     if (user) {
                         this.handleUserLogin(user);
@@ -202,7 +365,7 @@
                         // Si no hay usuario, nos aseguramos de estar en la vista auth
                         // Aunque ya está activa por HTML, esto confirma la navegación lógica
                         const params = new URLSearchParams(window.location.search);
-                        if (params.get('id')) signInAnonymously(auth); 
+                        if (params.get('id')) signInAnonymously(auth);
                         else this.navTo('auth');
                     }
                 });
@@ -214,10 +377,10 @@
                     document.getElementById('dashboard-header-title').textContent = "PANEL DE CONTROL (ADMIN)";
                     document.querySelector('.hero-bg-dark').classList.add('admin-header');
                     const adminMapBtn = document.getElementById('admin-map-btn');
-                    if(adminMapBtn) adminMapBtn.classList.remove('hidden');
+                    if (adminMapBtn) adminMapBtn.classList.remove('hidden');
                 } else if (user.isAnonymous) state.role = 'guest';
                 else state.role = 'architect';
-                
+
                 this.updateUserProfile(user);
             }
 
@@ -228,7 +391,7 @@
                 const avatarPlaceholder = document.getElementById('user-avatar-placeholder');
 
                 if (nameEl) nameEl.textContent = user.displayName || "Invitado";
-                
+
                 if (user.photoURL) {
                     avatarImg.src = user.photoURL;
                     avatarImg.classList.remove('hidden');
@@ -243,25 +406,25 @@
                 }
             }
 
-            async loginGoogle() { 
-                this.loader(true, "Conectando..."); 
+            async loginGoogle() {
+                this.loader(true, "Conectando...");
                 const provider = new GoogleAuthProvider();
-                try { 
+                try {
                     await signInWithPopup(auth, provider);
                     // El onAuthStateChanged se encargará del resto, pero aseguramos:
-                    this.loader(false); 
-                } 
-                catch (e) { 
-                    this.loader(false); 
+                    this.loader(false);
+                }
+                catch (e) {
+                    this.loader(false);
                     console.error("Login Error:", e);
                     // Mensaje más amigable para el usuario
-                    this.toast("Error: " + e.message, "error"); 
+                    this.toast("Error: " + e.message, "error");
                 }
             }
 
             async loginAnonymous() {
                 this.loader(true, "Ingresando...");
-                try { await signInAnonymously(auth); } catch(e) { this.loader(false); }
+                try { await signInAnonymously(auth); } catch (e) { this.loader(false); }
             }
 
             logout() { signOut(auth).then(() => window.location.reload()); }
@@ -270,13 +433,13 @@
                 document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
                 const target = document.getElementById(`view-${id}`);
                 if (target) target.classList.add('active');
-                
+
                 if (id !== 'admin-map' && state.mapListener) {
-                    state.mapListener(); 
+                    state.mapListener();
                     state.mapListener = null;
                 }
             }
-            
+
             // --- CARGA ROBUSTA DE PROYECTOS ---
             async loadProjects() {
                 const list = document.getElementById('projects-list');
@@ -304,7 +467,7 @@
                     state.localProjects = currentLocals;
                     if (currentLocals.length > 0) this.renderUserList(currentLocals, list);
                     else list.innerHTML = '<div class="p-10 text-center text-slate-600">Sincronizando...</div>';
-                } catch(e) {}
+                } catch (e) { }
 
                 // Escuchar nube privada del usuario
                 if (state.user && !state.user.isAnonymous) {
@@ -312,15 +475,15 @@
                     onSnapshot(projectsRef, (snap) => {
                         const cloudMap = new Map();
                         snap.forEach(doc => cloudMap.set(doc.id, { id: doc.id, ...doc.data() }));
-                        
+
                         // Fusionar: Preferir Nube, rellenar con Local
                         const merged = [...cloudMap.values()];
-                        currentLocals.forEach(lp => { if(!cloudMap.has(lp.id)) merged.push(lp); });
-                        
+                        currentLocals.forEach(lp => { if (!cloudMap.has(lp.id)) merged.push(lp); });
+
                         merged.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                        
-                        if (merged.length === 0) { 
-                            list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs">Crea uno nuevo (+)</p></div>`; 
+
+                        if (merged.length === 0) {
+                            list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p><p class="text-xs">Crea uno nuevo (+)</p></div>`;
                         } else {
                             this.renderUserList(merged, list);
                         }
@@ -330,7 +493,7 @@
                         else list.innerHTML = `<div class="p-10 text-center text-red-400">Error de conexión</div>`;
                     });
                 } else if (currentLocals.length === 0) {
-                     list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`; 
+                    list.innerHTML = `<div class="flex flex-col items-center justify-center h-64 text-slate-600 opacity-80"><div class="text-5xl mb-4 grayscale opacity-50">📂</div><p class="font-bold text-lg text-slate-500">Sin proyectos</p></div>`;
                 }
             }
 
@@ -344,7 +507,7 @@
                 const statusClass = isGlobal ? 'status-global' : 'status-local';
                 const item = document.createElement('div');
                 item.className = `log-card p-4 mb-3 rounded-lg shadow-md text-white border-l-4 border-indigo-500`;
-                
+
                 let passwordHtml = '';
                 if (log.password) {
                     passwordHtml = `<div class="mt-3 bg-yellow-500/20 border border-yellow-500 p-3 rounded-xl flex items-center justify-between gap-2 animate-pulse"><div class="flex items-center gap-2"><span class="text-2xl">🔑</span><div><span class="text-[10px] uppercase text-yellow-500 font-bold block">Clave de Acceso:</span><span class="font-mono font-black text-white text-lg select-all">${log.password}</span></div></div><button onclick="navigator.clipboard.writeText('${log.password}')" class="bg-black/30 p-2 rounded-lg text-xs">Copiar</button></div>`;
@@ -397,9 +560,9 @@
                     </div>
                     <div class="flex gap-2 mt-2">
                         <button onclick="app.openProject('${data.id}', 'view')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-slate-200 transition flex items-center justify-center gap-2"><span>👀</span> Ver</button>
-                        ${data.status !== 'global' ? 
-                            `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
-                        }
+                        ${data.status !== 'global' ?
+                        `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl shadow-lg hover:bg-emerald-500 transition flex items-center justify-center gap-2">☁️ Publicar</button>` : ''
+                    }
                     </div>
                 `;
                 container.appendChild(el);
@@ -409,32 +572,32 @@
             async openAdminMap() {
                 this.navTo('admin-map');
                 const mapEl = document.getElementById('admin-map-container');
-                if(state.adminMap) { state.adminMap.remove(); state.adminMap = null; }
-                state.adminMap = L.map(mapEl).setView([0,0], 2);
-                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Satellite' }).addTo(state.adminMap);
+                if (state.adminMap) { state.adminMap.remove(); state.adminMap = null; }
+                state.adminMap = L.map(mapEl).setView([0, 0], 2);
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Google Satellite' }).addTo(state.adminMap);
 
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
-                
+
                 state.mapListener = onSnapshot(logsRef, (snap) => {
                     state.adminMap.eachLayer((layer) => { if (!layer._url) state.adminMap.removeLayer(layer); });
                     const bounds = [];
                     snap.forEach(docSnap => {
                         const log = docSnap.data();
-                        if(log.coords && log.coords.lat) this.addAdminMarker(log, log.coords, bounds);
+                        if (log.coords && log.coords.lat) this.addAdminMarker(log, log.coords, bounds);
                     });
-                    if(bounds.length > 0) state.adminMap.fitBounds(bounds);
+                    if (bounds.length > 0) state.adminMap.fitBounds(bounds);
                 });
             }
 
             addAdminMarker(log, coords, bounds) {
-                if(!state.adminMap) return;
+                if (!state.adminMap) return;
                 const isGlobal = log.status.includes('Global');
-                const colorUrl = isGlobal 
-                    ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png' 
+                const colorUrl = isGlobal
+                    ? 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png'
                     : 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-orange.png';
                 const icon = L.icon({ iconUrl: colorUrl, shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
-                
+
                 const marker = L.marker([coords.lat, coords.lon], { icon }).addTo(state.adminMap);
                 marker.bindPopup(`
                     <div class="text-center min-w-[150px]">
@@ -452,10 +615,10 @@
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                     const snap = await getDoc(doc(db, 'artifacts', namespace, 'users', uid, 'projects', pid));
-                    if(!snap.exists()) throw new Error("Proyecto eliminado por usuario.");
+                    if (!snap.exists()) throw new Error("Proyecto eliminado por usuario.");
                     state.currentProject = { id: pid, data: snap.data(), ownerUid: uid };
-                    await this.setupViewer(snap.data(), true); 
-                } catch(e) { this.toast(e.message, "error"); } finally { this.loader(false); }
+                    await this.setupViewer(snap.data(), true);
+                } catch (e) { this.toast(e.message, "error"); } finally { this.loader(false); }
             }
 
             async openProject(id) {
@@ -465,13 +628,13 @@
                     if (!project && state.user) {
                         const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                         try {
-                             const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
-                             if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
-                        } catch (e) {}
+                            const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                            if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
+                        } catch (e) { }
                     }
                     if (!project) throw new Error("No encontrado (¿Borraste datos del navegador?)");
                     state.currentProject = { id: project.id, data: project, ownerUid: state.user.uid };
-                    
+
                     // Al cargar, inicializa la escala temporal con la guardada en el proyecto
                     if (project.calibration?.s) {
                         state.draftData.calibration.s = project.calibration.s;
@@ -484,52 +647,58 @@
             }
 
             async setupViewer(data, isShared = false) {
-                this.navTo('surface'); 
+                this.navTo('surface');
                 const viewer = document.getElementById('model-viewer-surface');
-                viewer.src = ""; 
-                
+                viewer.src = "";
+
                 let blob = null;
-                try { if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) { blob = await getModelFromCache(data.modelUrl || data.id); } } catch(e) {}
+                try { if (data.status === 'local' || (data.modelUrl && !data.modelUrl.startsWith('http'))) { blob = await getModelFromCache(data.modelUrl || data.id); } } catch (e) { }
 
                 if (blob) viewer.src = URL.createObjectURL(blob);
                 else if (data.modelUrl) viewer.src = data.modelUrl;
-                
+
                 // Configurar Botones del Overlay
                 const overlay = document.getElementById('viewer-overlay');
                 overlay.innerHTML = `
                     <div class="bg-black/50 backdrop-blur p-2 rounded-lg mb-2 text-center text-xs text-white/70">
                         📍 GPS Guardado: ${data.coords ? `${data.coords.lat.toFixed(5)}, ${data.coords.lon.toFixed(5)}` : 'Sin datos'}
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex gap-2 mb-2">
                         <button onclick="app.navTo('dashboard')" class="ar-btn btn-secondary flex-1">⛔ SALIR</button>
                         ${data.coords ? `<button onclick="app.startARGPSWrapper()" class="ar-btn btn-gps flex-1">📡 VER EN GPS</button>` : ''}
                     </div>
-                    <button id="btn-ar-action" class="ar-btn btn-primary w-full mt-2">📷 VER EN MESA (AR)</button>
-                    ${!isShared ? `<button onclick="app.publishProject('${data.id}')" class="ar-btn bg-indigo-600 text-white w-full mt-2">☁️ PUBLICAR GLOBAL</button>` : ''}
+                    <div class="flex gap-2 mb-2">
+                         <button onclick="app.exportProject('${data.id}')" class="ar-btn bg-indigo-600/80 text-white flex-1 text-xs">📤 COMPARTIR (.ARPROJ)</button>
+                    </div>
+                    <button id="btn-ar-action" class="ar-btn btn-primary w-full">📷 VER EN MESA (AR)</button>
+                    ${!isShared && data.status !== 'local_synced' ? `<button onclick="app.publishProject('${data.id}')" class="ar-btn bg-indigo-600 text-white w-full mt-2">☁️ PUBLICAR GLOBAL</button>` : ''}
                 `;
-                
+
+                // INICIAR LIVE SYNC HÍBRIDO SI ES IMPORTADO
+                if (data.isImported) this.setupHybridSync(data);
+
                 const arBtn = document.getElementById('btn-ar-action');
-                if(arBtn) arBtn.onclick = () => { if(viewer.loaded) viewer.activateAR(); else this.toast("Espera carga...", "warning"); };
+                if (arBtn) arBtn.onclick = () => { if (viewer.loaded) viewer.activateAR(); else this.toast("Espera carga...", "warning"); };
 
                 const tools = document.getElementById('tools-panel-container');
-                if(tools) tools.classList.remove('hidden'); 
-                
+                if (tools) tools.classList.remove('hidden');
+
                 const mapBtn = document.getElementById('btn-view-map-single');
-                if(mapBtn) {
-                    if(data.coords) {
+                if (mapBtn) {
+                    if (data.coords) {
                         mapBtn.classList.remove('hidden');
                         mapBtn.onclick = () => {
-                             this.navTo('editor'); 
-                             setTimeout(() => this.initMap(data.coords, true), 300); 
+                            this.navTo('editor');
+                            setTimeout(() => this.initMap(data.coords, true), 300);
                         };
                     } else {
                         mapBtn.classList.add('hidden');
                     }
                 }
-                
+
                 // Aplica la orientación guardada
-                if(data.orientation) viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
-                
+                if (data.orientation) viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
+
                 // Aplica la escala guardada (ya sea del proyecto o la temporal por defecto/ajustada)
                 const scaleValue = data.calibration?.s || state.draftData.calibration.s || 1;
                 viewer.scale = `${scaleValue} ${scaleValue} ${scaleValue}`;
@@ -538,12 +707,12 @@
 
             async startARGPSWrapper() {
                 const data = state.currentProject.data;
-                if(!data.coords) return this.toast("Sin coordenadas", "error");
+                if (!data.coords) return this.toast("Sin coordenadas", "error");
                 this.navTo('ar');
                 let finalUrl = data.modelUrl;
                 if (!finalUrl.startsWith('http')) {
                     const blob = await getModelFromCache(data.id);
-                    if(blob) finalUrl = URL.createObjectURL(blob);
+                    if (blob) finalUrl = URL.createObjectURL(blob);
                 }
                 this.startARGPS(data.coords, finalUrl, data.calibration?.s || 1);
             }
@@ -552,7 +721,7 @@
                 const container = document.getElementById('ar-container');
                 const debugPanel = document.getElementById('ar-debug-panel');
                 debugPanel.classList.remove('hidden');
-                
+
                 // NOTA: El escalado solo está disponible en el modo 'ar' (ARCore/ARKit) del model-viewer.
                 // A-Frame AR.js (GPS AR) usa un escalado fijo basado en la distancia/geolocalización.
                 // Mantenemos la escala original guardada para A-Frame.
@@ -564,7 +733,7 @@
                         </a-entity>
                     </a-scene>`;
 
-                if(navigator.geolocation) {
+                if (navigator.geolocation) {
                     navigator.geolocation.watchPosition(pos => {
                         const dist = this.calcDist(pos.coords.latitude, pos.coords.longitude, coords.lat, coords.lon);
                         document.getElementById('gps-data-display').innerHTML = `
@@ -577,11 +746,11 @@
             }
 
             calcDist(lat1, lon1, lat2, lon2) {
-                const R = 6371e3; 
-                const φ1 = lat1 * Math.PI/180, φ2 = lat2 * Math.PI/180;
-                const Δφ = (lat2-lat1) * Math.PI/180, Δλ = (lon2-lon1) * Math.PI/180;
-                const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2) * Math.sin(Δλ/2);
-                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+                const R = 6371e3;
+                const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+                const Δφ = (lat2 - lat1) * Math.PI / 180, Δλ = (lon2 - lon1) * Math.PI / 180;
+                const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+                return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
             }
 
             async publishProject(id) {
@@ -593,7 +762,7 @@
                         const req = dbL.transaction("projects").objectStore("projects").get(id);
                         req.onsuccess = () => r(req.result);
                     });
-                    if(!projData) throw new Error("Datos corruptos");
+                    if (!projData) throw new Error("Datos corruptos");
 
                     let modelUrl = projData.modelUrl;
                     if (!modelUrl.startsWith('http')) {
@@ -607,69 +776,264 @@
 
                     const firestoreData = { ...projData, modelUrl, status: 'global', updatedAt: new Date().toISOString() };
                     await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
-                    
+
                     await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                        userName: state.user.displayName, userId: state.user.uid, projectName: projData.name, 
+                        userName: state.user.displayName, userId: state.user.uid, projectName: projData.name,
                         status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id,
-                        coords: projData.coords, 
+                        coords: projData.coords,
                         password: projData.password || null
                     });
 
-                    projData.status = 'global'; projData.modelUrl = modelUrl; 
+                    projData.status = 'global'; projData.modelUrl = modelUrl;
                     await saveProjectToLocalDB(projData);
                     this.toast("✅ Publicado con éxito", "success");
                     this.openProject(id);
-                } catch(e) { this.toast("Error: " + e.message, "error"); } finally { this.loader(false); }
+                } catch (e) { this.toast("Error: " + e.message, "error"); } finally { this.loader(false); }
             }
 
             async forceDeleteProject(logId, projectId, userId) {
-                if(!confirm("¿Eliminar proyecto y rastros?")) return;
+                if (!confirm("¿Eliminar proyecto y rastros?")) return;
                 this.loader(true, "Eliminando...");
                 try {
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    try { const storageRef = ref(storage, `models/${userId}/${projectId}.glb`); await deleteObject(storageRef); } catch(e){}
+                    try { const storageRef = ref(storage, `models/${userId}/${projectId}.glb`); await deleteObject(storageRef); } catch (e) { }
                     const promises = [];
-                    try { promises.push(deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId))); } catch(e){}
-                    
+                    try { promises.push(deleteDoc(doc(db, 'artifacts', namespace, 'users', userId, 'projects', projectId))); } catch (e) { }
+
                     const logsRef = collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs');
                     const q = query(logsRef, where('projectId', '==', projectId));
                     const querySnapshot = await getDocs(q);
                     querySnapshot.forEach((doc) => promises.push(deleteDoc(doc.ref)));
-                    
+
                     await Promise.all(promises);
                     this.toast("Eliminado", "success");
-                } catch(e) { this.toast(e.message, "error"); } finally { this.loader(false); }
+                } catch (e) { this.toast(e.message, "error"); } finally { this.loader(false); }
             }
 
-            handleFile(e) { state.tempFile = e.target.files[0]; if(state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
-            toggleModal(id, show) { 
-                const m = document.getElementById(`modal-${id}`); 
-                if(show && id==='new-project') this.resetCreation();
-                show ? m.classList.remove('hidden') : m.classList.add('hidden'); 
+            // --- FUNCIONES DE COMPARTIR OFFLINE (.arproj) ---
+            async exportProject(id) {
+                this.loader(true, "Empaquetando...");
+                try {
+                    // 1. Obtener datos del proyecto
+                    let project = state.localProjects.find(p => p.id === id);
+                    if (!project && state.user) {
+                        // Intentar buscar en DB si no está local
+                        const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                        try {
+                            const docSnap = await getDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id));
+                            if (docSnap.exists()) project = { id: docSnap.id, ...docSnap.data() };
+                        } catch (e) { }
+                    }
+                    if (!project) throw new Error("Proyecto no encontrado");
+
+                    // 2. Obtener el archivo GLB (Blob)
+                    let blob = await getModelFromCache(id);
+                    if (!blob && project.modelUrl) {
+                        // Si no está en cache pero tiene URL (es global), intentar descargarlo
+                        if (project.modelUrl.startsWith('http')) {
+                            const resp = await fetch(project.modelUrl);
+                            blob = await resp.blob();
+                        }
+                    }
+                    if (!blob) throw new Error("No se encontró el modelo 3D");
+
+                    // 3. Crear ZIP
+                    const zip = new JSZip();
+                    // Guardamos metadatos limpios
+                    const metaData = {
+                        id: project.id,
+                        name: project.name,
+                        coords: project.coords || { lat: 0, lon: 0 },
+                        calibration: project.calibration || { s: 1 },
+                        orientation: project.orientation || { roll: 0, pitch: 0, yaw: 0 },
+                        author: state.user ? state.user.displayName : "Anónimo",
+                        createdAt: new Date().toISOString()
+                    };
+                    zip.file("data.json", JSON.stringify(metaData));
+                    zip.file("model.glb", blob);
+
+                    const zipBlob = await zip.generateAsync({ type: "blob" });
+                    const zipFile = new File([zipBlob], `${project.name.replace(/\s+/g, '_')}.arproj`, { type: "application/zip" });
+
+                    // 4. Compartir
+                    if (navigator.share && navigator.canShare({ files: [zipFile] })) {
+                        await navigator.share({
+                            title: `Proyecto AR: ${project.name}`,
+                            text: 'Abre este archivo en la App AR Constructor.',
+                            files: [zipFile]
+                        });
+                        this.toast("Compartido exitosamente", "success");
+                    } else {
+                        // Fallback: Descargar
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(zipBlob);
+                        a.download = `${project.name.replace(/\s+/g, '_')}.arproj`;
+                        a.click();
+                        this.toast("Archivo descargado", "success");
+                    }
+
+                } catch (e) {
+                    console.error(e);
+                    this.toast("Error exportando: " + e.message, "error");
+                } finally { this.loader(false); }
             }
-            resetCreation() { 
-                state.tempFile = null; document.getElementById('project-name').value = ""; 
+
+            async importProject(file) {
+                this.loader(true, "Importando...");
+                try {
+                    const zip = new JSZip();
+                    const content = await zip.loadAsync(file);
+
+                    if (!content.files["data.json"] || !content.files["model.glb"]) {
+                        throw new Error("Archivo .arproj inválido (faltan datos)");
+                    }
+
+                    // 1. Leer Metadatos
+                    const metaStr = await content.files["data.json"].async("text");
+                    const metaData = JSON.parse(metaStr);
+
+                    // 2. Leer Modelo
+                    const modelBlob = await content.files["model.glb"].async("blob");
+
+                    // 3. Generar nuevo ID único para evitar conflictos si ya existe
+                    // Pero mantenemos el ID original en metadata para tracking si se desea
+                    const newId = `imported_${Date.now()}`;
+                    metaData.id = newId;
+                    metaData.status = 'local_synced'; // Para permitir Live Sync
+                    metaData.isImported = true;
+
+                    // 4. Guardar
+                    await saveModelToCache(newId, modelBlob);
+                    await saveProjectToLocalDB(metaData);
+
+                    // 5. Autoconectar Live Sync (Hybrid)
+                    // Si el usuario importado entra a ver, intentaremos escuchar cambios en el ID original
+                    // (Nota: Para esto necesitaríamos el ID original del arquitecto, 
+                    //  pero al importar generamos uno nuevo local. 
+                    //  Para Live Sync real, el archivo debe contener el ID de la nube del arquitecto).
+
+                    if (state.user) {
+                        const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+                        // Guardar referencia en nube personal
+                        await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', newId), {
+                            ...metaData,
+                            modelUrl: newId, // Referencia local
+                            originalId: metaData.originalId || metaData.id
+                        });
+                    }
+
+                    this.toast("✅ Proyecto Importado", "success");
+                    this.openProject(newId);
+
+                } catch (e) {
+                    console.error(e);
+                    this.toast("Error al importar: " + e.message, "error");
+                } finally { this.loader(false); }
+            }
+
+            // --- HYBRID LIVE SYNC ---
+            setupHybridSync(project) {
+                // Solo activamos sync si el proyecto tiene un owner (no es pure local)
+                if (!project.ownerUid || project.status === 'local') return;
+
+                console.log("📡 Iniciando Live Sync Híbrido...");
+                const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
+
+                // Escuchamos el documento en la nube del dueño original
+                const docRef = doc(db, 'artifacts', namespace, 'users', project.ownerUid, 'projects', project.id);
+
+                this.syncListener = onSnapshot(docRef, (snap) => {
+                    if (!snap.exists()) return;
+                    const cloudData = snap.data();
+
+                    // Comprobamos si hay cambios relevantes (GPS, Escala, Rotación)
+                    const currentCoords = state.currentProject.data.coords;
+                    const newCoords = cloudData.coords;
+
+                    if (newCoords.lat !== currentCoords.lat || newCoords.lon !== currentCoords.lon ||
+                        cloudData.calibration?.s !== state.currentProject.data.calibration?.s ||
+                        cloudData.orientation?.yaw !== state.currentProject.data.orientation?.yaw) {
+
+                        this.toast("🔄 Sincronizando cambios...", "info");
+
+                        // Actualizamos estado local en memoria
+                        state.currentProject.data.coords = newCoords;
+                        state.currentProject.data.calibration = cloudData.calibration;
+                        state.currentProject.data.orientation = cloudData.orientation;
+
+                        // Si estamos en el visor AR (surface), actualizamos el modelo en vivo
+                        const viewer = document.getElementById('model-viewer-surface');
+                        if (viewer) {
+                            if (cloudData.calibration?.s) viewer.scale = `${cloudData.calibration.s} ${cloudData.calibration.s} ${cloudData.calibration.s}`;
+                            if (cloudData.orientation) viewer.orientation = `${cloudData.orientation.roll}deg ${cloudData.orientation.pitch}deg ${cloudData.orientation.yaw}deg`;
+                        }
+
+                        // Si estamos en mapa, actualizamos marcador
+                        if (state.map) {
+                            // Re-render map marker
+                            this.initMap(newCoords, true);
+                        }
+                    }
+                });
+            }
+
+            handleFile(e) { state.tempFile = e.target.files[0]; if (state.tempFile) document.getElementById('file-name').textContent = state.tempFile.name; }
+
+            // Handler para Importar .arproj
+            handleImport(e) {
+                const file = e.target.files[0];
+                if (file) this.importProject(file);
+            }
+
+            // --- APK NATIVE BRIDGE ---
+            async importProjectFromBase64(base64Data) {
+                this.loader(true, "Recibiendo desde WhatsApp...");
+                try {
+                    // Convert Base64 to Blob
+                    const byteCharacters = atob(base64Data);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
+                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: "application/zip" });
+                    const file = new File([blob], "imported_shared.arproj", { type: "application/zip" });
+
+                    await this.importProject(file);
+                } catch (e) {
+                    this.toast("Error APK Import: " + e.message, "error");
+                    this.loader(false);
+                }
+            }
+
+            toggleModal(id, show) {
+                const m = document.getElementById(`modal-${id}`);
+                if (show && id === 'new-project') this.resetCreation();
+                show ? m.classList.remove('hidden') : m.classList.add('hidden');
+            }
+            resetCreation() {
+                state.tempFile = null; document.getElementById('project-name').value = "";
                 // Al iniciar, la escala de calibración vuelve a 1
                 state.draftData = { name: '', coords: { lat: 0, lon: 0 }, calibration: { s: 1 } };
             }
 
             async startCreationFlow() {
                 const name = document.getElementById('project-name').value;
-                if(!name || !state.tempFile) return this.toast("Faltan datos", "warning");
+                if (!name || !state.tempFile) return this.toast("Faltan datos", "warning");
                 state.draftData.name = name;
                 state.localBlobUrl = URL.createObjectURL(state.tempFile);
                 this.toggleModal('new-project', false);
                 this.navTo('surface');
-                
+
                 const viewer = document.getElementById('model-viewer-surface');
                 viewer.src = state.localBlobUrl;
                 // Aplica la escala por defecto (1) al iniciar el flujo
                 viewer.scale = "1 1 1";
 
                 const tools = document.getElementById('tools-panel-container');
-                if(tools) tools.classList.remove('hidden');
+                if (tools) tools.classList.remove('hidden');
                 const mapBtn = document.getElementById('btn-view-map-single');
-                if(mapBtn) mapBtn.classList.add('hidden'); 
+                if (mapBtn) mapBtn.classList.add('hidden');
 
                 document.getElementById('viewer-overlay').innerHTML = `
                     <div class="bg-indigo-600/90 p-4 rounded-xl text-center mb-2 animate-pulse">
@@ -695,10 +1059,10 @@
             captureDataAndSave() {
                 this.loader(true, "Guardando GPS...");
                 const viewer = document.getElementById('model-viewer-surface');
-                
+
                 // La escala actual debe provenir de state.draftData.calibration.s que se actualizó en handleScaleChange
                 // Si el usuario no entró a AR o no la modificó, seguirá siendo 1.
-                const finalScale = state.draftData.calibration.s || 1; 
+                const finalScale = state.draftData.calibration.s || 1;
 
                 navigator.geolocation.getCurrentPosition(pos => {
                     const coords = { lat: pos.coords.latitude, lon: pos.coords.longitude };
@@ -714,16 +1078,16 @@
                 const pData = {
                     id: pid, name: state.draftData.name, modelUrl: pid, coords,
                     // Guarda la escala ajustada por el usuario
-                    calibration: { s: scale }, 
-                    orientation: { roll:0, pitch:0, yaw:0 },
+                    calibration: { s: scale },
+                    orientation: { roll: 0, pitch: 0, yaw: 0 },
                     status: 'local', role: 'owner', createdAt: new Date().toISOString()
                 };
                 try {
                     await saveModelToCache(pid, state.tempFile);
                     await saveProjectToLocalDB(pData);
-                    
+
                     const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                    if(state.user) {
+                    if (state.user) {
                         // SOLUCION CRITICA: GUARDAR TAMBIEN EN COLECCION PRIVADA (METADATOS)
                         // Esto asegura que la lista no salga vacia si se borra el cache local
                         await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', pid), {
@@ -733,7 +1097,7 @@
 
                         // Y guardamos en log público para el admin
                         await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
-                            userName: state.user.displayName, userId: state.user.uid, projectName: pData.name, 
+                            userName: state.user.displayName, userId: state.user.uid, projectName: pData.name,
                             status: "Borrador Local", createdAt: new Date().toISOString(), projectId: pid, coords: coords
                         });
                     }
@@ -741,8 +1105,8 @@
                     this.toast("✅ Proyecto Creado", "success");
                     this.navTo('dashboard');
                     this.loadProjects();
-                } catch(e) { 
-                    this.loader(false); 
+                } catch (e) {
+                    this.loader(false);
                     this.toast("Guardado local OK (Nube falló)", "warning");
                     this.navTo('dashboard');
                     this.loadProjects();
@@ -751,13 +1115,13 @@
 
             initMap(coords, readOnly = false) {
                 const mapEl = document.getElementById('map');
-                if(state.map) { state.map.remove(); state.map = null; }
+                if (state.map) { state.map.remove(); state.map = null; }
                 state.map = L.map(mapEl, { zoomControl: false }).setView([coords.lat, coords.lon], 18);
-                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}',{ maxZoom: 20, subdomains:['mt0','mt1','mt2','mt3'], attribution: 'Google Maps' }).addTo(state.map);
+                L.tileLayer('http://{s}.google.com/vt/lyrs=s,h&x={x}&y={y}&z={z}', { maxZoom: 20, subdomains: ['mt0', 'mt1', 'mt2', 'mt3'], attribution: 'Google Maps' }).addTo(state.map);
                 const icon = L.icon({ iconUrl: 'https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-2x-green.png', shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png', iconSize: [25, 41], iconAnchor: [12, 41] });
                 const marker = L.marker([coords.lat, coords.lon], { draggable: !readOnly, icon }).addTo(state.map);
-                
-                if(!readOnly) {
+
+                if (!readOnly) {
                     marker.on('dragend', e => {
                         const ll = e.target.getLatLng();
                         state.draftData.coords = { lat: ll.lat, lon: ll.lng };
@@ -765,42 +1129,42 @@
                 } else {
                     marker.bindPopup("Ubicación del Modelo").openPopup();
                     const btn = document.querySelector('#view-editor .save-btn');
-                    if(btn) { btn.textContent = "Volver al Visor"; btn.onclick = () => app.navTo('surface'); }
+                    if (btn) { btn.textContent = "Volver al Visor"; btn.onclick = () => app.navTo('surface'); }
                     const btnExit = document.querySelector('#view-editor .exit-btn');
-                    if(btnExit) btnExit.classList.add('hidden');
+                    if (btnExit) btnExit.classList.add('hidden');
                 }
                 setTimeout(() => state.map.invalidateSize(), 500);
             }
 
             rotateModel(axis, deg) {
-                if (axis === 'pitch') state.modelOrientation.pitch += deg; 
-                if (axis === 'roll') state.modelOrientation.roll += deg;   
-                if (axis === 'yaw') state.modelOrientation.yaw += deg;     
+                if (axis === 'pitch') state.modelOrientation.pitch += deg;
+                if (axis === 'roll') state.modelOrientation.roll += deg;
+                if (axis === 'yaw') state.modelOrientation.yaw += deg;
                 this.updateModelOrientation();
             }
             updateModelOrientation() {
                 const viewer = document.getElementById('model-viewer-surface');
-                if(viewer) viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
+                if (viewer) viewer.orientation = `${state.modelOrientation.roll}deg ${state.modelOrientation.pitch}deg ${state.modelOrientation.yaw}deg`;
             }
-            
+
             async deleteProject(id) {
-                if(!confirm("¿Seguro que deseas eliminar este proyecto LOCAL?")) return;
+                if (!confirm("¿Seguro que deseas eliminar este proyecto LOCAL?")) return;
                 this.loader(true, "Eliminando...");
                 const dbL = await dbPromise;
                 const tx = dbL.transaction(["projects", "models"], "readwrite");
                 tx.objectStore("projects").delete(id);
                 tx.objectStore("models").delete(id);
-                
+
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
-                try { await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id)); } catch(e) {}
+                try { await deleteDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id)); } catch (e) { }
                 this.loader(false);
                 this.loadProjects();
             }
-            
+
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             toast(msg, type = 'info') {
                 const t = document.getElementById('toast');
-                t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${type==='error'?'bg-red-600':type==='success'?'bg-emerald-600':'bg-slate-800'} border border-white/20`; 
+                t.className = `fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] transition-all duration-300 ${type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-emerald-600' : 'bg-slate-800'} border border-white/20`;
                 t.innerHTML = msg;
                 setTimeout(() => t.classList.add('-translate-y-24'), 3000);
                 t.classList.remove('-translate-y-24');
@@ -811,14 +1175,18 @@
                 show ? l.classList.remove('hidden') : l.classList.add('hidden');
             }
         }
-        
-        window.onload = () => { try { window.app = new ARSystem(); } catch(e) { console.error(e); } };
+
+        window.onload = () => { try { window.app = new ARSystem(); } catch (e) { console.error(e); } };
     </script>
 </head>
+
 <body>
     <!-- TOAST & LOADER -->
-    <div id="toast" class="-translate-y-24 fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] bg-slate-800 transition-all text-center min-w-[200px]"></div>
-    <div id="loader" class="hidden fixed inset-0 bg-black/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
+    <div id="toast"
+        class="-translate-y-24 fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-full text-white font-bold shadow-xl z-[9999] bg-slate-800 transition-all text-center min-w-[200px]">
+    </div>
+    <div id="loader"
+        class="hidden fixed inset-0 bg-black/95 backdrop-blur-sm z-[10000] flex flex-col items-center justify-center text-white">
         <div class="loader-spin mb-4"></div>
         <p id="loader-text" class="font-bold tracking-widest text-sm animate-pulse">PROCESANDO...</p>
     </div>
@@ -827,12 +1195,18 @@
     <div id="view-auth" class="view active justify-center items-center p-6 hero-bg-dark">
         <div class="ver-badge">Ver: <span id="version-display">...</span></div>
         <div class="w-full max-w-sm dark-card p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden">
-            <div class="w-24 h-24 bg-white/5 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl shadow-inner border border-white/10">🏗️</div>
+            <div
+                class="w-24 h-24 bg-white/5 rounded-full mx-auto mb-6 flex items-center justify-center text-5xl shadow-inner border border-white/10">
+                🏗️</div>
             <h1 class="text-4xl font-black text-white mb-2 tracking-tighter drop-shadow-lg">AR PRO</h1>
             <p class="text-slate-400 text-sm mb-8 font-medium">Visualización 1:1</p>
-            <button onclick="app.loginAnonymous()" class="w-full bg-white/5 text-white border border-white/20 font-bold py-4 rounded-xl hover:bg-white/10 transition mb-3">Modo Invitado</button>
-            <button onclick="app.loginGoogle()" class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
+            <button onclick="app.loginAnonymous()"
+                class="w-full bg-white/5 text-white border border-white/20 font-bold py-4 rounded-xl hover:bg-white/10 transition mb-3">Modo
+                Invitado</button>
+            <button onclick="app.loginGoogle()"
+                class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition flex items-center justify-center gap-3 shadow-xl">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+                    class="w-6 h-6 bg-white rounded-full p-0.5"> <span>Entrar con Google</span>
             </button>
             <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.6</p>
         </div>
@@ -844,9 +1218,13 @@
             <div class="absolute top-4 right-4 text-[10px] text-white/30 font-mono ver-tag">v6.6</div>
             <div class="flex justify-between items-center mb-8">
                 <div class="flex items-center gap-4">
-                    <div class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
-                        <img id="user-avatar-img" class="w-full h-full rounded-full object-cover hidden" src="" referrerpolicy="no-referrer">
-                        <div id="user-avatar-placeholder" class="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-2xl hidden">👤</div>
+                    <div
+                        class="w-16 h-16 rounded-full bg-white/10 backdrop-blur-md border-2 border-white/20 p-1 shadow-lg">
+                        <img id="user-avatar-img" class="w-full h-full rounded-full object-cover hidden" src=""
+                            referrerpolicy="no-referrer">
+                        <div id="user-avatar-placeholder"
+                            class="w-full h-full rounded-full bg-indigo-900 flex items-center justify-center text-2xl hidden">
+                            👤</div>
                     </div>
                     <div>
                         <h2 id="user-name-display" class="text-2xl font-black text-white leading-none mb-1">Hola!</h2>
@@ -854,30 +1232,57 @@
                     </div>
                 </div>
                 <div class="flex gap-2">
-                    <button id="admin-map-btn" onclick="app.openAdminMap()" class="hidden bg-emerald-600 hover:bg-emerald-500 text-white p-3 rounded-2xl shadow-lg border border-emerald-400">🌍 MAPA VIVO</button>
-                    <button onclick="app.logout()" class="bg-white/10 hover:bg-red-500/20 text-white p-3 rounded-2xl backdrop-blur transition border border-white/10">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path></svg>
+                    <button id="admin-map-btn" onclick="app.openAdminMap()"
+                        class="hidden bg-emerald-600 hover:bg-emerald-500 text-white p-3 rounded-2xl shadow-lg border border-emerald-400">🌍
+                        MAPA VIVO</button>
+                    <button onclick="app.logout()"
+                        class="bg-white/10 hover:bg-red-500/20 text-white p-3 rounded-2xl backdrop-blur transition border border-white/10">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1">
+                            </path>
+                        </svg>
                     </button>
                 </div>
             </div>
         </div>
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6" id="dashboard-main-header">
+            <h2 class="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-cyan-400"
+                id="dashboard-header-title">Mis Proyectos</h2>
+            <div class="flex gap-2">
+                <input type="file" id="import-file" accept=".arproj,.zip" class="hidden"
+                    onchange="app.handleImport(event)">
+                <button onclick="document.getElementById('import-file').click()"
+                    class="bg-indigo-600/30 border border-indigo-500/50 hover:bg-indigo-600/50 text-white w-10 h-10 rounded-xl flex items-center justify-center transition shadow-lg backdrop-blur-sm">📥</button>
+                <button onclick="app.toggleModal('new-project', true)"
+                    class="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white w-10 h-10 rounded-xl flex items-center justify-center transition shadow-lg shadow-indigo-500/20 transform hover:scale-105 font-bold text-xl">+</button>
+            </div>
+        </div>
         <div id="projects-list" class="flex-1 overflow-y-auto p-6 -mt-10 relative z-0 pb-32 space-y-4"></div>
-        <button onclick="app.toggleModal('new-project', true)" class="fixed bottom-8 right-6 w-16 h-16 bg-indigo-600 text-white rounded-2xl shadow-2xl shadow-indigo-500/40 text-3xl flex items-center justify-center hover:scale-110 hover:bg-indigo-700 transition z-30 active:scale-95 border-2 border-white/20">+</button>
+        <button onclick="app.toggleModal('new-project', true)"
+            class="fixed bottom-8 right-6 w-16 h-16 bg-indigo-600 text-white rounded-2xl shadow-2xl shadow-indigo-500/40 text-3xl flex items-center justify-center hover:scale-110 hover:bg-indigo-700 transition z-30 active:scale-95 border-2 border-white/20">+</button>
     </div>
 
     <!-- VIEW: SURFACE (VISOR 3D & AR MESA) -->
     <div id="view-surface" class="view bg-black">
         <div id="tools-panel-container" class="tools-panel pointer-events-auto">
             <!-- Botón de Mapa RESTAURADO -->
-            <button id="btn-view-map-single" type="button" class="tool-btn hidden mb-2 text-emerald-400 border-emerald-500/50">🌍</button>
+            <button id="btn-view-map-single" type="button"
+                class="tool-btn hidden mb-2 text-emerald-400 border-emerald-500/50">🌍</button>
             <button type="button" class="tool-btn" onclick="app.rotateModel('pitch', 90)">🔃</button>
             <button type="button" class="tool-btn" onclick="app.rotateModel('pitch', -90)">🔄</button>
             <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
         </div>
         <div class="relative w-full h-full z-0">
             <!-- SE ELIMINA ar-scale="fixed" para permitir el escalado con pinza -->
-            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto" class="w-full h-full">
-                <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png" class="hand-icon"><p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p></div>
+            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls
+                shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto"
+                class="w-full h-full">
+                <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png"
+                        class="hand-icon">
+                    <p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p>
+                </div>
             </model-viewer>
             <!-- UI OVERLAY (BOTONES FUERA DEL VISOR) -->
             <div id="viewer-overlay" class="ar-overlay-ui slide-up">
@@ -890,12 +1295,18 @@
     <div id="view-admin-map" class="view">
         <div id="admin-map-container" class="flex-1 bg-slate-900 relative z-0"></div>
         <div class="absolute top-0 left-0 w-full p-4 z-20 flex justify-between pointer-events-none">
-            <div class="bg-black/80 backdrop-blur text-white px-4 py-2 rounded-xl text-xs font-bold border border-white/20 shadow-xl pointer-events-auto">
+            <div
+                class="bg-black/80 backdrop-blur text-white px-4 py-2 rounded-xl text-xs font-bold border border-white/20 shadow-xl pointer-events-auto">
                 <h3 class="text-emerald-400 mb-1">RASTREO EN VIVO</h3>
-                <div class="flex items-center gap-2 mb-1"><div class="w-2 h-2 rounded-full bg-green-500"></div> Publicados</div>
-                <div class="flex items-center gap-2"><div class="w-2 h-2 rounded-full bg-orange-500"></div> Borradores Locales</div>
+                <div class="flex items-center gap-2 mb-1">
+                    <div class="w-2 h-2 rounded-full bg-green-500"></div> Publicados
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="w-2 h-2 rounded-full bg-orange-500"></div> Borradores Locales
+                </div>
             </div>
-            <button onclick="app.navTo('dashboard')" class="pointer-events-auto bg-white text-black font-bold px-4 py-2 rounded-xl shadow-lg h-10">Cerrar</button>
+            <button onclick="app.navTo('dashboard')"
+                class="pointer-events-auto bg-white text-black font-bold px-4 py-2 rounded-xl shadow-lg h-10">Cerrar</button>
         </div>
     </div>
 
@@ -903,32 +1314,43 @@
     <div id="view-ar" class="view bg-black">
         <div id="ar-container" class="absolute inset-0 z-0"></div>
         <div id="ar-debug-panel" class="hidden absolute top-0 left-0 w-full p-4 z-20 pointer-events-none">
-            <div class="bg-black/60 backdrop-blur text-white p-4 rounded-xl text-xs font-mono border border-white/10 shadow-lg">
+            <div
+                class="bg-black/60 backdrop-blur text-white p-4 rounded-xl text-xs font-mono border border-white/10 shadow-lg">
                 <h3 class="text-sky-400 font-bold mb-2">📡 RADAR GPS ACTIVO</h3>
                 <div id="gps-data-display">Esperando señal...</div>
             </div>
         </div>
         <div class="absolute bottom-10 left-0 w-full p-6 z-20 flex justify-center pointer-events-auto">
-             <button onclick="app.navTo('surface')" class="bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg border border-red-400">SALIR DEL GPS</button>
+            <button onclick="app.navTo('surface')"
+                class="bg-red-600 text-white font-bold px-6 py-3 rounded-full shadow-lg border border-red-400">SALIR DEL
+                GPS</button>
         </div>
     </div>
-    
+
     <!-- MAPA EDITOR -->
     <div id="view-editor" class="view">
         <div id="map" class="flex-1 bg-slate-900 relative z-0"></div>
-        <div class="absolute bottom-0 left-0 w-full p-6 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 flex flex-col gap-2">
-            <button type="button" onclick="app.confirmAndPublishFromMap()" class="save-btn w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 border border-white/20"><span>☁️</span> CONFIRMAR Y PUBLICAR (GLOBAL)</button>
-            <button type="button" onclick="app.exitMapToDashboard()" class="exit-btn w-full bg-white/10 text-slate-300 py-3 rounded-xl font-bold hover:bg-white/20 backdrop-blur transition">💾 Guardar solo en celular (Salir)</button>
+        <div
+            class="absolute bottom-0 left-0 w-full p-6 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 flex flex-col gap-2">
+            <button type="button" onclick="app.confirmAndPublishFromMap()"
+                class="save-btn w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-xl hover:bg-indigo-500 transition active:scale-95 flex items-center justify-center gap-2 border border-white/20"><span>☁️</span>
+                CONFIRMAR Y PUBLICAR (GLOBAL)</button>
+            <button type="button" onclick="app.exitMapToDashboard()"
+                class="exit-btn w-full bg-white/10 text-slate-300 py-3 rounded-xl font-bold hover:bg-white/20 backdrop-blur transition">💾
+                Guardar solo en celular (Salir)</button>
         </div>
     </div>
-    
+
     <!-- MODAL NEW PROJECT -->
-    <div id="modal-new-project" class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-6 flex items-end sm:items-center justify-center transition-all">
+    <div id="modal-new-project"
+        class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-6 flex items-end sm:items-center justify-center transition-all">
         <div class="dark-card w-full max-w-md p-8 rounded-[2rem] shadow-2xl mb-4 sm:mb-0">
             <h2 class="text-3xl font-black text-white mb-2">Nuevo Proyecto</h2>
             <div class="space-y-5">
-                <input type="text" id="project-name" placeholder="Nombre del proyecto" class="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none focus:border-indigo-500">
-                <label class="block bg-white/5 border border-dashed border-white/20 p-8 rounded-2xl text-center cursor-pointer hover:bg-white/10 hover:border-indigo-500 transition group">
+                <input type="text" id="project-name" placeholder="Nombre del proyecto"
+                    class="w-full bg-white/5 border border-white/10 p-4 rounded-xl font-bold text-white outline-none focus:border-indigo-500">
+                <label
+                    class="block bg-white/5 border border-dashed border-white/20 p-8 rounded-2xl text-center cursor-pointer hover:bg-white/10 hover:border-indigo-500 transition group">
                     <input type="file" accept=".glb" class="hidden" onchange="app.handleFile(event)">
                     <div class="text-3xl mb-2">📦</div>
                     <span class="text-indigo-400 font-bold text-sm">Subir GLB</span>
@@ -936,21 +1358,26 @@
                 </label>
             </div>
             <div class="flex gap-3 mt-10">
-                <button onclick="app.toggleModal('new-project', false)" class="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-white/5">Cancelar</button>
-                <button onclick="app.startCreationFlow()" class="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-xl hover:bg-indigo-500">CONTINUAR</button>
+                <button onclick="app.toggleModal('new-project', false)"
+                    class="flex-1 py-4 rounded-xl font-bold text-slate-400 hover:bg-white/5">Cancelar</button>
+                <button onclick="app.startCreationFlow()"
+                    class="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-xl hover:bg-indigo-500">CONTINUAR</button>
             </div>
         </div>
     </div>
-    
+
     <!-- MODALES COMPARTIDOS -->
-    <div id="modal-password-entry" class="hidden fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
+    <div id="modal-password-entry"
+        class="hidden fixed inset-0 z-[1000] bg-black/95 backdrop-blur-xl p-6 flex items-center justify-center">
         <div class="dark-card w-full max-w-sm p-8 rounded-2xl shadow-2xl text-center border border-red-500/30">
             <div class="mb-4 text-4xl animate-bounce">🔐</div>
             <h3 class="text-2xl font-black text-white mb-6">ACCESO PRIVADO</h3>
-            <input type="password" id="access-password" placeholder="Ingresa la clave" class="w-full bg-black border border-white/20 p-4 rounded-xl text-white text-center text-lg font-bold mb-6 focus:border-red-500 outline-none">
-            <button onclick="app.checkSharePassword()" class="w-full py-4 rounded-xl font-black bg-white text-black shadow-xl">ENTRAR</button>
+            <input type="password" id="access-password" placeholder="Ingresa la clave"
+                class="w-full bg-black border border-white/20 p-4 rounded-xl text-white text-center text-lg font-bold mb-6 focus:border-red-500 outline-none">
+            <button onclick="app.checkSharePassword()"
+                class="w-full py-4 rounded-xl font-black bg-white text-black shadow-xl">ENTRAR</button>
         </div>
     </div>
 </body>
-</html>
 
+</html>
