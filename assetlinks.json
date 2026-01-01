@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.ecopiensa.arquitek3",
+    "sha256_cert_fingerprints": [
+      "56:B4:A8:30:F1:19:D1:CC:3D:D6:48:20:84:A9:B6:ED:29:43:25:F4:59:BD:03:97:31:17:9B:2B:5A:8B:62:05"
+    ]
+  }
+}]
