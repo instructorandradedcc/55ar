@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.7 (Final Integrated)</title>
+    <title>AR Admin Pro v1.1 (ecopiensa evolution)</title>
 
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -330,7 +330,26 @@
         class ARSystem {
             constructor() {
                 console.log(`%c AR System ${APP_VERSION} `, 'background: #F59E0B; color: #000; padding: 2px 5px; border-radius: 3px;');
-                this.initAuth();
+
+                // WATCHDOG (PRIORIDAD ALTA): Si en 5s no ha cargado, forzar vista
+                setTimeout(() => {
+                    const l = document.getElementById('loader');
+                    if (l && !l.classList.contains('hidden')) {
+                        console.warn("Watchdog: Loader stuck, forcing hide.");
+                        l.classList.add('hidden'); // Force hide direct DOM
+                        if (!state.user) this.navTo('auth');
+                    }
+                }, 5000);
+
+                try {
+                    if (typeof auth !== 'undefined') this.initAuth();
+                    else console.error("Auth not initialized");
+                } catch (e) {
+                    console.error("Critical Init Error:", e);
+                    this.loader(false);
+                    this.navTo('auth');
+                }
+
                 this.updateVersionUI();
                 const viewer = document.getElementById('model-viewer-surface');
                 if (viewer) viewer.addEventListener('scale-change', this.handleScaleChange.bind(this));
@@ -338,15 +357,6 @@
 
                 // Limpieza periódica de expirados
                 setInterval(() => this.cleanupExpiredProjects(), 60000);
-
-                // WATCHDOG: Si en 5s no ha cargado, forzar vista
-                setTimeout(() => {
-                    if (document.getElementById('loader') && !document.getElementById('loader').classList.contains('hidden')) {
-                        console.warn("Watchdog: Loader stuck, forcing hide.");
-                        this.loader(false);
-                        if (!state.user) this.navTo('auth');
-                    }
-                }, 5000);
             }
 
             // --- LÓGICA DE APERTURA Y CACHÉ (CRUCIAL) ---
