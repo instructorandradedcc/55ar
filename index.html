@@ -454,7 +454,7 @@
                          <button onclick="app.showQR('${data.id}', '${data.ownerUid}')" class="ar-btn bg-white text-black flex-1 text-xs">📱 QR</button>
                     </div>` : ''}
                     <button id="btn-ar-action" class="ar-btn btn-primary w-full mt-2">📷 VER EN MESA (AR)</button>
-                    ${!isShared && data.status !== 'global' ? `<button onclick="app.publishProject('${data.id}')" class="ar-btn bg-indigo-600 text-white w-full mt-2">☁️ PUBLICAR (30 MIN)</button>` : ''}
+                    ${!isShared && data.status !== 'global' ? `<button id="btn-publish-${data.id}" onclick="app.publishProject('${data.id}')" class="ar-btn bg-indigo-600 text-white w-full mt-2">☁️ PUBLICAR (30 MIN)</button>` : ''}
                 `;
 
                 const arBtn = document.getElementById('btn-ar-action');
@@ -490,10 +490,13 @@
                     return;
                 }
 
-                const btn = document.getElementById(`btn-publish-${id}`); // Assuming a button with this ID exists
-                const originalText = btn.innerHTML;
-                btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Subiendo...`;
-                btn.disabled = true;
+                const btn = document.getElementById(`btn-publish-${id}`);
+                let originalText = "";
+                if (btn) {
+                    originalText = btn.innerHTML;
+                    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Subiendo...`;
+                    btn.disabled = true;
+                }
 
                 try {
                     this.loader(true, "Iniciando publicación segura...");
@@ -714,7 +717,7 @@
                     <p class="text-xs text-slate-400 mb-3">${date} • ${isExpired ? 'EXPIRADO' : data.status}</p>
                     <div class="flex gap-2">
                         <button onclick="app.openProject('${data.id}')" class="flex-1 bg-white text-black text-sm font-bold py-3 rounded-xl">👀 Ver</button>
-                        ${data.status !== 'global' && !isExpired ? `<button onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl">☁️ 30 Min</button>` : ''}
+                        ${data.status !== 'global' && !isExpired ? `<button id="btn-publish-${data.id}" onclick="app.publishProject('${data.id}')" class="flex-1 bg-emerald-600 text-white text-sm font-bold py-3 rounded-xl">☁️ 30 Min</button>` : ''}
                     </div>
                 `;
                 container.appendChild(el);
