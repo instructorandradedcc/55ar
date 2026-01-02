@@ -717,9 +717,13 @@
                         <button onclick="app.navTo('dashboard')" class="ar-btn btn-secondary flex-1">⛔ SALIR</button>
                         ${data.coords ? `<button onclick="app.startARGPSWrapper()" class="ar-btn btn-gps flex-1">📡 VER EN GPS</button>` : ''}
                     </div>
-                    <div class="flex gap-2 mt-2">
-                         <button onclick="app.exportProject('${data.id}')" class="ar-btn bg-indigo-600/80 text-white flex-1 text-xs">📤 COMPARTIR (.ARPROJ)</button>
-                    </div>
+                     <div class="flex gap-2 mt-2">
+                          <button onclick="app.exportProject('${data.id}')" class="ar-btn bg-indigo-600/80 text-white flex-1 text-xs">📤 ARPROJ</button>
+                          ${(data.status === 'global' || data.status === 'local_synced') ? `
+                            <button onclick="app.shareLink('${data.id}', '${data.ownerUid}')" class="ar-btn bg-blue-500 text-white flex-1 text-xs">🔗 LINK</button>
+                            <button onclick="app.showQR('${data.id}', '${data.ownerUid}')" class="ar-btn bg-white text-black flex-1 text-xs">📱 QR</button>
+                          ` : ''}
+                     </div>
                     <button id="btn-ar-action" class="ar-btn btn-primary w-full mt-2">📷 VER EN MESA (AR)</button>
                     ${!isShared && data.status !== 'local_synced' ? `<button onclick="app.publishProject('${data.id}')" class="ar-btn bg-indigo-600 text-white w-full mt-2">☁️ PUBLICAR GLOBAL</button>` : ''}
                 `;
@@ -948,6 +952,18 @@
                 this.loader(false); this.loadProjects();
             }
 
+            shareLink(id, uid) {
+                const url = `${window.location.origin}${window.location.pathname}?id=${id}&uid=${uid}`;
+                navigator.clipboard.writeText(url).then(() => this.toast("Enlace copiado!", "success"));
+            }
+
+            showQR(id, uid) {
+                const url = `${window.location.origin}${window.location.pathname}?id=${id}&uid=${uid}`;
+                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(url)}`;
+                document.getElementById('qr-image').src = qrUrl;
+                this.toggleModal('qr', true);
+            }
+
             updateVersionUI() { document.querySelectorAll('.ver-tag').forEach(e => e.textContent = APP_VERSION); }
             toast(msg, type = 'info') {
                 const t = document.getElementById('toast');
@@ -1034,7 +1050,7 @@
             <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
         </div>
         <div class="relative w-full h-full z-0">
-            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls
+            <model-viewer id="model-viewer-surface" src="" ar ar-modes="scene-viewer webxr quick-look" camera-controls
                 shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto"
                 class="w-full h-full">
                 <div class="ar-prompt">
@@ -1109,6 +1125,20 @@
                 <button onclick="app.startCreationFlow()"
                     class="flex-[2] bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-xl hover:bg-indigo-500">CONTINUAR</button>
             </div>
+        </div>
+    </div>
+    </div>
+
+    <div id="modal-qr"
+        class="hidden fixed inset-0 z-50 bg-black/90 backdrop-blur-md p-6 flex items-center justify-center transition-all">
+        <div class="dark-card p-8 rounded-[2rem] shadow-2xl text-center">
+            <h2 class="text-2xl font-black text-white mb-4">Compartir Modelo</h2>
+            <div class="bg-white p-4 rounded-xl inline-block mb-4">
+                <img id="qr-image" src="" alt="QR Code" class="w-48 h-48">
+            </div>
+            <p class="text-slate-400 text-xs mb-6 max-w-[200px] mx-auto">Escanea para ver en otro dispositivo AR</p>
+            <button onclick="app.toggleModal('qr', false)"
+                class="bg-indigo-600 text-white font-bold py-3 px-8 rounded-xl w-full">Cerrar</button>
         </div>
     </div>
 </body>
