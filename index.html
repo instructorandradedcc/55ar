@@ -338,6 +338,15 @@
 
                 // Limpieza periódica de expirados
                 setInterval(() => this.cleanupExpiredProjects(), 60000);
+
+                // WATCHDOG: Si en 5s no ha cargado, forzar vista
+                setTimeout(() => {
+                    if (document.getElementById('loader') && !document.getElementById('loader').classList.contains('hidden')) {
+                        console.warn("Watchdog: Loader stuck, forcing hide.");
+                        this.loader(false);
+                        if (!state.user) this.navTo('auth');
+                    }
+                }, 5000);
             }
 
             // --- LÓGICA DE APERTURA Y CACHÉ (CRUCIAL) ---
