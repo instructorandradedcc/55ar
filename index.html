@@ -263,8 +263,9 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v7.0 | R2 EPHEMERAL";
+        const APP_VERSION = "v7.2 | R2 DEBUG";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
+
 
         let app, auth, db, storage;
 
@@ -583,7 +584,7 @@
                 } catch (error) {
                     console.error("Error publicando:", error);
                     this.toast(`Error: ${error.message}`, "error");
-                    alert("Falló la publicación.\nUsa 'ENVIAR ARCHIVO' para compartir por WhatsApp mientras solucionas esto.");
+                    alert(`❌ FALLÓ LA PUBLICACIÓN\n\nError Técnico: ${error.message}\n\nEnvía captura de esto al soporte.`);
                 } finally {
                     this.loader(false);
                     if (btn) { // Check if btn exists before accessing properties
@@ -931,7 +932,8 @@
                     </div>
                     <div>
                         <h2 id="user-name-display" class="text-2xl font-black text-white leading-none mb-1">Hola!</h2>
-                        <p id="dashboard-header-title" class="text-slate-400 text-xs">Arquitek Pro</p>
+                        <p id="dashboard-header-title" class="text-slate-400 text-xs">Arquitek Pro <span
+                                class="ver-tag ml-2 text-indigo-400"></span></p>
                     </div>
                 </div>
                 <div class="flex gap-2">
