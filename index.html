@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.7 (Final Integrated)</title>
+    <title>AR Admin Pro v6.8 (Final Integrated)</title>
 
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -786,7 +786,7 @@
             }
 
             async publishProject(id) {
-                this.loader(true, "Publicando...");
+                this.loader(true, "Iniciando publicación...");
                 const namespace = typeof __app_id !== 'undefined' ? __app_id : 'ar-prod-v1';
                 try {
                     const dbL = await dbPromise;
@@ -794,28 +794,65 @@
                         const req = dbL.transaction("projects").objectStore("projects").get(id);
                         req.onsuccess = () => r(req.result);
                     });
-                    if (!projData) throw new Error("Datos corruptos");
+
+                    if (!projData) throw new Error("No se encontraron los datos locales del proyecto");
+
                     let modelUrl = projData.modelUrl;
+
+                    // Si el modelo es local, hay que subirlo a la nube
                     if (!modelUrl.startsWith('http')) {
+                        this.loader(true, "Buscando modelo 3D...");
                         const blob = await getModelFromCache(id);
-                        if (blob) {
-                            const storageRef = ref(storage, `models/${state.user.uid}/${id}.glb`);
-                            const uploadTask = await uploadBytesResumable(storageRef, blob);
-                            modelUrl = await getDownloadURL(uploadTask.ref);
-                        }
+
+                        if (!blob) throw new Error("Error fatal: Archivo 3D no encontrado en caché");
+
+                        this.loader(true, "Subiendo a la nube (0%)...");
+                        const storageRef = ref(storage, `models/${state.user.uid}/${id}.glb`);
+                        const uploadTask = uploadBytesResumable(storageRef, blob);
+
+                        await new Promise((resolve, reject) => {
+                            uploadTask.on('state_changed',
+                                (snapshot) => {
+                                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                                    this.loader(true, `Subiendo: ${progress.toFixed(0)}%`);
+                                },
+                                (error) => reject(error),
+                                () => resolve()
+                            );
+                        });
+
+                        modelUrl = await getDownloadURL(uploadTask.snapshot.ref);
                     }
+
+                    this.loader(true, "Registrando en base de datos...");
                     const firestoreData = { ...projData, modelUrl, status: 'global', updatedAt: new Date().toISOString() };
+
+                    // Doble escritura para asegurar consistencia
                     await setDoc(doc(db, 'artifacts', namespace, 'users', state.user.uid, 'projects', id), firestoreData);
+
                     await addDoc(collection(db, 'artifacts', namespace, 'public', 'data', 'project_logs'), {
                         userName: state.user.displayName, userId: state.user.uid, projectName: projData.name,
                         status: "Global (Publicado)", createdAt: new Date().toISOString(), projectId: id,
                         coords: projData.coords, password: projData.password || null
                     });
-                    projData.status = 'global'; projData.modelUrl = modelUrl;
+
+                    // Actualizar local
+                    projData.status = 'global';
+                    projData.modelUrl = modelUrl;
                     await saveProjectToLocalDB(projData);
-                    this.toast("✅ Publicado", "success");
+
+                    this.loader(false);
+                    this.toast("✅ ¡PROYECTO PUBLICADO CON ÉXITO!", "success");
+
+                    // Recargar para mostrar botones de compartir
                     this.openProject(id);
-                } catch (e) { this.toast("Error: " + e.message, "error"); } finally { this.loader(false); }
+
+                } catch (e) {
+                    console.error(e);
+                    this.toast("Error Publicando: " + e.message, "error");
+                } finally {
+                    this.loader(false);
+                }
             }
 
             async forceDeleteProject(logId, projectId, userId) {
