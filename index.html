@@ -241,6 +241,20 @@
             flex-direction: column;
             gap: 8px;
         }
+
+        .slogan-text {
+            font-family: 'Outfit', sans-serif;
+            font-weight: 300;
+            font-size: 11px;
+            letter-spacing: 1px;
+            line-height: 1.5;
+            color: #ccc;
+            text-transform: uppercase;
+            max-width: 280px;
+            margin: 0 auto 24px auto;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding-top: 12px;
+        }
     </style>
 
     <script type="module">
@@ -973,18 +987,34 @@
     </style>
 
     <div id="view-auth" class="view active justify-center items-center p-6 hero-bg-dark">
-        <div class="w-full max-w-sm dark-card p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden">
+        <div
+            class="w-full max-w-sm dark-card p-8 rounded-3xl shadow-2xl text-center relative overflow-hidden border border-white/5">
+            <!-- decorative blur -->
+            <div
+                class="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500 to-transparent opacity-50">
+            </div>
+
             <img src="https://raw.githubusercontent.com/instructorandradedcc/55ar/main/icon.png"
-                class="w-32 h-32 mx-auto mb-4 object-contain drop-shadow-lg animate-pulse" alt="App Icon">
-            <h1 class="text-4xl font-black text-white mb-2 tracking-tighter">AR PRO</h1>
-            <p class="text-slate-400 text-sm mb-8 font-medium">Restored & Integrated</p>
+                class="w-28 h-28 mx-auto mb-6 object-contain drop-shadow-2xl" alt="App Icon">
+
+            <p class="slogan-text">
+                arquitectura, diseño, realidad aumentada<br>
+                <span class="text-indigo-400 font-bold">-- la guía perfecta --</span><br>
+                de como tus proyectos se ven en la obra.<br>
+                el seguimiento y verificación a otro nivel.
+            </p>
+
             <button onclick="app.loginAnonymous()"
-                class="w-full bg-white/5 text-white border border-white/20 font-bold py-4 rounded-xl hover:bg-white/10 transition mb-3">Modo
-                Invitado</button>
+                class="w-full bg-white/5 text-white border border-white/20 font-bold py-4 rounded-xl hover:bg-white/10 transition mb-3 backdrop-blur-sm">
+                Modo Invitado
+            </button>
             <button onclick="app.loginGoogle()"
-                class="w-full bg-indigo-600 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition shadow-xl">Entrar
-                con Google</button>
-            <p class="mt-8 text-[10px] text-slate-600 font-mono uppercase tracking-widest ver-tag">v6.7</p>
+                class="w-full bg-indigo-600/90 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition shadow-lg shadow-indigo-900/30">
+                Entrar con Google
+            </button>
+
+            <p class="mt-6 text-[9px] text-slate-600 font-mono uppercase tracking-widest ver-tag opacity-60">v7.2 |
+                FINAL</p>
         </div>
     </div>
 
