@@ -690,10 +690,19 @@
             }
 
             async loginGoogle() {
+                this.loader(true, "Conectando con Google...");
                 const provider = new GoogleAuthProvider();
-                try { await signInWithPopup(auth, provider); } catch (e) { this.toast(e.message, "error"); }
+                try {
+                    await signInWithPopup(auth, provider);
+                } catch (e) {
+                    this.loader(false);
+                    this.toast(e.message, "error");
+                }
             }
-            async loginAnonymous() { try { await signInAnonymously(auth); } catch (e) { } }
+            async loginAnonymous() {
+                this.loader(true, "Iniciando como Invitado...");
+                try { await signInAnonymously(auth); } catch (e) { this.loader(false); }
+            }
             logout() { signOut(auth).then(() => window.location.reload()); }
 
             navTo(id) {
@@ -948,11 +957,10 @@
             </div>
 
             <!-- Nombre App -->
-            <h1 class="text-3xl font-black text-white mb-8 tracking-tighter">AR PRO <span
-                    class="text-indigo-500">.</span></h1>
+            <!-- <h1 class="text-3xl font-black text-white mb-8 tracking-tighter">ARQUITEK-3 <span class="text-indigo-500">.</span></h1> -->
 
             <!-- Barra de Carga (Línea) -->
-            <div class="w-48 h-1.5 bg-gray-800 rounded-full overflow-hidden relative mb-4">
+            <div class="w-48 h-1 bg-gray-800 rounded-full overflow-hidden relative mb-4">
                 <div
                     class="absolute top-0 left-0 h-full bg-indigo-500 w-full origin-left animate-[loadBar_1s_ease-in-out_infinite]">
                 </div>
