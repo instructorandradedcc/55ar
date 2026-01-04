@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v6.7 (Final Integrated)</title>
+    <title>AR Admin Pro v1.7 (Final)</title>
 
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -492,7 +492,14 @@
                 `;
 
                 const arBtn = document.getElementById('btn-ar-action');
-                if (arBtn) arBtn.onclick = () => { if (viewer.loaded) viewer.activateAR(); else this.toast("Espera carga...", "warning"); };
+                if (arBtn) arBtn.onclick = () => {
+                    if (viewer.loaded) {
+                        this.toast("Iniciando Cámara AR...", "info");
+                        viewer.activateAR();
+                    } else {
+                        this.toast("Espera carga...", "warning");
+                    }
+                };
 
                 // Restaurar escala y rotación
                 if (data.orientation) viewer.orientation = `${data.orientation.roll}deg ${data.orientation.pitch}deg ${data.orientation.yaw}deg`;
@@ -701,7 +708,12 @@
             }
             async loginAnonymous() {
                 this.loader(true, "Iniciando como Invitado...");
-                try { await signInAnonymously(auth); } catch (e) { this.loader(false); }
+                try {
+                    await signInAnonymously(auth);
+                } catch (e) {
+                    this.loader(false);
+                    this.toast("Error: " + e.message, "error");
+                }
             }
             logout() { signOut(auth).then(() => window.location.reload()); }
 
@@ -1012,16 +1024,16 @@
                 el seguimiento y verificación a otro nivel.
             </p>
 
-            <button onclick="app.loginAnonymous()"
+            <!-- <button onclick="app.loginAnonymous()"
                 class="w-full bg-white/5 text-white border border-white/20 font-bold py-4 rounded-xl hover:bg-white/10 transition mb-3 backdrop-blur-sm">
                 Modo Invitado
-            </button>
+            </button> -->
             <button onclick="app.loginGoogle()"
                 class="w-full bg-indigo-600/90 text-white font-bold py-4 rounded-xl hover:bg-indigo-500 transition shadow-lg shadow-indigo-900/30">
                 Entrar con Google
             </button>
 
-            <p class="mt-6 text-[9px] text-slate-600 font-mono uppercase tracking-widest ver-tag opacity-60">v7.2 |
+            <p class="mt-6 text-[9px] text-slate-600 font-mono uppercase tracking-widest ver-tag opacity-60">v1.7 |
                 FINAL</p>
         </div>
     </div>
@@ -1071,8 +1083,9 @@
             <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
         </div>
         <div class="relative w-full h-full z-0">
-            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr" camera-controls shadow-intensity="1"
-                auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto" class="w-full h-full">
+            <model-viewer id="model-viewer-surface" src="" ar ar-modes="scene-viewer webxr quick-look" camera-controls
+                shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto"
+                class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png"
                         class="hand-icon">
                     <p class="text-white font-bold text-sm mt-2 drop-shadow-lg">Mueve el móvil</p>
