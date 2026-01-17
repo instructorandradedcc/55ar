@@ -465,7 +465,7 @@
                 // --- FIX: CONFIGURACIÓN CRÍTICA AR PARA SUPERFICIES ---
                 // Forzar detección de suelo y evitar que flote
                 viewer.setAttribute('ar-placement', 'floor');
-                viewer.setAttribute('ar-scale', 'fixed'); 
+                viewer.setAttribute('ar-scale', 'auto'); 
                 viewer.setAttribute('shadow-intensity', '2'); // Sombra fuerte ayuda a visualizar el contacto
                 
                 // Priorizar WebXR que suele manejar mejor los "hits" de suelo
@@ -1123,7 +1123,7 @@
                 shadow-intensity="2" 
                 shadow-softness="0.5"
                 auto-rotate 
-                ar-scale="fixed" 
+                ar-scale="auto" 
                 ar-placement="floor" 
                 touch-action="pan-y"
                 interaction-prompt="auto" class="w-full h-full">
@@ -1220,4 +1220,3 @@
 </body>
 
 </html>
-
