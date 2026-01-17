@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
     <meta name="theme-color" content="#000000">
-    <title>AR Admin Pro v1.7 (Final)</title>
+    <title>ARQuiteck-2</title>
 
     <link rel="icon" type="image/png" href="https://github.com/instructorandradedcc/55ar/raw/main/favicon3dAR.png">
 
@@ -277,7 +277,7 @@
             measurementId: "G-ZL6T8CGKP9"
         };
 
-        const APP_VERSION = "v7.2 | R2 DEBUG";
+        const APP_VERSION = "v7.2 | ARQuiteck-2";
         const ADMIN_EMAIL = "instructor.andrade.dcc@gmail.com";
 
 
@@ -1033,8 +1033,8 @@
                 Entrar con Google
             </button>
 
-            <p class="mt-6 text-[9px] text-slate-600 font-mono uppercase tracking-widest ver-tag opacity-60">v1.7 |
-                FINAL</p>
+            <p class="mt-6 text-[9px] text-slate-600 font-mono uppercase tracking-widest ver-tag opacity-60">v7.2 |
+                ARQuiteck-2</p>
         </div>
     </div>
 
@@ -1083,7 +1083,8 @@
             <button type="button" class="tool-btn" onclick="app.rotateModel('yaw', 45)">⤵️</button>
         </div>
         <div class="relative w-full h-full z-0">
-            <model-viewer id="model-viewer-surface" src="" ar ar-modes="scene-viewer webxr quick-look" camera-controls
+            <!-- FIX: Prioritizar WebXR sobre scene-viewer para estabilidad en Chrome App -->
+            <model-viewer id="model-viewer-surface" src="" ar ar-modes="webxr scene-viewer quick-look" camera-controls
                 shadow-intensity="1" auto-rotate ar-placement="floor" touch-action="none" interaction-prompt="auto"
                 class="w-full h-full">
                 <div class="ar-prompt"><img src="https://modelviewer.dev/shared-assets/icons/hand.png"
@@ -1178,4 +1179,3 @@
 </body>
 
 </html>
-
